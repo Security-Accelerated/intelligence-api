@@ -12,7 +12,7 @@ import (
 
 var config *viper.Viper
 
-const appName = "skynet-server"
+const appName = "intelligence-api"
 
 func init() {
 	config = viper.New()
@@ -20,6 +20,7 @@ func init() {
 	// setup config sources
 	config.SetConfigType("yaml")
 	config.SetConfigName(appName)
+	config.AddConfigPath("../../config/")
 	config.AddConfigPath("../config/")
 	config.AddConfigPath("config/")
 	config.AddConfigPath("/etc/" + appName + "/")
