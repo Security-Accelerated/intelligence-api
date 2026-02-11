@@ -1,0 +1,8 @@
+---
+
+application:
+  mode: local
+  port: 8080
+
+gin:
+  mode: debug

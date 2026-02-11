@@ -23,7 +23,7 @@ func init() {
 	config.AddConfigPath("../config/")
 	config.AddConfigPath("config/")
 	config.AddConfigPath("/etc/" + appName + "/")
-	config.AddConfigPath("/etc/securityaccelerated/")
+	config.AddConfigPath("/etc/security-accelerated/")
 
 	// application
 	config.Set("application.start.time", time.Now().UTC())
