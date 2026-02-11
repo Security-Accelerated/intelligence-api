@@ -1,0 +1,61 @@
+package logging
+
+import (
+	"strings"
+
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/config"
+	"go.elastic.co/ecszap"
+	"go.uber.org/zap"
+)
+
+var appLogger *zap.Logger
+
+const (
+	// environments
+	production = "production"
+	docker     = "docker"
+)
+
+func inflateLogger(logger *zap.Logger) *zap.Logger {
+	return logger.With(
+		zap.String("application_name", config.Config().GetString("application.name")),
+		zap.String("session_id", config.Config().GetString("application.session.id")),
+		zap.String("host", config.Config().GetString("environment.host")),
+	)
+}
+
+func productionLogger() (*zap.Logger, error) {
+	config := zap.NewProductionConfig()
+	config.EncoderConfig = ecszap.ECSCompatibleEncoderConfig(config.EncoderConfig)
+
+	logger, err := config.Build(ecszap.WrapCoreOption(), zap.AddCaller())
+	if err != nil {
+		return nil, err
+	}
+
+	return inflateLogger(logger), nil
+}
+
+func logger(env string) (*zap.Logger, error) {
+	switch strings.ToLower(env) {
+	case docker, production:
+		return productionLogger()
+	default:
+		return zap.NewDevelopment()
+	}
+}
+
+func init() {
+	env := config.Config().GetString("application.mode")
+
+	newLogger, err := logger(env)
+	if err != nil {
+		panic(err)
+	}
+
+	appLogger = newLogger
+}
+
+func Logger() *zap.Logger {
+	return appLogger
+}
