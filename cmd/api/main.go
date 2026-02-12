@@ -12,7 +12,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/config"
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/handler"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/middleware"
 	"go.uber.org/zap"
 )
 
@@ -48,6 +50,10 @@ func main() {
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	})
+	router.Use(middleware.RequestLogger())
+
+	h := handler.New()
+	h.RegisterRoutes(router)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
