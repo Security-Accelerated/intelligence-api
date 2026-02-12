@@ -1,6 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/config"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
 	"go.uber.org/zap"
@@ -22,4 +32,55 @@ func main() {
 		zap.String("architecture", config.Config().GetString("environment.architecture")),
 		zap.String("os", config.Config().GetString("environment.os")),
 	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+
+	if config.Config().GetString("application.mode") == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	})
+
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", port),
+		Handler:      router,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		logger.Info("server started", zap.Int("port", port))
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		logger.Fatal("server error", zap.Error(err))
+	case sig := <-shutdown:
+		logger.Info("shutdown signal received", zap.String("signal", sig.String()))
+	}
+
+	cancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("graceful shutdown failed, forcing close", zap.Error(err))
+		server.Close()
+	}
+
+	logger.Info("application stopped")
 }
