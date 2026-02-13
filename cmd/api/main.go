@@ -15,6 +15,7 @@ import (
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/handler"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/middleware"
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/service"
 	"go.uber.org/zap"
 )
 
@@ -52,14 +53,15 @@ func main() {
 	})
 	router.Use(middleware.RequestLogger())
 
-	h := handler.New()
+	domainService := service.NewDomainService()
+	h := handler.New(domainService)
 	h.RegisterRoutes(router)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
 		Handler:      router,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 45 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
