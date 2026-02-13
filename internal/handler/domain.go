@@ -25,6 +25,7 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		return
 	}
 
-	result := h.domainService.Lookup(c.Request.Context(), d)
+	result, cached := h.domainService.Lookup(c.Request.Context(), d)
+	c.Set("cache_hit", cached)
 	c.JSON(http.StatusOK, result)
 }

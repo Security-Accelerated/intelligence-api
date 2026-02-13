@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/cache"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/config"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/handler"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
@@ -53,7 +54,14 @@ func main() {
 	})
 	router.Use(middleware.RequestLogger())
 
-	domainService := service.NewDomainService()
+	redisCache := cache.NewRedisCache(
+		config.Config().GetString("redis.addr"),
+		config.Config().GetString("redis.password"),
+		config.Config().GetInt("redis.db"),
+	)
+
+	cacheTTL := config.Config().GetDuration("redis.cache_ttl")
+	domainService := service.NewDomainService(redisCache, cacheTTL)
 	h := handler.New(domainService)
 	h.RegisterRoutes(router)
 

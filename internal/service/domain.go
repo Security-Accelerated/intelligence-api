@@ -5,16 +5,28 @@ import (
 	"sync"
 	"time"
 
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/cache"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
+	"go.uber.org/zap"
 )
 
-type DomainService struct{}
-
-func NewDomainService() *DomainService {
-	return &DomainService{}
+type DomainService struct {
+	cache    *cache.RedisCache
+	cacheTTL time.Duration
 }
 
-func (s *DomainService) Lookup(ctx context.Context, domainName string) *domain.DomainResponse {
+func NewDomainService(c *cache.RedisCache, cacheTTL time.Duration) *DomainService {
+	return &DomainService{cache: c, cacheTTL: cacheTTL}
+}
+
+func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.DomainResponse, bool) {
+	if cached, err := s.cache.Get(ctx, domainName); err != nil {
+		logging.Logger().Warn("cache get failed", zap.String("domain", domainName), zap.Error(err))
+	} else if cached != nil {
+		return cached, true
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -88,5 +100,11 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string) *domain.D
 	}()
 
 	wg.Wait()
-	return resp
+
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil
+	if hasData {
+		s.cache.Set(ctx, domainName, resp, s.cacheTTL)
+	}
+
+	return resp, false
 }

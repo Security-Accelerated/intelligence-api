@@ -16,13 +16,19 @@ func RequestLogger() gin.HandlerFunc {
 
 		c.Next()
 
-		logger.Info("request",
+		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
 			zap.Int("status", c.Writer.Status()),
 			zap.Duration("latency", time.Since(start)),
 			zap.String("client_ip", c.ClientIP()),
 			zap.String("user_agent", c.Request.UserAgent()),
-		)
+		}
+
+		if cacheHit, exists := c.Get("cache_hit"); exists {
+			fields = append(fields, zap.Bool("cache_hit", cacheHit.(bool)))
+		}
+
+		logger.Info("request", fields...)
 	}
 }
