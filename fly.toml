@@ -1,5 +1,10 @@
+# fly.toml app configuration file generated for security-accelerated-intelligence-api on 2026-02-15T21:02:19Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
 app = 'security-accelerated-intelligence-api'
-primary_region = 'iad'
+primary_region = 'ams'
 
 [build]
 
@@ -9,8 +14,10 @@ primary_region = 'iad'
   auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
-  memory = '256mb'
+  memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256
