@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,8 +48,9 @@ func init() {
 	}
 
 
-	// pull from env if not set in config file
-	viper.AutomaticEnv()
+	// allow env vars to override config: POSTGRES_HOST → postgres.host
+	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	config.AutomaticEnv()
 
 	// read in config
 	if err := config.ReadInConfig(); err != nil {
