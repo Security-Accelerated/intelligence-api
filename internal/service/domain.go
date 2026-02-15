@@ -5,19 +5,35 @@ import (
 	"sync"
 	"time"
 
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/cache"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
 	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
 	"go.uber.org/zap"
 )
 
-type DomainService struct {
-	cache    *cache.RedisCache
-	cacheTTL time.Duration
+type DomainCache interface {
+	Get(ctx context.Context, key string) (*domain.DomainResponse, error)
+	Set(ctx context.Context, key string, resp *domain.DomainResponse, ttl time.Duration)
 }
 
-func NewDomainService(c *cache.RedisCache, cacheTTL time.Duration) *DomainService {
-	return &DomainService{cache: c, cacheTTL: cacheTTL}
+type DomainService struct {
+	cache    DomainCache
+	cacheTTL time.Duration
+
+	lookupWhois   func(ctx context.Context, d string) (*domain.WhoisInfo, error)
+	lookupDNS     func(ctx context.Context, d string) (*domain.DNSInfo, error)
+	lookupSSL     func(ctx context.Context, d string) (*domain.SSLInfo, error)
+	lookupHeaders func(ctx context.Context, d string) (*domain.HeadersInfo, error)
+}
+
+func NewDomainService(c DomainCache, cacheTTL time.Duration) *DomainService {
+	return &DomainService{
+		cache:         c,
+		cacheTTL:      cacheTTL,
+		lookupWhois:   domain.LookupWhois,
+		lookupDNS:     domain.LookupDNS,
+		lookupSSL:     domain.LookupSSL,
+		lookupHeaders: domain.LookupHeaders,
+	}
 }
 
 func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.DomainResponse, bool) {
@@ -41,7 +57,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.
 
 	go func() {
 		defer wg.Done()
-		result, err := domain.LookupWhois(ctx, domainName)
+		result, err := s.lookupWhois(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -56,7 +72,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.
 
 	go func() {
 		defer wg.Done()
-		result, err := domain.LookupDNS(ctx, domainName)
+		result, err := s.lookupDNS(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -71,7 +87,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.
 
 	go func() {
 		defer wg.Done()
-		result, err := domain.LookupSSL(ctx, domainName)
+		result, err := s.lookupSSL(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
@@ -86,7 +102,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.
 
 	go func() {
 		defer wg.Done()
-		result, err := domain.LookupHeaders(ctx, domainName)
+		result, err := s.lookupHeaders(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {

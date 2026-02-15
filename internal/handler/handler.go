@@ -1,15 +1,21 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/service"
+	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
 )
 
-type Handler struct {
-	domainService *service.DomainService
+type DomainLookupService interface {
+	Lookup(ctx context.Context, domainName string) (*domain.DomainResponse, bool)
 }
 
-func New(domainService *service.DomainService) *Handler {
+type Handler struct {
+	domainService DomainLookupService
+}
+
+func New(domainService DomainLookupService) *Handler {
 	return &Handler{
 		domainService: domainService,
 	}
