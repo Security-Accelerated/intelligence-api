@@ -23,7 +23,6 @@ func init() {
 	config.AddConfigPath("../../config/")
 	config.AddConfigPath("../config/")
 	config.AddConfigPath("config/")
-	config.AddConfigPath("/etc/" + appName + "/")
 	config.AddConfigPath("/etc/security-accelerated/")
 
 	// application
