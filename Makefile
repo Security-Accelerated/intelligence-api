@@ -2,7 +2,9 @@ APP_NAME := intelligence-api
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty)
 
-.PHONY: build clean test run release
+.PHONY: all build clean test test-integration run release
+
+all: test build
 
 build:
 	go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME) ./cmd/api/
@@ -11,7 +13,10 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 test:
-	go test ./...
+	go test -race -count=1 ./...
+
+test-integration:
+	go test -race -count=1 -tags=integration -v .
 
 run: build
 	./$(BUILD_DIR)/$(APP_NAME)
