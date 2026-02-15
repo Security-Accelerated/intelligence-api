@@ -65,7 +65,8 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		wg.Add(1)
 		go func(idx int, name string) {
 			defer wg.Done()
-			result, _ := h.domainService.Lookup(c.Request.Context(), name)
+			result, cached := h.domainService.Lookup(c.Request.Context(), name)
+			result.CacheHit = cached
 			ch <- indexedResult{index: idx, resp: result}
 		}(v.index, v.name)
 	}

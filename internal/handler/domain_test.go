@@ -137,6 +137,17 @@ func TestDomainLookup_CachedResponse(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if !resp[0].CacheHit {
+		t.Errorf("CacheHit = false, want true")
+	}
 }
 
 func TestDomainLookup_MissingBody(t *testing.T) {

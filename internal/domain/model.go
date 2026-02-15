@@ -7,12 +7,13 @@ type DomainRequest struct {
 }
 
 type DomainResponse struct {
-	Domain  string       `json:"domain"`
-	Whois   *WhoisInfo   `json:"whois,omitempty"`
-	DNS     *DNSInfo     `json:"dns,omitempty"`
-	SSL     *SSLInfo     `json:"ssl,omitempty"`
-	Headers *HeadersInfo `json:"headers,omitempty"`
-	Errors  []LookupError `json:"errors,omitempty"`
+	Domain   string        `json:"domain"`
+	CacheHit bool          `json:"cache_hit"`
+	Whois    *WhoisInfo    `json:"whois,omitempty"`
+	DNS      *DNSInfo      `json:"dns,omitempty"`
+	SSL      *SSLInfo      `json:"ssl,omitempty"`
+	Headers  *HeadersInfo  `json:"headers,omitempty"`
+	Errors   []LookupError `json:"errors,omitempty"`
 }
 
 type WhoisInfo struct {
