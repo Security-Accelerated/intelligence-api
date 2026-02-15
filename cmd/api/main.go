@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
+	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
@@ -45,6 +48,28 @@ func main() {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
+	// Postgres
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		config.Config().GetString("postgres.host"),
+		config.Config().GetInt("postgres.port"),
+		config.Config().GetString("postgres.user"),
+		config.Config().GetString("postgres.password"),
+		config.Config().GetString("postgres.dbname"),
+		config.Config().GetString("postgres.sslmode"),
+	)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		logger.Fatal("failed to open postgres connection", zap.Error(err))
+	}
+	defer db.Close()
+
+	if err := db.PingContext(ctx); err != nil {
+		logger.Fatal("failed to ping postgres", zap.Error(err))
+	}
+	logger.Info("connected to postgres")
+
+	authRepo := auth.NewPostgresRepository(db)
+
 	if config.Config().GetString("application.mode") == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -66,6 +91,7 @@ func main() {
 	domainService := service.NewDomainService(redisCache, cacheTTL)
 	h := handler.New(domainService, version)
 	h.RegisterRoutes(router)
+	h.RegisterProtectedRoutes(router, middleware.APIKeyAuth(authRepo))
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),

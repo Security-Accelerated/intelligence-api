@@ -29,6 +29,11 @@ func newTestRouter(svc DomainLookupService) *gin.Engine {
 	r := gin.New()
 	h := New(svc, "test")
 	h.RegisterRoutes(r)
+	// Register protected routes with a stub auth middleware that grants admin.
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_role", "admin")
+		c.Next()
+	})
 	return r
 }
 

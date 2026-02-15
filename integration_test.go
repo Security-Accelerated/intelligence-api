@@ -13,12 +13,32 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/service"
 )
+
+// stubRepo is an in-memory auth.Repository for integration tests.
+type stubRepo struct {
+	keys map[string]*auth.APIKey
+}
+
+func newStubRepo() *stubRepo {
+	return &stubRepo{keys: map[string]*auth.APIKey{
+		"test-admin-key":  {ID: 1, Key: "test-admin-key", Role: "admin", Active: true},
+		"test-domain-key": {ID: 2, Key: "test-domain-key", Role: "domain", Active: true},
+	}}
+}
+
+func (r *stubRepo) GetByKey(_ context.Context, key string) (*auth.APIKey, error) {
+	if ak, ok := r.keys[key]; ok {
+		return ak, nil
+	}
+	return nil, context.DeadlineExceeded // any non-nil error triggers 401
+}
 
 func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	t.Helper()
@@ -44,10 +64,13 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		},
 	)
 
+	repo := newStubRepo()
+
 	r := gin.New()
 	r.Use(middleware.RequestLogger())
 	h := handler.New(svc, "test")
 	h.RegisterRoutes(r)
+	h.RegisterProtectedRoutes(r, middleware.APIKeyAuth(repo))
 
 	return r, mr
 }
@@ -58,6 +81,7 @@ func TestIntegration_DomainLookup_FullFlow(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -102,6 +126,7 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 	w1 := httptest.NewRecorder()
 	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(body))
 	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w1, req1)
 
 	if w1.Code != http.StatusOK {
@@ -112,6 +137,7 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(body))
 	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w2, req2)
 
 	if w2.Code != http.StatusOK {
@@ -139,6 +165,7 @@ func TestIntegration_DomainLookup_InvalidDomain(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["notadomain"]}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
@@ -163,5 +190,59 @@ func TestIntegration_Hello(t *testing.T) {
 	}
 	if body["message"] != "hello world" {
 		t.Errorf("message = %q, want %q", body["message"], "hello world")
+	}
+}
+
+func TestIntegration_Auth_MissingKey(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestIntegration_Auth_InvalidKey(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "bad-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestIntegration_Auth_DomainKeyCanAccessDomain(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-domain-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestIntegration_Auth_DomainKeyCannotAccessInfo(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	req.Header.Set("X-API-Key", "test-domain-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
 	}
 }

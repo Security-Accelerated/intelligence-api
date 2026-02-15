@@ -23,6 +23,13 @@ RUN printf '%s\n' \
   '  password: ""' \
   '  db: 0' \
   '  cache_ttl: 60m' \
+  'postgres:' \
+  '  host: postgres' \
+  '  port: 5432' \
+  '  user: intelligence' \
+  '  password: intelligence' \
+  '  dbname: intelligence_api' \
+  '  sslmode: disable' \
   > /etc/security-accelerated/intelligence-api.yaml
 
 EXPOSE 8080

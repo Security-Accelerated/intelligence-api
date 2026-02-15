@@ -3,13 +3,26 @@
 
 A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP header lookups for one or more domains, with Redis caching.
 
+## Authentication
+
+All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL.
+
+### Roles
+
+| Role | Access |
+|------|--------|
+| `admin` | All endpoints (`/hello`, `/info`, `/domain`) |
+| `domain` | Only `POST /api/v1/domain` |
+
+Requests without a valid key receive `401 Unauthorized`. Requests with a key that lacks permission for the endpoint receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
+
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/hello` | Health check, returns `{"message": "hello world"}` |
-| GET | `/api/v1/info` | Application and environment info |
-| POST | `/api/v1/domain` | Domain intelligence lookup |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
+| GET | `/api/v1/info` | `admin` | Application and environment info |
+| POST | `/api/v1/domain` | `admin`, `domain` | Domain intelligence lookup |
 
 ### POST /api/v1/domain
 
@@ -26,6 +39,7 @@ The `domains` field accepts an array of domain names. Each entry accepts raw dom
 ```sh
 curl -X POST http://localhost:8080/api/v1/domain \
   -H 'Content-Type: application/json' \
+  -H 'X-API-Key: test-admin-key' \
   -d '{"domains":["example.com"]}'
 ```
 
@@ -62,6 +76,7 @@ Lookup results are cached in Redis. Repeated lookups for the same domain return 
 
 - Go 1.25+
 - Redis (or use the included Docker Compose)
+- PostgreSQL (or use the included Docker Compose)
 
 ### Configuration
 
@@ -86,6 +101,26 @@ Config values:
 | `redis.password` | `""` | Redis password |
 | `redis.db` | `0` | Redis database number |
 | `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
+| `postgres.host` | `localhost` | PostgreSQL host |
+| `postgres.port` | `5432` | PostgreSQL port |
+| `postgres.user` | `intelligence` | PostgreSQL user |
+| `postgres.password` | `intelligence` | PostgreSQL password |
+| `postgres.dbname` | `intelligence_api` | PostgreSQL database name |
+| `postgres.sslmode` | `disable` | PostgreSQL SSL mode |
+
+### Database Setup
+
+The `migrations/` directory contains SQL files that are automatically applied when using Docker Compose (mounted to `/docker-entrypoint-initdb.d/`).
+
+- `001_create_api_keys.sql` — creates the `api_keys` table
+- `seed.sql` — inserts test keys (`test-admin-key` and `test-domain-key`)
+
+To manage API keys manually:
+
+```sql
+INSERT INTO api_keys (key, role) VALUES ('my-secret-key', 'admin');
+INSERT INTO api_keys (key, role) VALUES ('my-domain-key', 'domain');
+```
 
 ### Run with Docker (recommended)
 
@@ -95,7 +130,7 @@ Build and run the full stack locally:
 docker compose up --build
 ```
 
-This starts both the API and Redis. The API is available at `http://localhost:8080`.
+This starts the API, Redis, and PostgreSQL. The API is available at `http://localhost:8080`. The migration and seed files run automatically on first start.
 
 ### Run from GitHub Container Registry
 
@@ -115,13 +150,23 @@ services:
       - "8080:8080"
     depends_on:
       - redis
+      - postgres
   redis:
     image: redis:7-alpine
     volumes:
       - redis-data:/data
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: intelligence
+      POSTGRES_PASSWORD: intelligence
+      POSTGRES_DB: intelligence_api
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
 
 volumes:
   redis-data:
+  postgres-data:
 ```
 
 Then run:
@@ -132,10 +177,10 @@ docker compose up
 
 ### Run without Docker
 
-Start Redis:
+Start Redis and PostgreSQL:
 
 ```sh
-docker compose up -d redis
+docker compose up -d redis postgres
 ```
 
 Build and run:
@@ -161,5 +206,5 @@ make run    # builds and starts the server
 
 ```sh
 make test                # unit tests
-make test-integration    # integration tests (uses in-memory Redis)
+make test-integration    # integration tests (uses in-memory Redis, stub auth)
 ```
