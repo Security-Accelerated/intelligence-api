@@ -8,7 +8,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP hea
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/hello` | Health check, returns `{"message": "hello world"}` |
-| GET | `/api/v1/version` | Returns build version, e.g. `{"version": "v0.1.0"}` |
+| GET | `/api/v1/info` | Application and environment info |
 | POST | `/api/v1/domain` | Domain intelligence lookup |
 
 ### POST /api/v1/domain
