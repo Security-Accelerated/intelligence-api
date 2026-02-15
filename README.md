@@ -42,10 +42,16 @@ The domain field accepts raw domains, URLs with `http://`/`https://` prefixes, a
 
 ### Configuration
 
-Copy the sample config and adjust as needed:
+The application looks for `intelligence-api.yaml` in the following locations (first match wins):
+
+1. `/etc/security-accelerated/` (recommended for production)
+2. `/etc/intelligence-api/`
+3. `config/` (relative to working directory)
+
+Copy the sample config to your preferred location:
 
 ```sh
-cp internal/config/sample-config.yml config/intelligence-api.yaml
+sudo cp internal/config/sample-config.yml /etc/security-accelerated/intelligence-api.yaml
 ```
 
 Config values:
