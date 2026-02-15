@@ -1,7 +1,7 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP header lookups for a given domain, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP header lookups for one or more domains, with Redis caching.
 
 ## API Endpoints
 
@@ -16,27 +16,39 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP hea
 **Request:**
 ```json
 {
-  "domain": "example.com"
+  "domains": ["example.com", "example.org"]
 }
 ```
 
-The domain field accepts raw domains, URLs with `http://`/`https://` prefixes, and trailing slashes — all are normalized automatically.
+The `domains` field accepts an array of domain names. Each entry accepts raw domains, URLs with `http://`/`https://` prefixes, and trailing slashes — all are normalized automatically. Domains are looked up concurrently.
 
 **Example:**
 ```sh
-curl -X POST http://localhost:8080/api/v1/domain -H 'Content-Type: application/json' -d '{"domain":"example.com"}'
+curl -X POST http://localhost:8080/api/v1/domain \
+  -H 'Content-Type: application/json' \
+  -d '{"domains":["example.com"]}'
 ```
 
 **Response:**
 ```json
-{
-  "domain": "example.com",
-  "whois": { "domain_name": "...", "registrar": "...", "..." : "..." },
-  "dns": { "a": ["93.184.216.34"], "mx": [], "ns": [], "..." : "..." },
-  "ssl": { "subject": "...", "issuer": "...", "..." : "..." },
-  "headers": { "status_code": 200, "headers": {}, "security_headers": {} },
-  "errors": []
-}
+[
+  {
+    "domain": "example.com",
+    "whois": { "domain_name": "...", "registrar": "...", "..." : "..." },
+    "dns": { "a": ["93.184.216.34"], "mx": [], "ns": [], "..." : "..." },
+    "ssl": { "subject": "...", "issuer": "...", "..." : "..." },
+    "headers": { "status_code": 200, "headers": {}, "security_headers": {} },
+    "errors": []
+  }
+]
+```
+
+Invalid domains in a multi-domain request are included in the response with a validation error instead of failing the entire request:
+```json
+[
+  { "domain": "example.com", "whois": {}, "dns": {}, "..." : "..." },
+  { "domain": "notadomain", "errors": [{"lookup": "validation", "message": "invalid domain name"}] }
+]
 ```
 
 ## Getting Started

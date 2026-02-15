@@ -3,7 +3,7 @@ package domain
 import "time"
 
 type DomainRequest struct {
-	Domain string `json:"domain" binding:"required"`
+	Domains []string `json:"domains" binding:"required,min=1"`
 }
 
 type DomainResponse struct {

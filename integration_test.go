@@ -56,7 +56,7 @@ func TestIntegration_DomainLookup_FullFlow(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domain":"example.com"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -64,35 +64,39 @@ func TestIntegration_DomainLookup_FullFlow(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp domain.DomainResponse
+	var resp []*domain.DomainResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	if resp.Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp.Domain, "example.com")
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
-	if resp.Whois == nil || resp.Whois.Registrar != "Test Registrar" {
-		t.Errorf("Whois = %+v, want Registrar=Test Registrar", resp.Whois)
+	r0 := resp[0]
+	if r0.Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", r0.Domain, "example.com")
 	}
-	if resp.DNS == nil || len(resp.DNS.A) == 0 {
-		t.Errorf("DNS.A = %v, want non-empty", resp.DNS)
+	if r0.Whois == nil || r0.Whois.Registrar != "Test Registrar" {
+		t.Errorf("Whois = %+v, want Registrar=Test Registrar", r0.Whois)
 	}
-	if resp.SSL == nil || resp.SSL.Subject != "example.com" {
-		t.Errorf("SSL = %+v, want Subject=example.com", resp.SSL)
+	if r0.DNS == nil || len(r0.DNS.A) == 0 {
+		t.Errorf("DNS.A = %v, want non-empty", r0.DNS)
 	}
-	if resp.Headers == nil || resp.Headers.StatusCode != 200 {
-		t.Errorf("Headers = %+v, want StatusCode=200", resp.Headers)
+	if r0.SSL == nil || r0.SSL.Subject != "example.com" {
+		t.Errorf("SSL = %+v, want Subject=example.com", r0.SSL)
 	}
-	if len(resp.Errors) != 0 {
-		t.Errorf("Errors = %v, want none", resp.Errors)
+	if r0.Headers == nil || r0.Headers.StatusCode != 200 {
+		t.Errorf("Headers = %+v, want StatusCode=200", r0.Headers)
+	}
+	if len(r0.Errors) != 0 {
+		t.Errorf("Errors = %v, want none", r0.Errors)
 	}
 }
 
 func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	body := `{"domain":"example.com"}`
+	body := `{"domains":["example.com"]}`
 
 	// First request — cache miss, populates cache.
 	w1 := httptest.NewRecorder()
@@ -114,15 +118,18 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 		t.Fatalf("second request: status = %d, want %d", w2.Code, http.StatusOK)
 	}
 
-	var resp1, resp2 domain.DomainResponse
+	var resp1, resp2 []*domain.DomainResponse
 	json.Unmarshal(w1.Body.Bytes(), &resp1)
 	json.Unmarshal(w2.Body.Bytes(), &resp2)
 
-	if resp1.Domain != resp2.Domain {
-		t.Errorf("Domain mismatch: %q vs %q", resp1.Domain, resp2.Domain)
+	if len(resp1) != 1 || len(resp2) != 1 {
+		t.Fatalf("expected 1 result each, got %d and %d", len(resp1), len(resp2))
 	}
-	if resp2.Whois == nil || resp2.Whois.Registrar != "Test Registrar" {
-		t.Errorf("cached response Whois = %+v, want Registrar=Test Registrar", resp2.Whois)
+	if resp1[0].Domain != resp2[0].Domain {
+		t.Errorf("Domain mismatch: %q vs %q", resp1[0].Domain, resp2[0].Domain)
+	}
+	if resp2[0].Whois == nil || resp2[0].Whois.Registrar != "Test Registrar" {
+		t.Errorf("cached response Whois = %+v, want Registrar=Test Registrar", resp2[0].Whois)
 	}
 }
 
@@ -130,7 +137,7 @@ func TestIntegration_DomainLookup_InvalidDomain(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domain":"notadomain"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["notadomain"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 

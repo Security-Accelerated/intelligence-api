@@ -35,7 +35,7 @@ func newTestRouter(svc DomainLookupService) *gin.Engine {
 func TestDomainLookup_ValidDomain(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domain":"example.com"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -43,12 +43,82 @@ func TestDomainLookup_ValidDomain(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp domain.DomainResponse
+	var resp []*domain.DomainResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	if resp.Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp.Domain, "example.com")
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+}
+
+func TestDomainLookup_MultipleDomains(t *testing.T) {
+	r := newTestRouter(&mockService{})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com","example.org"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if len(resp) != 2 {
+		t.Fatalf("len(resp) = %d, want 2", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+	if resp[1].Domain != "example.org" {
+		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "example.org")
+	}
+}
+
+func TestDomainLookup_MixedValidInvalid(t *testing.T) {
+	r := newTestRouter(&mockService{})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com","notadomain","example.org"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if len(resp) != 3 {
+		t.Fatalf("len(resp) = %d, want 3", len(resp))
+	}
+
+	// First domain: valid
+	if resp[0].Domain != "example.com" {
+		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+	if len(resp[0].Errors) != 0 {
+		t.Errorf("resp[0].Errors = %v, want none", resp[0].Errors)
+	}
+
+	// Second domain: invalid, should have validation error
+	if resp[1].Domain != "notadomain" {
+		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "notadomain")
+	}
+	if len(resp[1].Errors) != 1 || resp[1].Errors[0].Lookup != "validation" {
+		t.Errorf("resp[1].Errors = %v, want validation error", resp[1].Errors)
+	}
+
+	// Third domain: valid
+	if resp[2].Domain != "example.org" {
+		t.Errorf("resp[2].Domain = %q, want %q", resp[2].Domain, "example.org")
 	}
 }
 
@@ -60,23 +130,13 @@ func TestDomainLookup_CachedResponse(t *testing.T) {
 	r := newTestRouter(svc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domain":"cached.com"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["cached.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
-
-	// capture cache_hit via middleware
-	var cacheHit interface{}
-	r.Use(func(c *gin.Context) {
-		c.Next()
-		cacheHit, _ = c.Get("cache_hit")
-	})
-	// re-register routes after adding middleware won't work; instead check response
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	// We primarily verify status 200 and correct domain; cache_hit is set on gin context
-	_ = cacheHit
 }
 
 func TestDomainLookup_MissingBody(t *testing.T) {
@@ -91,10 +151,10 @@ func TestDomainLookup_MissingBody(t *testing.T) {
 	}
 }
 
-func TestDomainLookup_EmptyDomain(t *testing.T) {
+func TestDomainLookup_EmptyArray(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domain":""}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":[]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -103,10 +163,10 @@ func TestDomainLookup_EmptyDomain(t *testing.T) {
 	}
 }
 
-func TestDomainLookup_NoDot(t *testing.T) {
+func TestDomainLookup_SingleInvalidDomain(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domain":"localhost"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["localhost"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -121,9 +181,9 @@ func TestDomainLookup_StripsProtocolAndSlash(t *testing.T) {
 		input  string
 		expect string
 	}{
-		{"https prefix", `{"domain":"https://example.com/"}`, "example.com"},
-		{"http prefix", `{"domain":"http://example.com/"}`, "example.com"},
-		{"trailing slash", `{"domain":"example.com/"}`, "example.com"},
+		{"https prefix", `{"domains":["https://example.com/"]}`, "example.com"},
+		{"http prefix", `{"domains":["http://example.com/"]}`, "example.com"},
+		{"trailing slash", `{"domains":["example.com/"]}`, "example.com"},
 	}
 
 	for _, tt := range tests {
@@ -139,12 +199,15 @@ func TestDomainLookup_StripsProtocolAndSlash(t *testing.T) {
 				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 			}
 
-			var resp domain.DomainResponse
+			var resp []*domain.DomainResponse
 			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
-			if resp.Domain != tt.expect {
-				t.Errorf("Domain = %q, want %q", resp.Domain, tt.expect)
+			if len(resp) != 1 {
+				t.Fatalf("len(resp) = %d, want 1", len(resp))
+			}
+			if resp[0].Domain != tt.expect {
+				t.Errorf("Domain = %q, want %q", resp[0].Domain, tt.expect)
 			}
 		})
 	}
@@ -154,7 +217,7 @@ func TestDomainLookup_WhitespaceTrimming(t *testing.T) {
 	svc := &mockService{}
 	r := newTestRouter(svc)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domain":"  example.com  "}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["  example.com  "]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -162,11 +225,14 @@ func TestDomainLookup_WhitespaceTrimming(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp domain.DomainResponse
+	var resp []*domain.DomainResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp.Domain, "example.com")
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
 	}
 }
