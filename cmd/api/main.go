@@ -20,6 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var version = "dev"
+
 func main() {
 	logger := logging.Logger()
 	defer logger.Sync()
@@ -62,7 +64,7 @@ func main() {
 
 	cacheTTL := config.Config().GetDuration("redis.cache_ttl")
 	domainService := service.NewDomainService(redisCache, cacheTTL)
-	h := handler.New(domainService)
+	h := handler.New(domainService, version)
 	h.RegisterRoutes(router)
 
 	server := &http.Server{

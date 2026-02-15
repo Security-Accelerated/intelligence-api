@@ -1,0 +1,29 @@
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG VERSION=dev
+RUN go build -ldflags "-X main.version=${VERSION}" -o /app/intelligence-api ./cmd/api/
+
+FROM alpine:3.21
+
+RUN mkdir -p /etc/security-accelerated
+COPY --from=build /app/intelligence-api /usr/local/bin/intelligence-api
+
+# Bake in a Docker-appropriate config
+RUN printf '%s\n' \
+  '---' \
+  'application:' \
+  '  mode: docker' \
+  '  port: 8080' \
+  'redis:' \
+  '  addr: redis:6379' \
+  '  password: ""' \
+  '  db: 0' \
+  '  cache_ttl: 60m' \
+  > /etc/security-accelerated/intelligence-api.yaml
+
+EXPOSE 8080
+ENTRYPOINT ["intelligence-api"]

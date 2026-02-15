@@ -46,7 +46,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 
 	r := gin.New()
 	r.Use(middleware.RequestLogger())
-	h := handler.New(svc)
+	h := handler.New(svc, "test")
 	h.RegisterRoutes(r)
 
 	return r, mr

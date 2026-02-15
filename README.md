@@ -8,6 +8,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP hea
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v1/hello` | Health check, returns `{"message": "hello world"}` |
+| GET | `/api/v1/version` | Returns build version, e.g. `{"version": "v0.1.0"}` |
 | POST | `/api/v1/domain` | Domain intelligence lookup |
 
 ### POST /api/v1/domain
@@ -64,13 +65,58 @@ Config values:
 | `redis.db` | `0` | Redis database number |
 | `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
 
-### Start Redis
+### Run with Docker (recommended)
+
+Build and run the full stack locally:
 
 ```sh
-docker compose up -d
+docker compose up --build
 ```
 
-### Build and Run
+This starts both the API and Redis. The API is available at `http://localhost:8080`.
+
+### Run from GitHub Container Registry
+
+On any machine with Docker — no code checkout needed:
+
+```sh
+docker login ghcr.io -u <github-username>
+```
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  api:
+    image: ghcr.io/securityaccelerateddevelopment/intelligence-api:main
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
+```
+
+Then run:
+
+```sh
+docker compose up
+```
+
+### Run without Docker
+
+Start Redis:
+
+```sh
+docker compose up -d redis
+```
+
+Build and run:
 
 ```sh
 make        # runs tests, then builds
@@ -94,33 +140,4 @@ make run    # builds and starts the server
 ```sh
 make test                # unit tests
 make test-integration    # integration tests (uses in-memory Redis)
-```
-
-## Project Structure
-
-```
-cmd/api/
-  main.go                  # application entrypoint, wiring, graceful shutdown
-internal/
-  cache/
-    redis.go               # Redis cache (Get/Set with JSON serialization)
-  config/
-    config.go              # Viper-based configuration
-  domain/
-    model.go               # request/response types
-    whois.go               # WHOIS lookup
-    dns.go                 # DNS lookup
-    ssl.go                 # TLS/SSL certificate lookup
-    headers.go             # HTTP header + security header lookup
-  handler/
-    handler.go             # route registration, DomainLookupService interface
-    domain.go              # POST /api/v1/domain handler
-    hello.go               # GET /api/v1/hello handler
-  logging/
-    logging.go             # Zap logger setup
-  middleware/
-    request_logger.go      # request logging middleware
-  service/
-    domain.go              # orchestrates concurrent lookups + caching
-integration_test.go        # full HTTP flow integration tests
 ```

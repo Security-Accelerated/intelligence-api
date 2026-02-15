@@ -27,7 +27,7 @@ func (m *mockService) Lookup(_ context.Context, domainName string) (*domain.Doma
 func newTestRouter(svc DomainLookupService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc)
+	h := New(svc, "test")
 	h.RegisterRoutes(r)
 	return r
 }

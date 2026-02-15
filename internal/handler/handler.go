@@ -13,11 +13,13 @@ type DomainLookupService interface {
 
 type Handler struct {
 	domainService DomainLookupService
+	version       string
 }
 
-func New(domainService DomainLookupService) *Handler {
+func New(domainService DomainLookupService, version string) *Handler {
 	return &Handler{
 		domainService: domainService,
+		version:       version,
 	}
 }
 
@@ -25,6 +27,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	v1 := router.Group("/api/v1")
 	{
 		v1.GET("/hello", h.Hello)
+		v1.GET("/version", h.Version)
 		v1.POST("/domain", h.DomainLookup)
 	}
 }
