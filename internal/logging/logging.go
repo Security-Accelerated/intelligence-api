@@ -3,7 +3,7 @@ package logging
 import (
 	"strings"
 
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/config"
 	"go.elastic.co/ecszap"
 	"go.uber.org/zap"
 )

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 // mockCache is a hand-written mock for DomainCache.

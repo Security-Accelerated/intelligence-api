@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 func setup(t *testing.T) (*RedisCache, *miniredis.Miniredis) {

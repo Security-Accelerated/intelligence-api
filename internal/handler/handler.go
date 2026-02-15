@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 type DomainLookupService interface {

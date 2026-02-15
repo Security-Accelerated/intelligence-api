@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 func (h *Handler) DomainLookup(c *gin.Context) {

@@ -1,4 +1,4 @@
-module github.com/securityaccelerateddevelopment/intelligence-api
+module github.com/security-accelerated/intelligence-api
 
 go 1.25.0
 

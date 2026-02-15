@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"go.uber.org/zap"
 )
 

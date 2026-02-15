@@ -13,11 +13,11 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/cache"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/domain"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/handler"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/middleware"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/service"
+	"github.com/security-accelerated/intelligence-api/internal/cache"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/handler"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/security-accelerated/intelligence-api/internal/service"
 )
 
 func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {

@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/cache"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/config"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/handler"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/logging"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/middleware"
-	"github.com/securityaccelerateddevelopment/intelligence-api/internal/service"
+	"github.com/security-accelerated/intelligence-api/internal/cache"
+	"github.com/security-accelerated/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/handler"
+	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/security-accelerated/intelligence-api/internal/service"
 	"go.uber.org/zap"
 )
 

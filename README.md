@@ -88,7 +88,7 @@ Create a `docker-compose.yml`:
 ```yaml
 services:
   api:
-    image: ghcr.io/securityaccelerateddevelopment/intelligence-api:main
+    image: ghcr.io/security-accelerated/intelligence-api:main
     ports:
       - "8080:8080"
     depends_on:
