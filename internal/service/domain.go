@@ -36,6 +36,18 @@ func NewDomainService(c DomainCache, cacheTTL time.Duration) *DomainService {
 	}
 }
 
+func (s *DomainService) SetLookups(
+	whois func(context.Context, string) (*domain.WhoisInfo, error),
+	dns func(context.Context, string) (*domain.DNSInfo, error),
+	ssl func(context.Context, string) (*domain.SSLInfo, error),
+	headers func(context.Context, string) (*domain.HeadersInfo, error),
+) {
+	s.lookupWhois = whois
+	s.lookupDNS = dns
+	s.lookupSSL = ssl
+	s.lookupHeaders = headers
+}
+
 func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.DomainResponse, bool) {
 	if cached, err := s.cache.Get(ctx, domainName); err != nil {
 		logging.Logger().Warn("cache get failed", zap.String("domain", domainName), zap.Error(err))
