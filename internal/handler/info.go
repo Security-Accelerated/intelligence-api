@@ -21,6 +21,7 @@ func (h *Handler) Info(c *gin.Context) {
 		"environment": gin.H{
 			"host":           cfg.GetString("environment.host"),
 			"os":             cfg.GetString("environment.os"),
+			"os_version":     cfg.GetString("environment.os.version"),
 			"architecture":   cfg.GetString("environment.architecture"),
 			"golang_version": cfg.GetString("environment.golang.version"),
 		},

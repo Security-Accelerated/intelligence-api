@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +41,12 @@ func init() {
 	config.Set("environment.architecture", runtime.GOARCH)
 	config.Set("environment.os", runtime.GOOS)
 
+	var uname syscall.Utsname
+	if err := syscall.Uname(&uname); err == nil {
+		config.Set("environment.os.version", charsToString(uname.Release[:]))
+	}
+
+
 	// pull from env if not set in config file
 	viper.AutomaticEnv()
 
@@ -55,4 +62,15 @@ func init() {
 
 func Config() *viper.Viper {
 	return config
+}
+
+func charsToString(ca []int8) string {
+	b := make([]byte, 0, len(ca))
+	for _, c := range ca {
+		if c == 0 {
+			break
+		}
+		b = append(b, byte(c))
+	}
+	return string(b)
 }
