@@ -34,6 +34,7 @@ curl -X POST http://localhost:8080/api/v1/domain \
 [
   {
     "domain": "example.com",
+    "cache_hit": false,
     "whois": { "domain_name": "...", "registrar": "...", "..." : "..." },
     "dns": { "a": ["93.184.216.34"], "mx": [], "ns": [], "..." : "..." },
     "ssl": { "subject": "...", "issuer": "...", "..." : "..." },
@@ -50,6 +51,10 @@ Invalid domains in a multi-domain request are included in the response with a va
   { "domain": "notadomain", "errors": [{"lookup": "validation", "message": "invalid domain name"}] }
 ]
 ```
+
+## Caching
+
+Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
 
 ## Getting Started
 
