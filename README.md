@@ -22,6 +22,11 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP hea
 
 The domain field accepts raw domains, URLs with `http://`/`https://` prefixes, and trailing slashes — all are normalized automatically.
 
+**Example:**
+```sh
+curl -X POST http://localhost:8080/api/v1/domain -H 'Content-Type: application/json' -d '{"domain":"example.com"}'
+```
+
 **Response:**
 ```json
 {
