@@ -1,0 +1,45 @@
+# Intelligence API - REST Client test file
+# Use with the VS Code REST Client extension (humao.rest-client).
+# Click "Send Request" above any ### block to execute it.
+# Requires the API running locally: make run or docker compose up
+
+@host = http://localhost:8080
+@adminKey = test-admin-key
+@domainKey = test-domain-key
+
+### Health check (no auth required)
+GET {{host}}/api/v1/hello
+
+### App info (admin only)
+GET {{host}}/api/v1/info
+X-API-Key: {{adminKey}}
+
+### Domain lookup (admin key)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"]
+}
+
+### Domain lookup (domain key)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+X-API-Key: {{domainKey}}
+
+{
+  "domains": ["example.com", "example.org"]
+}
+
+### Domain lookup - should return 401 (no key)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+
+{
+  "domains": ["example.com"]
+}
+
+### Info - should return 403 (domain key lacks access)
+GET {{host}}/api/v1/info
+X-API-Key: {{domainKey}}
