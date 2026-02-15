@@ -13,6 +13,9 @@ redis:
   db: 0
   cache_ttl: 60m
 
+auth:
+  cache_ttl: 5m
+
 postgres:
   host: localhost
   port: 5432

@@ -6,7 +6,7 @@ import (
 )
 
 type Repository interface {
-	GetByKey(ctx context.Context, key string) (*APIKey, error)
+	GetByKey(ctx context.Context, key string) (*Customer, error)
 }
 
 type PostgresRepository struct {
@@ -17,14 +17,33 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*APIKey, error) {
-	var ak APIKey
+func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Customer, error) {
+	var c Customer
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, key, role, active, created_at FROM api_keys WHERE key = $1 AND active = true`,
+		`SELECT c.id, c.name, c.active, c.created_at
+		   FROM api_keys ak
+		   JOIN customers c ON c.id = ak.customer_id
+		  WHERE ak.key = $1 AND c.active = true`,
 		key,
-	).Scan(&ak.ID, &ak.Key, &ak.Role, &ak.Active, &ak.CreatedAt)
+	).Scan(&c.ID, &c.Name, &c.Active, &c.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
-	return &ak, nil
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT role FROM customer_roles WHERE customer_id = $1`, c.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err != nil {
+			return nil, err
+		}
+		c.Roles = append(c.Roles, role)
+	}
+	return &c, rows.Err()
 }

@@ -2,10 +2,10 @@ package auth
 
 import "time"
 
-type APIKey struct {
+type Customer struct {
 	ID        int
-	Key       string
-	Role      string
+	Name      string
 	Active    bool
+	Roles     []string
 	CreatedAt time.Time
 }

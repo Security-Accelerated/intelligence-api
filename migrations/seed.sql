@@ -1,6 +1,17 @@
 -- Example seed data for local development. Not auto-run in production.
--- Insert a test admin key and a test domain-only key.
-INSERT INTO api_keys (key, role) VALUES
-    ('test-admin-key', 'admin'),
-    ('test-domain-key', 'domain')
+
+INSERT INTO customers (id, name) VALUES
+    (1, 'Test Admin'),
+    (2, 'Test Domain User')
+ON CONFLICT (name) DO NOTHING;
+
+INSERT INTO api_keys (customer_id, key) VALUES
+    (1, 'test-admin-key'),
+    (2, 'test-domain-key')
 ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO customer_roles (customer_id, role) VALUES
+    (1, 'admin'),
+    (1, 'domain'),
+    (2, 'domain')
+ON CONFLICT (customer_id, role) DO NOTHING;

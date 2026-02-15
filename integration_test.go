@@ -23,19 +23,19 @@ import (
 
 // stubRepo is an in-memory auth.Repository for integration tests.
 type stubRepo struct {
-	keys map[string]*auth.APIKey
+	keys map[string]*auth.Customer
 }
 
 func newStubRepo() *stubRepo {
-	return &stubRepo{keys: map[string]*auth.APIKey{
-		"test-admin-key":  {ID: 1, Key: "test-admin-key", Role: "admin", Active: true},
-		"test-domain-key": {ID: 2, Key: "test-domain-key", Role: "domain", Active: true},
+	return &stubRepo{keys: map[string]*auth.Customer{
+		"test-admin-key":  {ID: 1, Name: "Test Admin", Active: true, Roles: []string{"admin", "domain"}},
+		"test-domain-key": {ID: 2, Name: "Test Domain User", Active: true, Roles: []string{"domain"}},
 	}}
 }
 
-func (r *stubRepo) GetByKey(_ context.Context, key string) (*auth.APIKey, error) {
-	if ak, ok := r.keys[key]; ok {
-		return ak, nil
+func (r *stubRepo) GetByKey(_ context.Context, key string) (*auth.Customer, error) {
+	if c, ok := r.keys[key]; ok {
+		return c, nil
 	}
 	return nil, context.DeadlineExceeded // any non-nil error triggers 401
 }

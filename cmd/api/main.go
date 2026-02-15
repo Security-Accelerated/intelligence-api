@@ -69,6 +69,11 @@ func main() {
 	logger.Info("connected to postgres")
 
 	authRepo := auth.NewPostgresRepository(db)
+	authCacheTTL := config.Config().GetDuration("auth.cache_ttl")
+	if authCacheTTL == 0 {
+		authCacheTTL = 5 * time.Minute
+	}
+	cachedRepo := auth.NewCachedRepository(authRepo, authCacheTTL)
 
 	if config.Config().GetString("application.mode") == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -91,7 +96,15 @@ func main() {
 	domainService := service.NewDomainService(redisCache, cacheTTL)
 	h := handler.New(domainService, version)
 	h.RegisterRoutes(router)
-	h.RegisterProtectedRoutes(router, middleware.APIKeyAuth(authRepo))
+	h.RegisterProtectedRoutes(router, middleware.APIKeyAuth(cachedRepo))
+
+	// Admin: auth cache invalidation
+	admin := router.Group("/api/v1/admin")
+	admin.Use(middleware.APIKeyAuth(cachedRepo), middleware.RequireRoles("admin"))
+	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
+		cachedRepo.InvalidateAll()
+		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
+	})
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),

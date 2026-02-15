@@ -5,7 +5,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP hea
 
 ## Authentication
 
-All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL.
+All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and can be assigned multiple roles.
 
 ### Roles
 
@@ -14,7 +14,7 @@ All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Ke
 | `admin` | All endpoints (`/hello`, `/info`, `/domain`) |
 | `domain` | Only `POST /api/v1/domain` |
 
-Requests without a valid key receive `401 Unauthorized`. Requests with a key that lacks permission for the endpoint receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
+A customer with both `admin` and `domain` roles has access to all endpoints. Requests without a valid key receive `401 Unauthorized`. Requests with a key whose customer lacks the required role receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
 
 ## API Endpoints
 
@@ -23,6 +23,7 @@ Requests without a valid key receive `401 Unauthorized`. Requests with a key tha
 | GET | `/api/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
 | GET | `/api/v1/info` | `admin` | Application and environment info |
 | POST | `/api/v1/domain` | `admin`, `domain` | Domain intelligence lookup |
+| POST | `/api/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 
 ### POST /api/v1/domain
 
@@ -101,6 +102,7 @@ Config values:
 | `redis.password` | `""` | Redis password |
 | `redis.db` | `0` | Redis database number |
 | `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
+| `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
 | `postgres.host` | `localhost` | PostgreSQL host |
 | `postgres.port` | `5432` | PostgreSQL port |
 | `postgres.user` | `intelligence` | PostgreSQL user |
@@ -112,14 +114,15 @@ Config values:
 
 The `migrations/` directory contains SQL files that are automatically applied when using Docker Compose (mounted to `/docker-entrypoint-initdb.d/`).
 
-- `001_create_api_keys.sql` — creates the `api_keys` table
-- `seed.sql` — inserts test keys (`test-admin-key` and `test-domain-key`)
+- `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables
+- `seed.sql` — inserts test customers with keys and roles
 
-To manage API keys manually:
+To manage customers and API keys manually:
 
 ```sql
-INSERT INTO api_keys (key, role) VALUES ('my-secret-key', 'admin');
-INSERT INTO api_keys (key, role) VALUES ('my-domain-key', 'domain');
+INSERT INTO customers (name) VALUES ('Acme Corp');
+INSERT INTO api_keys (customer_id, key) VALUES (1, 'my-secret-key');
+INSERT INTO customer_roles (customer_id, role) VALUES (1, 'admin'), (1, 'domain');
 ```
 
 ### Run with Docker (recommended)
