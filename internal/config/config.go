@@ -43,7 +43,7 @@ func init() {
 
 	var uname syscall.Utsname
 	if err := syscall.Uname(&uname); err == nil {
-		config.Set("environment.os.version", charsToString(uname.Release[:]))
+		config.Set("environment.kernel", charsToString(uname.Release[:]))
 	}
 
 
