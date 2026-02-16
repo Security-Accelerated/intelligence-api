@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 func setup(t *testing.T) (*RedisCache, *miniredis.Miniredis) {
@@ -26,12 +25,12 @@ func TestCacheKey(t *testing.T) {
 
 func TestGet_Miss(t *testing.T) {
 	rc, _ := setup(t)
-	resp, err := rc.Get(context.Background(), "nonexistent.com")
+	data, err := rc.Get(context.Background(), "nonexistent.com")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp != nil {
-		t.Fatalf("expected nil response on cache miss, got %+v", resp)
+	if data != nil {
+		t.Fatalf("expected nil on cache miss, got %v", data)
 	}
 }
 
@@ -39,31 +38,16 @@ func TestGet_Hit(t *testing.T) {
 	rc, mr := setup(t)
 	mr.Set("domain:example.com", `{"domain":"example.com","whois":{"domain_name":"example.com"}}`)
 
-	resp, err := rc.Get(context.Background(), "example.com")
+	data, err := rc.Get(context.Background(), "example.com")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp == nil {
-		t.Fatal("expected non-nil response")
+	if data == nil {
+		t.Fatal("expected non-nil data")
 	}
-	if resp.Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp.Domain, "example.com")
-	}
-	if resp.Whois == nil || resp.Whois.DomainName != "example.com" {
-		t.Errorf("Whois.DomainName = %v, want %q", resp.Whois, "example.com")
-	}
-}
-
-func TestGet_CorruptJSON(t *testing.T) {
-	rc, mr := setup(t)
-	mr.Set("domain:bad.com", `{not valid json`)
-
-	resp, err := rc.Get(context.Background(), "bad.com")
-	if err == nil {
-		t.Fatal("expected error for corrupt JSON")
-	}
-	if resp != nil {
-		t.Fatalf("expected nil response on corrupt JSON, got %+v", resp)
+	want := `{"domain":"example.com","whois":{"domain_name":"example.com"}}`
+	if string(data) != want {
+		t.Errorf("data = %q, want %q", string(data), want)
 	}
 }
 
@@ -71,28 +55,20 @@ func TestSetThenGet_RoundTrip(t *testing.T) {
 	rc, _ := setup(t)
 	ctx := context.Background()
 
-	original := &domain.DomainResponse{
-		Domain: "roundtrip.com",
-		Whois:  &domain.WhoisInfo{DomainName: "roundtrip.com", Registrar: "TestRegistrar"},
-		DNS:    &domain.DNSInfo{A: []string{"1.2.3.4"}},
-	}
+	original := []byte(`{"domain":"roundtrip.com","whois":{"domain_name":"roundtrip.com","registrar":"TestRegistrar"}}`)
 
-	rc.Set(ctx, "roundtrip.com", original, 5*time.Minute)
+	if err := rc.Set(ctx, "roundtrip.com", original, 5*time.Minute); err != nil {
+		t.Fatalf("unexpected Set error: %v", err)
+	}
 
 	got, err := rc.Get(ctx, "roundtrip.com")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got == nil {
-		t.Fatal("expected non-nil response after Set")
+		t.Fatal("expected non-nil data after Set")
 	}
-	if got.Domain != original.Domain {
-		t.Errorf("Domain = %q, want %q", got.Domain, original.Domain)
-	}
-	if got.Whois == nil || got.Whois.Registrar != "TestRegistrar" {
-		t.Errorf("Whois.Registrar = %v, want %q", got.Whois, "TestRegistrar")
-	}
-	if got.DNS == nil || len(got.DNS.A) != 1 || got.DNS.A[0] != "1.2.3.4" {
-		t.Errorf("DNS.A = %v, want [1.2.3.4]", got.DNS)
+	if string(got) != string(original) {
+		t.Errorf("data = %q, want %q", string(got), string(original))
 	}
 }

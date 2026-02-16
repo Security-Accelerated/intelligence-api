@@ -2,12 +2,10 @@ package cache
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 type RedisCache struct {
@@ -24,28 +22,19 @@ func NewRedisCache(addr, password string, db int) *RedisCache {
 	}
 }
 
-func (c *RedisCache) Get(ctx context.Context, key string) (*domain.DomainResponse, error) {
-	val, err := c.client.Get(ctx, cacheKey(key)).Result()
+func (c *RedisCache) Get(ctx context.Context, key string) ([]byte, error) {
+	val, err := c.client.Get(ctx, cacheKey(key)).Bytes()
 	if err == redis.Nil {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-
-	var resp domain.DomainResponse
-	if err := json.Unmarshal([]byte(val), &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
+	return val, nil
 }
 
-func (c *RedisCache) Set(ctx context.Context, key string, resp *domain.DomainResponse, ttl time.Duration) {
-	data, err := json.Marshal(resp)
-	if err != nil {
-		return
-	}
-	c.client.Set(ctx, cacheKey(key), data, ttl)
+func (c *RedisCache) Set(ctx context.Context, key string, data []byte, ttl time.Duration) error {
+	return c.client.Set(ctx, cacheKey(key), data, ttl).Err()
 }
 
 func cacheKey(name string) string {

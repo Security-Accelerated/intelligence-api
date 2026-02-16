@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -10,19 +11,19 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
-// mockCache is a hand-written mock for DomainCache.
+// mockCache is a hand-written mock for cache.Cache.
 type mockCache struct {
-	mu      sync.Mutex
-	store   map[string]*domain.DomainResponse
-	getErr  error
+	mu       sync.Mutex
+	store    map[string][]byte
+	getErr   error
 	setCalls int
 }
 
 func newMockCache() *mockCache {
-	return &mockCache{store: make(map[string]*domain.DomainResponse)}
+	return &mockCache{store: make(map[string][]byte)}
 }
 
-func (m *mockCache) Get(_ context.Context, key string) (*domain.DomainResponse, error) {
+func (m *mockCache) Get(_ context.Context, key string) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.getErr != nil {
@@ -31,11 +32,12 @@ func (m *mockCache) Get(_ context.Context, key string) (*domain.DomainResponse, 
 	return m.store[key], nil
 }
 
-func (m *mockCache) Set(_ context.Context, key string, resp *domain.DomainResponse, _ time.Duration) {
+func (m *mockCache) Set(_ context.Context, key string, data []byte, _ time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.store[key] = resp
+	m.store[key] = data
 	m.setCalls++
+	return nil
 }
 
 // helpers to build a testable DomainService with stub lookups.
@@ -80,7 +82,8 @@ func newTestService(mc *mockCache) *DomainService {
 func TestLookup_CacheHit(t *testing.T) {
 	mc := newMockCache()
 	cached := &domain.DomainResponse{Domain: "cached.com"}
-	mc.store["cached.com"] = cached
+	data, _ := json.Marshal(cached)
+	mc.store["cached.com"] = data
 
 	svc := newTestService(mc)
 	// replace lookups with ones that panic to prove they aren't called

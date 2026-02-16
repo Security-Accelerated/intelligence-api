@@ -2,21 +2,18 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
+	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"go.uber.org/zap"
 )
 
-type DomainCache interface {
-	Get(ctx context.Context, key string) (*domain.DomainResponse, error)
-	Set(ctx context.Context, key string, resp *domain.DomainResponse, ttl time.Duration)
-}
-
 type DomainService struct {
-	cache    DomainCache
+	cache    cache.Cache
 	cacheTTL time.Duration
 
 	lookupWhois   func(ctx context.Context, d string) (*domain.WhoisInfo, error)
@@ -25,7 +22,7 @@ type DomainService struct {
 	lookupHeaders func(ctx context.Context, d string) (*domain.HeadersInfo, error)
 }
 
-func NewDomainService(c DomainCache, cacheTTL time.Duration) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL time.Duration) *DomainService {
 	return &DomainService{
 		cache:         c,
 		cacheTTL:      cacheTTL,
@@ -49,10 +46,15 @@ func (s *DomainService) SetLookups(
 }
 
 func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.DomainResponse, bool) {
-	if cached, err := s.cache.Get(ctx, domainName); err != nil {
+	if data, err := s.cache.Get(ctx, domainName); err != nil {
 		logging.Logger().Warn("cache get failed", zap.String("domain", domainName), zap.Error(err))
-	} else if cached != nil {
-		return cached, true
+	} else if data != nil {
+		var cached domain.DomainResponse
+		if err := json.Unmarshal(data, &cached); err != nil {
+			logging.Logger().Warn("cache unmarshal failed", zap.String("domain", domainName), zap.Error(err))
+		} else {
+			return &cached, true
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -131,7 +133,11 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.
 
 	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil
 	if hasData {
-		s.cache.Set(ctx, domainName, resp, s.cacheTTL)
+		if data, err := json.Marshal(resp); err != nil {
+			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))
+		} else if err := s.cache.Set(ctx, domainName, data, s.cacheTTL); err != nil {
+			logging.Logger().Warn("cache set failed", zap.String("domain", domainName), zap.Error(err))
+		}
 	}
 
 	return resp, false
