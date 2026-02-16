@@ -48,24 +48,11 @@ func main() {
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	// Postgres
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		config.Config().GetString("postgres.host"),
-		config.Config().GetInt("postgres.port"),
-		config.Config().GetString("postgres.user"),
-		config.Config().GetString("postgres.password"),
-		config.Config().GetString("postgres.dbname"),
-		config.Config().GetString("postgres.sslmode"),
-	)
-	db, err := sql.Open("postgres", dsn)
+	db, err := openDB(ctx)
 	if err != nil {
-		logger.Fatal("failed to open postgres connection", zap.Error(err))
+		logger.Fatal("failed to connect to postgres", zap.Error(err))
 	}
 	defer db.Close()
-
-	if err := db.PingContext(ctx); err != nil {
-		logger.Fatal("failed to ping postgres", zap.Error(err))
-	}
 	logger.Info("connected to postgres")
 
 	authRepo := auth.NewPostgresRepository(db)
@@ -75,36 +62,16 @@ func main() {
 	}
 	cachedRepo := auth.NewCachedRepository(authRepo, authCacheTTL)
 
-	if config.Config().GetString("application.mode") == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
-	router := gin.New()
-	router.Use(func(c *gin.Context) {
-		c.Request = c.Request.WithContext(ctx)
-		c.Next()
-	})
-	router.Use(middleware.RequestLogger())
-
 	redisCache := cache.NewRedisCache(
 		config.Config().GetString("redis.addr"),
 		config.Config().GetString("redis.password"),
 		config.Config().GetInt("redis.db"),
 	)
-
 	cacheTTL := config.Config().GetDuration("redis.cache_ttl")
 	domainService := service.NewDomainService(redisCache, cacheTTL)
 	h := handler.New(domainService, version)
-	h.RegisterRoutes(router)
-	h.RegisterProtectedRoutes(router, middleware.APIKeyAuth(cachedRepo))
 
-	// Admin: auth cache invalidation
-	admin := router.Group("/api/v1/admin")
-	admin.Use(middleware.APIKeyAuth(cachedRepo), middleware.RequireRoles("admin"))
-	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
-		cachedRepo.InvalidateAll()
-		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
-	})
+	router := newRouter(ctx, h, cachedRepo)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
@@ -140,4 +107,49 @@ func main() {
 	}
 
 	logger.Info("application stopped")
+}
+
+func openDB(ctx context.Context) (*sql.DB, error) {
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		config.Config().GetString("postgres.host"),
+		config.Config().GetInt("postgres.port"),
+		config.Config().GetString("postgres.user"),
+		config.Config().GetString("postgres.password"),
+		config.Config().GetString("postgres.dbname"),
+		config.Config().GetString("postgres.sslmode"),
+	)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+func newRouter(ctx context.Context, h *handler.Handler, cachedRepo *auth.CachedRepository) *gin.Engine {
+	if config.Config().GetString("application.mode") == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	})
+	router.Use(middleware.RequestLogger())
+
+	h.RegisterRoutes(router)
+	h.RegisterProtectedRoutes(router, middleware.APIKeyAuth(cachedRepo))
+
+	admin := router.Group("/api/v1/admin")
+	admin.Use(middleware.APIKeyAuth(cachedRepo), middleware.RequireRoles("admin"))
+	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
+		cachedRepo.InvalidateAll()
+		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
+	})
+
+	return router
 }
