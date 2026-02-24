@@ -33,6 +33,10 @@ func RequestLogger() gin.HandlerFunc {
 			fields = append(fields, zap.Bool("screenshot_requested", screenshot.(bool)))
 		}
 
+		if typosquatting, exists := c.Get("typosquatting_requested"); exists {
+			fields = append(fields, zap.Bool("typosquatting_requested", typosquatting.(bool)))
+		}
+
 		logger.Info("request", fields...)
 	}
 }

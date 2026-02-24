@@ -27,7 +27,7 @@ func (m *mockService) Lookup(_ context.Context, domainName string, _ domain.Look
 func newTestRouter(svc DomainLookupService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, "test")
+	h := New(svc, nil, "test")
 	h.RegisterRoutes(r)
 	// Register protected routes with a stub auth middleware that grants admin.
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {

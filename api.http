@@ -52,6 +52,35 @@ X-API-Key: {{domainKey}}
   "screenshot": true
 }
 
+### Typosquatting - shallow (admin/premium key)
+POST {{host}}/api/v1/domain/typosquatting
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"]
+}
+
+### Typosquatting - deep with active checks (admin/premium key)
+POST {{host}}/api/v1/domain/typosquatting
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "depth": "deep",
+  "active": true
+}
+
+### Typosquatting - should return 403 (basic tier)
+POST {{host}}/api/v1/domain/typosquatting
+Content-Type: application/json
+X-API-Key: {{domainKey}}
+
+{
+  "domains": ["example.com"]
+}
+
 ### Domain lookup - should return 401 (no key)
 POST {{host}}/api/v1/domain
 Content-Type: application/json

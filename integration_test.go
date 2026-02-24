@@ -67,11 +67,24 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		},
 	)
 
+	typosquattingSvc := service.NewTyposquattingService(rc, 5*time.Minute, 30*time.Second, 500, 20)
+	typosquattingSvc.SetLookup(func(_ context.Context, d string, opts domain.TyposquattingOptions) (*domain.TyposquattingResponse, error) {
+		return &domain.TyposquattingResponse{
+			Domain: d,
+			Depth:  opts.Depth,
+			Count:  2,
+			Permutations: []domain.Permutation{
+				{Domain: "exarnple.com", Technique: "homoglyph"},
+				{Domain: "examlpe.com", Technique: "character_swap"},
+			},
+		}, nil
+	})
+
 	repo := newStubRepo()
 
 	r := gin.New()
 	r.Use(middleware.RequestLogger())
-	h := handler.New(svc, "test")
+	h := handler.New(svc, typosquattingSvc, "test")
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, middleware.APIKeyAuth(repo))
 
@@ -318,5 +331,91 @@ func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
 	}
 	if resp[0].Screenshot != nil {
 		t.Error("expected screenshot to be nil when not requested")
+	}
+}
+
+func TestIntegration_Typosquat_PremiumCanAccess(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.TyposquattingResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+	if resp[0].Count != 2 {
+		t.Errorf("Count = %d, want 2", resp[0].Count)
+	}
+	if len(resp[0].Permutations) != 2 {
+		t.Errorf("len(Permutations) = %d, want 2", len(resp[0].Permutations))
+	}
+}
+
+func TestIntegration_Typosquat_BasicGets403(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-domain-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_Typosquat_DeepDepth(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
+		strings.NewReader(`{"domains":["example.com"],"depth":"deep"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.TyposquattingResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Depth != "deep" {
+		t.Errorf("Depth = %q, want %q", resp[0].Depth, "deep")
+	}
+}
+
+func TestIntegration_Typosquat_InvalidDepth(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
+		strings.NewReader(`{"domains":["example.com"],"depth":"invalid"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
 }

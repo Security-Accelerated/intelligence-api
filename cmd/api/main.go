@@ -40,8 +40,13 @@ func main() {
 		zap.String("golang_version", config.Config().GetString("environment.golang.version")),
 		zap.String("architecture", config.Config().GetString("environment.architecture")),
 		zap.String("os", config.Config().GetString("environment.os")),
+		zap.String("version", version),
 		zap.Duration("cache_ttl", config.Config().GetDuration("redis.cache_ttl")),
+		zap.Duration("auth_cache_ttl", config.Config().GetDuration("auth.cache_ttl")),
 		zap.Duration("screenshot_timeout", config.Config().GetDuration("screenshot.timeout")),
+		zap.Duration("typosquatting_timeout", config.Config().GetDuration("typosquatting.timeout")),
+		zap.Int("typosquatting_max_permutations", config.Config().GetInt("typosquatting.max_permutations")),
+		zap.Int("typosquatting_concurrency", config.Config().GetInt("typosquatting.concurrency")),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -75,7 +80,16 @@ func main() {
 		screenshotTimeout = 15 * time.Second
 	}
 	domainService := service.NewDomainService(redisCache, cacheTTL, screenshotTimeout)
-	h := handler.New(domainService, version)
+
+	typosquattingTimeout := config.Config().GetDuration("typosquatting.timeout")
+	if typosquattingTimeout == 0 {
+		typosquattingTimeout = 30 * time.Second
+	}
+	typosquattingMaxPerms := config.Config().GetInt("typosquatting.max_permutations")
+	typosquattingConcurrency := config.Config().GetInt("typosquatting.concurrency")
+	typosquattingService := service.NewTyposquattingService(redisCache, cacheTTL, typosquattingTimeout, typosquattingMaxPerms, typosquattingConcurrency)
+
+	h := handler.New(domainService, typosquattingService, version)
 
 	router := newRouter(ctx, h, cachedRepo)
 

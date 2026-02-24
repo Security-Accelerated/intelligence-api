@@ -12,15 +12,21 @@ type DomainLookupService interface {
 	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool)
 }
 
-type Handler struct {
-	domainService DomainLookupService
-	version       string
+type TyposquattingLookupService interface {
+	Lookup(ctx context.Context, domainName string, active bool, depth string) (*domain.TyposquattingResponse, bool)
 }
 
-func New(domainService DomainLookupService, version string) *Handler {
+type Handler struct {
+	domainService    DomainLookupService
+	typosquattingService TyposquattingLookupService
+	version          string
+}
+
+func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, version string) *Handler {
 	return &Handler{
-		domainService: domainService,
-		version:       version,
+		domainService:    domainService,
+		typosquattingService: typosquattingService,
+		version:          version,
 	}
 }
 
@@ -37,4 +43,5 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, authMiddleware gin
 	v1.Use(authMiddleware)
 	v1.GET("/info", middleware.RequireRoles("admin"), h.Info)
 	v1.POST("/domain", middleware.RequireRoles("admin", "domain"), h.DomainLookup)
+	v1.POST("/domain/typosquatting", middleware.RequireRoles("admin", "domain"), h.TyposquattingLookup)
 }

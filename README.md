@@ -14,7 +14,7 @@ Each customer has a `tier` that controls access to premium features:
 | Tier | Features |
 |------|----------|
 | `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) |
-| `premium` | All basic features + page screenshots |
+| `premium` | All basic features + page screenshots + typosquatting detection |
 
 The tier is stored in the `customers` table. New customers default to `basic`.
 
@@ -22,8 +22,8 @@ The tier is stored in the `customers` table. New customers default to `basic`.
 
 | Role | Access |
 |------|--------|
-| `admin` | All endpoints (`/hello`, `/info`, `/domain`) |
-| `domain` | Only `POST /api/v1/domain` |
+| `admin` | All endpoints (`/hello`, `/info`, `/domain`, `/domain/typosquatting`) |
+| `domain` | `POST /api/v1/domain` and `POST /api/v1/domain/typosquatting` |
 
 A customer with both `admin` and `domain` roles has access to all endpoints. Requests without a valid key receive `401 Unauthorized`. Requests with a key whose customer lacks the required role receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
 
@@ -34,6 +34,7 @@ A customer with both `admin` and `domain` roles has access to all endpoints. Req
 | GET | `/api/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
 | GET | `/api/v1/info` | `admin` | Application and environment info |
 | POST | `/api/v1/domain` | `admin`, `domain` | Domain intelligence lookup |
+| POST | `/api/v1/domain/typosquatting` | `admin`, `domain` | Typosquatting detection (premium) |
 | POST | `/api/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 
 ### POST /api/v1/domain
@@ -82,9 +83,68 @@ Invalid domains in a multi-domain request are included in the response with a va
 ]
 ```
 
+### POST /api/v1/domain/typosquatting
+
+Generates typosquatting permutations for one or more domains to detect potential brand impersonation. Requires a **premium** tier customer.
+
+**Request:**
+```json
+{
+  "domains": ["example.com"],
+  "depth": "shallow",
+  "active": true
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `domains` | *(required)* | Array of domain names to check |
+| `depth` | `"shallow"` | `"shallow"` (4 algorithms, ~30-80 results) or `"deep"` (10 algorithms, hundreds of results) |
+| `active` | `false` | When `true`, also checks DNS registration and HTTP liveness for each permutation |
+
+**Depth levels:**
+- **`shallow`** — character omission, character swap, homoglyphs, wrong TLD. Produces a manageable number of results for most domains.
+- **`deep`** — all 10 algorithms including adjacent key substitution, character repeat, vowel swap, missing dot, character addition, and bitsquatting. Useful for thorough brand protection audits.
+
+**Example:**
+```sh
+curl -X POST http://localhost:8080/api/v1/domain/typosquatting \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: test-admin-key' \
+  -d '{"domains":["example.com"],"active":true}'
+```
+
+**Response:**
+```json
+[
+  {
+    "domain": "example.com",
+    "cache_hit": false,
+    "depth": "shallow",
+    "count": 42,
+    "capped": false,
+    "permutations": [
+      {
+        "domain": "examp1e.com",
+        "technique": "homoglyph",
+        "registered": true,
+        "live": true
+      },
+      {
+        "domain": "examlpe.com",
+        "technique": "character_swap",
+        "registered": false
+      }
+    ]
+  }
+]
+```
+
+When `active` is `false`, `registered` and `live` fields are omitted. When `active` is `true` but a domain is not registered, `live` is omitted. A hard cap on permutations (default 500, configurable via `typosquatting.max_permutations`) prevents unbounded results — `capped: true` indicates truncation.
+
 ## Response Fields
 
-Each object in the domain lookup response contains the following sections.
+### Domain Lookup (`/api/v1/domain`)
 
 ### `domain` / `cache_hit` / `errors`
 
@@ -167,11 +227,34 @@ A visual screenshot of the domain's web page, captured with headless Chrome at 1
 
 The screenshot lookup first tries HTTPS, then falls back to HTTP. Non-200 responses still populate the `screenshot` section with the status code but no image data.
 
+### Typosquatting Detection (`/api/v1/domain/typosquatting`)
+
+| Field | What it means |
+|-------|---------------|
+| `domain` | The domain that was checked |
+| `cache_hit` | Whether the result was served from cache |
+| `depth` | Which depth level was used (`shallow` or `deep`) |
+| `count` | Total number of permutations returned |
+| `capped` | Whether the permutation cap was hit (results truncated) |
+| `permutations` | Array of typosquatting candidates |
+| `errors` | Any errors that occurred during generation or active checks |
+
+Each permutation contains:
+
+| Field | What it means |
+|-------|---------------|
+| `domain` | The typosquatting candidate domain |
+| `technique` | Which algorithm generated it (`character_omission`, `character_swap`, `homoglyph`, `wrong_tld`, `adjacent_char`, `character_repeat`, `vowel_swap`, `missing_dot`, `addition`, `bitsquatting`) |
+| `registered` | Whether the domain has DNS A records (only present when `active: true`) |
+| `live` | Whether the domain responds to HTTP requests (only present when registered) |
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
 
 Screenshot and non-screenshot requests use separate cache keys (`domain` vs `domain:screenshot`). Each key is fully self-contained — a screenshot request caches all 5 lookups together, and a non-screenshot request caches the 4 base lookups.
+
+Typosquatting results are cached under their own keys based on depth and active flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+active:example.com:deep`).
 
 ## Getting Started
 
@@ -207,6 +290,9 @@ Config values:
 | `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
+| `typosquatting.timeout` | `30s` | Timeout for typosquatting detection (generation + active checks) |
+| `typosquatting.max_permutations` | `500` | Maximum number of permutations returned per domain |
+| `typosquatting.concurrency` | `20` | Max concurrent DNS/HTTP checks during active scanning |
 | `postgres.host` | `localhost` | PostgreSQL host |
 | `postgres.port` | `5432` | PostgreSQL port |
 | `postgres.user` | `intelligence` | PostgreSQL user |

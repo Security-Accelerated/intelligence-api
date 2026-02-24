@@ -22,6 +22,39 @@ type DomainResponse struct {
 	Errors     []LookupError   `json:"errors,omitempty"`
 }
 
+// --- Typosquatting (separate endpoint) ---
+
+type TyposquattingRequest struct {
+	Domains []string `json:"domains" binding:"required,min=1"`
+	Active  bool     `json:"active,omitempty"`
+	Depth   string   `json:"depth,omitempty"` // "shallow" (default) or "deep"
+}
+
+type TyposquattingResponse struct {
+	Domain       string        `json:"domain"`
+	CacheHit     bool          `json:"cache_hit"`
+	Depth        string        `json:"depth"`
+	Count        int           `json:"count"`
+	Capped       bool          `json:"capped"`
+	Permutations []Permutation `json:"permutations"`
+	Errors       []LookupError `json:"errors,omitempty"`
+}
+
+type Permutation struct {
+	Domain     string `json:"domain"`
+	Technique  string `json:"technique"`
+	Registered *bool  `json:"registered,omitempty"`
+	Live       *bool  `json:"live,omitempty"`
+}
+
+type TyposquattingOptions struct {
+	Active          bool
+	Depth           string
+	Timeout         time.Duration
+	MaxPermutations int
+	Concurrency     int
+}
+
 type ScreenshotInfo struct {
 	StatusCode int    `json:"status_code"`
 	PNG        string `json:"png,omitempty"`

@@ -19,6 +19,11 @@ auth:
 screenshot:
   timeout: 15s
 
+typosquatting:
+  timeout: 30s
+  max_permutations: 500
+  concurrency: 20
+
 postgres:
   host: localhost
   port: 5432
