@@ -52,6 +52,37 @@ X-API-Key: {{domainKey}}
   "screenshot": true
 }
 
+### Domain lookup with reputation (admin/premium key)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "reputation": true
+}
+
+### Domain lookup with reputation - should return 403 (basic tier)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+X-API-Key: {{domainKey}}
+
+{
+  "domains": ["example.com"],
+  "reputation": true
+}
+
+### Domain lookup with screenshot + reputation (admin/premium key)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "screenshot": true,
+  "reputation": true
+}
+
 ### Typosquatting - shallow (admin/premium key)
 POST {{host}}/api/v1/domain/typosquatting
 Content-Type: application/json

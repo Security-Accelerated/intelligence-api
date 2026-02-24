@@ -37,6 +37,10 @@ func RequestLogger() gin.HandlerFunc {
 			fields = append(fields, zap.Bool("typosquatting_requested", typosquatting.(bool)))
 		}
 
+		if reputation, exists := c.Get("reputation_requested"); exists {
+			fields = append(fields, zap.Bool("reputation_requested", reputation.(bool)))
+		}
+
 		logger.Info("request", fields...)
 	}
 }

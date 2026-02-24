@@ -74,6 +74,13 @@ func failScreenshot(_ context.Context, _ string, _ time.Duration) (*domain.Scree
 	return nil, errors.New("screenshot failed")
 }
 
+func okReputation(_ context.Context, _ string) (*domain.ReputationInfo, error) {
+	return &domain.ReputationInfo{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"}, nil
+}
+func failReputation(_ context.Context, _ string) (*domain.ReputationInfo, error) {
+	return nil, errors.New("reputation failed")
+}
+
 func newTestService(mc *mockCache) *DomainService {
 	return &DomainService{
 		cache:             mc,
@@ -84,12 +91,19 @@ func newTestService(mc *mockCache) *DomainService {
 		lookupSSL:         okSSL,
 		lookupHeaders:     okHeaders,
 		lookupScreenshot:  okScreenshot,
+		lookupReputation:   okReputation,
 	}
 }
 
 func noOpts() domain.LookupOptions { return domain.LookupOptions{} }
 
 func screenshotOpts() domain.LookupOptions { return domain.LookupOptions{Screenshot: true} }
+
+func reputationOpts() domain.LookupOptions { return domain.LookupOptions{Reputation: true} }
+
+func reputationAndScreenshotOpts() domain.LookupOptions {
+	return domain.LookupOptions{Screenshot: true, Reputation: true}
+}
 
 func TestLookup_CacheHit(t *testing.T) {
 	mc := newMockCache()
@@ -157,6 +171,7 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 		lookupSSL:         failSSL,
 		lookupHeaders:     failHeaders,
 		lookupScreenshot:  failScreenshot,
+		lookupReputation:   failReputation,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "fail.com", noOpts())
@@ -184,6 +199,7 @@ func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
 		lookupSSL:         okSSL,
 		lookupHeaders:     failHeaders,
 		lookupScreenshot:  okScreenshot,
+		lookupReputation:   okReputation,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "partial.com", noOpts())
@@ -331,5 +347,93 @@ func TestLookup_Screenshot_Failure(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected a screenshot error in resp.Errors")
+	}
+}
+
+func TestLookup_Reputation_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", reputationOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.Reputation == nil {
+		t.Fatal("expected Reputation to be populated")
+	}
+	if !resp.Reputation.Listed {
+		t.Error("expected Reputation.Listed = true")
+	}
+	if resp.Reputation.Category != "phishing" {
+		t.Errorf("Reputation.Category = %q, want %q", resp.Reputation.Category, "phishing")
+	}
+	if resp.Reputation.Provider != "spamhaus_dbl" {
+		t.Errorf("Reputation.Provider = %q, want %q", resp.Reputation.Provider, "spamhaus_dbl")
+	}
+}
+
+func TestLookup_Reputation_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.Reputation != nil {
+		t.Error("expected Reputation to be nil when not requested")
+	}
+}
+
+func TestLookup_Reputation_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupReputation = failReputation
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", reputationOpts())
+	if resp.Reputation != nil {
+		t.Error("expected Reputation to be nil on failure")
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if e.Lookup == "reputation" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected a reputation error in resp.Errors")
+	}
+}
+
+func TestLookup_Reputation_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	svc.Lookup(context.Background(), "example.com", reputationOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:reputation"]; !ok {
+		t.Error("expected cache entry for reputation key 'example.com:reputation'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_ReputationAndScreenshot_CombinedCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", reputationAndScreenshotOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com:reputation+screenshot"]; !ok {
+		t.Error("expected cache entry for combined key 'example.com:reputation+screenshot'")
 	}
 }

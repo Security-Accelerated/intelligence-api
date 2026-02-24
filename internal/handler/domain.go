@@ -27,13 +27,22 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		return
 	}
 
-	opts := domain.LookupOptions{Screenshot: req.Screenshot}
+	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation}
 	c.Set("screenshot_requested", req.Screenshot)
+	c.Set("reputation_requested", req.Reputation)
 
 	if req.Screenshot {
 		tier, _ := c.Get("api_key_tier")
 		if tier != "premium" {
 			c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a premium tier subscription"})
+			return
+		}
+	}
+
+	if req.Reputation {
+		tier, _ := c.Get("api_key_tier")
+		if tier != "premium" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "reputation requires a premium tier subscription"})
 			return
 		}
 	}

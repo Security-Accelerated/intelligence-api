@@ -1,7 +1,7 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, and page screenshot lookups for one or more domains, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, and reputation lookups for one or more domains, with Redis caching.
 
 ## Authentication
 
@@ -14,7 +14,7 @@ Each customer has a `tier` that controls access to premium features:
 | Tier | Features |
 |------|----------|
 | `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) |
-| `premium` | All basic features + page screenshots + typosquatting detection |
+| `premium` | All basic features + page screenshots + reputation checks + typosquatting detection |
 
 The tier is stored in the `customers` table. New customers default to `basic`.
 
@@ -43,13 +43,16 @@ A customer with both `admin` and `domain` roles has access to all endpoints. Req
 ```json
 {
   "domains": ["example.com", "example.org"],
-  "screenshot": true
+  "screenshot": true,
+  "reputation": true
 }
 ```
 
 The `domains` field accepts an array of domain names. Each entry accepts raw domains, URLs with `http://`/`https://` prefixes, and trailing slashes — all are normalized automatically. Domains are looked up concurrently.
 
 The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
+
+The optional `reputation` field (default `false`) checks each domain against the Spamhaus DBL blocklist via DNS. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
 
 **Example:**
 ```sh
@@ -70,6 +73,7 @@ curl -X POST http://localhost:8080/api/v1/domain \
     "ssl": { "subject": "...", "issuer": "...", "..." : "..." },
     "headers": { "status_code": 200, "headers": {}, "security_headers": {} },
     "screenshot": { "status_code": 200, "png": "<base64-encoded PNG>" },
+    "reputation": { "listed": true, "category": "phishing", "provider": "spamhaus_dbl", "return_code": "127.0.1.4" },
     "errors": []
   }
 ]
@@ -227,6 +231,17 @@ A visual screenshot of the domain's web page, captured with headless Chrome at 1
 
 The screenshot lookup first tries HTTPS, then falls back to HTTP. Non-200 responses still populate the `screenshot` section with the status code but no image data.
 
+### `reputation` — Domain Reputation (Premium Only)
+
+Checks whether the domain is listed on the Spamhaus Domain Block List (DBL) via DNS. Only present when `"reputation": true` is included in the request.
+
+| Field | What it means |
+|-------|---------------|
+| `listed` | Whether the domain appears on the blocklist (`true` = listed, `false` = clean) |
+| `category` | The classification if listed: `spam`, `phishing`, `malware`, `botnet_cc`, `abused_spam`, `abused_spammed_redirector`, `abused_phishing`, `abused_malware`, `abused_botnet_cc`, or `unknown` |
+| `provider` | Always `spamhaus_dbl` — identifies which blocklist was queried |
+| `return_code` | The raw DNS return code (e.g. `127.0.1.4` for phishing). Only present when listed. |
+
 ### Typosquatting Detection (`/api/v1/domain/typosquatting`)
 
 | Field | What it means |
@@ -252,7 +267,11 @@ Each permutation contains:
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
 
-Screenshot and non-screenshot requests use separate cache keys (`domain` vs `domain:screenshot`). Each key is fully self-contained — a screenshot request caches all 5 lookups together, and a non-screenshot request caches the 4 base lookups.
+Optional features use composite cache keys built from sorted feature suffixes. Each key is fully self-contained — all lookups for that feature combination are cached together:
+- `domain` — base lookups (WHOIS, DNS, SSL, headers)
+- `domain:reputation` — base + reputation
+- `domain:screenshot` — base + screenshot
+- `domain:reputation+screenshot` — base + reputation + screenshot
 
 Typosquatting results are cached under their own keys based on depth and active flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+active:example.com:deep`).
 

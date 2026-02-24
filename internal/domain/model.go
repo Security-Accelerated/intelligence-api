@@ -5,10 +5,12 @@ import "time"
 type DomainRequest struct {
 	Domains    []string `json:"domains" binding:"required,min=1"`
 	Screenshot bool     `json:"screenshot,omitempty"`
+	Reputation bool     `json:"reputation,omitempty"`
 }
 
 type LookupOptions struct {
 	Screenshot bool
+	Reputation bool
 }
 
 type DomainResponse struct {
@@ -19,7 +21,15 @@ type DomainResponse struct {
 	SSL        *SSLInfo        `json:"ssl,omitempty"`
 	Headers    *HeadersInfo    `json:"headers,omitempty"`
 	Screenshot *ScreenshotInfo `json:"screenshot,omitempty"`
+	Reputation *ReputationInfo `json:"reputation,omitempty"`
 	Errors     []LookupError   `json:"errors,omitempty"`
+}
+
+type ReputationInfo struct {
+	Listed     bool   `json:"listed"`
+	Category   string `json:"category,omitempty"`
+	Provider   string `json:"provider"`
+	ReturnCode string `json:"return_code,omitempty"`
 }
 
 // --- Typosquatting (separate endpoint) ---

@@ -25,14 +25,17 @@ func (m *mockService) Lookup(_ context.Context, domainName string, _ domain.Look
 }
 
 func newTestRouter(svc DomainLookupService) *gin.Engine {
+	return newTestRouterWithTier(svc, "premium")
+}
+
+func newTestRouterWithTier(svc DomainLookupService, tier string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := New(svc, nil, "test")
 	h.RegisterRoutes(r)
-	// Register protected routes with a stub auth middleware that grants admin.
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_roles", []string{"admin"})
-		c.Set("api_key_tier", "premium")
+		c.Set("api_key_tier", tier)
 		c.Next()
 	})
 	return r
@@ -251,5 +254,56 @@ func TestDomainLookup_WhitespaceTrimming(t *testing.T) {
 	}
 	if resp[0].Domain != "example.com" {
 		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+}
+
+func TestDomainLookup_Reputation_PremiumAllowed(t *testing.T) {
+	r := newTestRouterWithTier(&mockService{}, "premium")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
+	r := newTestRouterWithTier(&mockService{}, "basic")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
+	svc := &mockService{
+		resp: &domain.DomainResponse{Domain: "example.com"},
+	}
+	r := newTestRouter(svc)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Reputation != nil {
+		t.Error("expected reputation to be nil when not requested")
 	}
 }

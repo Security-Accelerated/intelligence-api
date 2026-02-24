@@ -65,6 +65,9 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
 			return &domain.ScreenshotInfo{StatusCode: 200, PNG: "c3R1Yg=="}, nil
 		},
+		func(_ context.Context, _ string) (*domain.ReputationInfo, error) {
+			return &domain.ReputationInfo{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"}, nil
+		},
 	)
 
 	typosquattingSvc := service.NewTyposquattingService(rc, 5*time.Minute, 30*time.Second, 500, 20)
@@ -556,5 +559,108 @@ func TestIntegration_Typosquat_ActiveParameter(t *testing.T) {
 	}
 	if resp[0].Count != 2 {
 		t.Errorf("Count = %d, want 2", resp[0].Count)
+	}
+}
+
+func TestIntegration_Reputation_PremiumCanAccess(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Reputation == nil {
+		t.Fatal("expected reputation to be populated for premium customer")
+	}
+	if !resp[0].Reputation.Listed {
+		t.Error("expected Reputation.Listed = true")
+	}
+	if resp[0].Reputation.Category != "phishing" {
+		t.Errorf("Reputation.Category = %q, want %q", resp[0].Reputation.Category, "phishing")
+	}
+	if resp[0].Reputation.Provider != "spamhaus_dbl" {
+		t.Errorf("Reputation.Provider = %q, want %q", resp[0].Reputation.Provider, "spamhaus_dbl")
+	}
+}
+
+func TestIntegration_Reputation_BasicGets403(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-domain-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_Reputation_AbsentWhenNotRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Reputation != nil {
+		t.Error("expected reputation to be nil when not requested")
+	}
+}
+
+func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true,"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Reputation == nil {
+		t.Error("expected reputation to be populated")
+	}
+	if resp[0].Screenshot == nil {
+		t.Error("expected screenshot to be populated")
 	}
 }
