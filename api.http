@@ -92,3 +92,7 @@ Content-Type: application/json
 ### Info - should return 403 (domain key lacks access)
 GET {{host}}/api/v1/info
 X-API-Key: {{domainKey}}
+
+### Invalidate auth cache (admin only)
+POST {{host}}/api/v1/admin/auth/cache/invalidate
+X-API-Key: {{adminKey}}
