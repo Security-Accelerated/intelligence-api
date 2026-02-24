@@ -67,6 +67,80 @@ Invalid domains in a multi-domain request are included in the response with a va
 ]
 ```
 
+## Response Fields
+
+Each object in the domain lookup response contains the following sections.
+
+### `domain` / `cache_hit` / `errors`
+
+- **`domain`** — Which domain this result is for, since you can submit multiple in one request.
+- **`cache_hit`** — Whether the result was served from Redis cache (`true`) or fetched live (`false`). Useful for understanding data freshness.
+- **`errors`** — Per-lookup errors when an individual lookup fails (e.g. WHOIS timed out but DNS succeeded). Partial failures don't block the rest of the response.
+
+### `whois` — Domain Registration & Ownership
+
+WHOIS tells you who owns a domain and when it expires.
+
+| Field | What it means |
+|-------|---------------|
+| `domain_name` | The registered domain name |
+| `registrar` | The company the domain was registered through (e.g. GoDaddy, Namecheap) |
+| `created_date` | When the domain was first registered — newly created domains are often higher risk |
+| `updated_date` | When the registration was last modified |
+| `expiry_date` | When the registration expires — domains pending expiration or in redemption are red flags |
+| `status` | EPP status codes like `clientTransferProhibited` that reveal lock state |
+| `name_servers` | Which DNS provider is authoritative — changes here can indicate hijacking |
+| `registrant` / `admin` / `tech` | Contact details (organization, country, email) that help attribute ownership, though often redacted behind WHOIS privacy |
+
+### `dns` — Domain Name System Records
+
+DNS is the internet's phone book. When you type a domain into a browser, your computer looks up the "phone number" (IP address) to connect to. Each record type serves a different purpose:
+
+| Field | What it means |
+|-------|---------------|
+| `a` | The IPv4 addresses (like `93.184.216.34`) the domain points to. This is the most fundamental record — it's the actual address a browser connects to. A domain can have multiple A records to spread traffic across servers. |
+| `aaaa` | Same as A records but for the newer IPv6 format (like `2606:2800:220:1:248:1893:25c8:1946`). IPv4 addresses are running out, so IPv6 provides a vastly larger address space. |
+| `mx` | Mail Exchange records — where to deliver email for that domain. If you send email to `someone@example.com`, the sending server looks up MX records to find the right mail server. The `priority` number determines the order: lower numbers get tried first, higher numbers are backups. |
+| `ns` | Name Server records — the authoritative source of truth for all DNS records on this domain. Think of it as "which phone book is the official one." Whoever controls the nameservers controls where the domain points, so unauthorized changes here mean an attacker can redirect all traffic. |
+| `txt` | Free-form text entries that have become critical for email security: **SPF** (which servers can send email for this domain), **DKIM** (a public key to verify emails weren't tampered with in transit), **DMARC** (what to do when emails fail SPF/DKIM checks), and **verification tokens** that services use to prove domain ownership. |
+| `cname` | Canonical Name — an alias that points to another domain instead of an IP address, like call forwarding. Often used to route traffic through CDNs like Cloudflare or AWS CloudFront. A "dangling CNAME" pointing to an unclaimed service is a known vulnerability — an attacker could claim that service and serve content on your domain. |
+
+### `ssl` — TLS Certificate
+
+SSL/TLS is what puts the padlock in your browser's address bar. This section shows the HTTPS certificate the server presents.
+
+| Field | What it means |
+|-------|---------------|
+| `subject` | The entity the certificate was issued to |
+| `issuer` | Which Certificate Authority issued it (e.g. Let's Encrypt vs. a paid CA) |
+| `not_before` / `not_after` | The certificate's validity window |
+| `expired` | Whether the certificate has expired — expired certs break browser trust |
+| `days_until_expiry` | How many days remain — low values signal maintenance risk |
+| `sans` | Subject Alternative Names — all hostnames the cert covers, which reveals related subdomains and services sharing infrastructure |
+| `serial_number` | Unique identifier for the certificate |
+| `signature_algorithm` | The cryptographic algorithm used (e.g. SHA-256); weaker algorithms like SHA-1 are deprecated |
+
+### `headers` — HTTP Response & Security Headers
+
+This section shows how the web server responds and what browser security policies it enforces.
+
+| Field | What it means |
+|-------|---------------|
+| `status_code` | Whether the domain serves content (200), redirects (301/302), or is down (5xx) |
+| `headers` | Raw response headers that can reveal server software, caching behavior, and CDN info |
+
+The `security_headers` subsection audits defensive headers that protect users:
+
+| Header | What it does |
+|--------|--------------|
+| `strict_transport_security` | Forces HTTPS — without it, connections can be downgraded to unencrypted HTTP |
+| `content_security_policy` | Controls what resources (scripts, images, etc.) can load on the page — the primary defense against cross-site scripting (XSS) |
+| `x_frame_options` | Prevents the page from being embedded in an iframe on another site — stops clickjacking attacks |
+| `x_content_type_options` | Prevents the browser from guessing file types — stops MIME-sniffing attacks |
+| `x_xss_protection` | Legacy browser XSS filter (mostly deprecated but still checked in audits) |
+| `referrer_policy` | Controls how much URL information leaks when users click links to other sites |
+| `permissions_policy` | Restricts browser features like camera, microphone, and geolocation |
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
