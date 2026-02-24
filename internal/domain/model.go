@@ -3,17 +3,28 @@ package domain
 import "time"
 
 type DomainRequest struct {
-	Domains []string `json:"domains" binding:"required,min=1"`
+	Domains    []string `json:"domains" binding:"required,min=1"`
+	Screenshot bool     `json:"screenshot,omitempty"`
+}
+
+type LookupOptions struct {
+	Screenshot bool
 }
 
 type DomainResponse struct {
-	Domain   string        `json:"domain"`
-	CacheHit bool          `json:"cache_hit"`
-	Whois    *WhoisInfo    `json:"whois,omitempty"`
-	DNS      *DNSInfo      `json:"dns,omitempty"`
-	SSL      *SSLInfo      `json:"ssl,omitempty"`
-	Headers  *HeadersInfo  `json:"headers,omitempty"`
-	Errors   []LookupError `json:"errors,omitempty"`
+	Domain     string          `json:"domain"`
+	CacheHit   bool            `json:"cache_hit"`
+	Whois      *WhoisInfo      `json:"whois,omitempty"`
+	DNS        *DNSInfo        `json:"dns,omitempty"`
+	SSL        *SSLInfo        `json:"ssl,omitempty"`
+	Headers    *HeadersInfo    `json:"headers,omitempty"`
+	Screenshot *ScreenshotInfo `json:"screenshot,omitempty"`
+	Errors     []LookupError   `json:"errors,omitempty"`
+}
+
+type ScreenshotInfo struct {
+	StatusCode int    `json:"status_code"`
+	PNG        string `json:"png,omitempty"`
 }
 
 type WhoisInfo struct {

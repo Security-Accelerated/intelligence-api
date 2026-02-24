@@ -23,6 +23,7 @@ func APIKeyAuth(repo auth.Repository) gin.HandlerFunc {
 		}
 
 		c.Set("api_key_roles", customer.Roles)
+		c.Set("api_key_tier", customer.Tier)
 		c.Next()
 	}
 }

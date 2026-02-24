@@ -13,23 +13,27 @@ import (
 )
 
 type DomainService struct {
-	cache    cache.Cache
-	cacheTTL time.Duration
+	cache             cache.Cache
+	cacheTTL          time.Duration
+	screenshotTimeout time.Duration
 
-	lookupWhois   func(ctx context.Context, d string) (*domain.WhoisInfo, error)
-	lookupDNS     func(ctx context.Context, d string) (*domain.DNSInfo, error)
-	lookupSSL     func(ctx context.Context, d string) (*domain.SSLInfo, error)
-	lookupHeaders func(ctx context.Context, d string) (*domain.HeadersInfo, error)
+	lookupWhois      func(ctx context.Context, d string) (*domain.WhoisInfo, error)
+	lookupDNS        func(ctx context.Context, d string) (*domain.DNSInfo, error)
+	lookupSSL        func(ctx context.Context, d string) (*domain.SSLInfo, error)
+	lookupHeaders    func(ctx context.Context, d string) (*domain.HeadersInfo, error)
+	lookupScreenshot func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL time.Duration) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration) *DomainService {
 	return &DomainService{
-		cache:         c,
-		cacheTTL:      cacheTTL,
-		lookupWhois:   domain.LookupWhois,
-		lookupDNS:     domain.LookupDNS,
-		lookupSSL:     domain.LookupSSL,
-		lookupHeaders: domain.LookupHeaders,
+		cache:             c,
+		cacheTTL:          cacheTTL,
+		screenshotTimeout: screenshotTimeout,
+		lookupWhois:       domain.LookupWhois,
+		lookupDNS:         domain.LookupDNS,
+		lookupSSL:         domain.LookupSSL,
+		lookupHeaders:     domain.LookupHeaders,
+		lookupScreenshot:  domain.LookupScreenshot,
 	}
 }
 
@@ -38,15 +42,22 @@ func (s *DomainService) SetLookups(
 	dns func(context.Context, string) (*domain.DNSInfo, error),
 	ssl func(context.Context, string) (*domain.SSLInfo, error),
 	headers func(context.Context, string) (*domain.HeadersInfo, error),
+	screenshot func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error),
 ) {
 	s.lookupWhois = whois
 	s.lookupDNS = dns
 	s.lookupSSL = ssl
 	s.lookupHeaders = headers
+	s.lookupScreenshot = screenshot
 }
 
-func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.DomainResponse, bool) {
-	if data, err := s.cache.Get(ctx, domainName); err != nil {
+func (s *DomainService) Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool) {
+	cacheKey := domainName
+	if opts.Screenshot {
+		cacheKey = domainName + ":screenshot"
+	}
+
+	if data, err := s.cache.Get(ctx, cacheKey); err != nil {
 		logging.Logger().Warn("cache get failed", zap.String("domain", domainName), zap.Error(err))
 	} else if data != nil {
 		var cached domain.DomainResponse
@@ -129,13 +140,31 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string) (*domain.
 		resp.Headers = result
 	}()
 
+	if opts.Screenshot {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := s.lookupScreenshot(ctx, domainName, s.screenshotTimeout)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				resp.Errors = append(resp.Errors, domain.LookupError{
+					Lookup:  "screenshot",
+					Message: err.Error(),
+				})
+				return
+			}
+			resp.Screenshot = result
+		}()
+	}
+
 	wg.Wait()
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil
 	if hasData {
 		if data, err := json.Marshal(resp); err != nil {
 			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))
-		} else if err := s.cache.Set(ctx, domainName, data, s.cacheTTL); err != nil {
+		} else if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL); err != nil {
 			logging.Logger().Warn("cache set failed", zap.String("domain", domainName), zap.Error(err))
 		}
 	}

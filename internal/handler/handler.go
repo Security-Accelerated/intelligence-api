@@ -9,7 +9,7 @@ import (
 )
 
 type DomainLookupService interface {
-	Lookup(ctx context.Context, domainName string) (*domain.DomainResponse, bool)
+	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool)
 }
 
 type Handler struct {

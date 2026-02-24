@@ -1,11 +1,22 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, and HTTP header lookups for one or more domains, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, and page screenshot lookups for one or more domains, with Redis caching.
 
 ## Authentication
 
 All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and can be assigned multiple roles.
+
+### Customer Tiers
+
+Each customer has a `tier` that controls access to premium features:
+
+| Tier | Features |
+|------|----------|
+| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) |
+| `premium` | All basic features + page screenshots |
+
+The tier is stored in the `customers` table. New customers default to `basic`.
 
 ### Roles
 
@@ -30,11 +41,14 @@ A customer with both `admin` and `domain` roles has access to all endpoints. Req
 **Request:**
 ```json
 {
-  "domains": ["example.com", "example.org"]
+  "domains": ["example.com", "example.org"],
+  "screenshot": true
 }
 ```
 
 The `domains` field accepts an array of domain names. Each entry accepts raw domains, URLs with `http://`/`https://` prefixes, and trailing slashes — all are normalized automatically. Domains are looked up concurrently.
+
+The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
 
 **Example:**
 ```sh
@@ -54,6 +68,7 @@ curl -X POST http://localhost:8080/api/v1/domain \
     "dns": { "a": ["93.184.216.34"], "mx": [], "ns": [], "..." : "..." },
     "ssl": { "subject": "...", "issuer": "...", "..." : "..." },
     "headers": { "status_code": 200, "headers": {}, "security_headers": {} },
+    "screenshot": { "status_code": 200, "png": "<base64-encoded PNG>" },
     "errors": []
   }
 ]
@@ -141,9 +156,22 @@ The `security_headers` subsection audits defensive headers that protect users:
 | `referrer_policy` | Controls how much URL information leaks when users click links to other sites |
 | `permissions_policy` | Restricts browser features like camera, microphone, and geolocation |
 
+### `screenshot` — Page Screenshot (Premium Only)
+
+A visual screenshot of the domain's web page, captured with headless Chrome at 1280x720. Only present when `"screenshot": true` is included in the request.
+
+| Field | What it means |
+|-------|---------------|
+| `status_code` | The HTTP status code from probing the domain. The screenshot only captures the page on `200 OK`. |
+| `png` | Base64-encoded PNG image of the page. Empty for non-200 responses. |
+
+The screenshot lookup first tries HTTPS, then falls back to HTTP. Non-200 responses still populate the `screenshot` section with the status code but no image data.
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
+
+Screenshot and non-screenshot requests use separate cache keys (`domain` vs `domain:screenshot`). Each key is fully self-contained — a screenshot request caches all 5 lookups together, and a non-screenshot request caches the 4 base lookups.
 
 ## Getting Started
 
@@ -152,6 +180,7 @@ Lookup results are cached in Redis. Repeated lookups for the same domain return 
 - Go 1.25+
 - Redis (or use the included Docker Compose)
 - PostgreSQL (or use the included Docker Compose)
+- Chromium or Google Chrome (for page screenshot feature; Docker image includes it)
 
 ### Configuration
 
@@ -177,6 +206,7 @@ Config values:
 | `redis.db` | `0` | Redis database number |
 | `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
+| `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `postgres.host` | `localhost` | PostgreSQL host |
 | `postgres.port` | `5432` | PostgreSQL port |
 | `postgres.user` | `intelligence` | PostgreSQL user |
@@ -189,7 +219,8 @@ Config values:
 The `migrations/` directory contains SQL files that are automatically applied when using Docker Compose (mounted to `/docker-entrypoint-initdb.d/`).
 
 - `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables
-- `seed.sql` — inserts test customers with keys and roles
+- `002_add_customer_tier.sql` — adds the `tier` column to `customers` (defaults to `basic`)
+- `seed.sql` — inserts test customers with keys and roles, sets Test Admin to `premium` tier
 
 To manage customers and API keys manually:
 

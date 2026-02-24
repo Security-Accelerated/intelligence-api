@@ -17,7 +17,7 @@ type mockService struct {
 	cached bool
 }
 
-func (m *mockService) Lookup(_ context.Context, domainName string) (*domain.DomainResponse, bool) {
+func (m *mockService) Lookup(_ context.Context, domainName string, _ domain.LookupOptions) (*domain.DomainResponse, bool) {
 	if m.resp != nil {
 		return m.resp, m.cached
 	}
@@ -32,6 +32,7 @@ func newTestRouter(svc DomainLookupService) *gin.Engine {
 	// Register protected routes with a stub auth middleware that grants admin.
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_tier", "premium")
 		c.Next()
 	})
 	return r

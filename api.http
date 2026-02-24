@@ -32,6 +32,26 @@ X-API-Key: {{domainKey}}
   "domains": ["example.com", "example.org"]
 }
 
+### Domain lookup with screenshot (admin/premium key)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "screenshot": true
+}
+
+### Domain lookup with screenshot - should return 403 (basic tier)
+POST {{host}}/api/v1/domain
+Content-Type: application/json
+X-API-Key: {{domainKey}}
+
+{
+  "domains": ["example.com"],
+  "screenshot": true
+}
+
 ### Domain lookup - should return 401 (no key)
 POST {{host}}/api/v1/domain
 Content-Type: application/json

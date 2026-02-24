@@ -54,6 +54,9 @@ func okSSL(_ context.Context, _ string) (*domain.SSLInfo, error) {
 func okHeaders(_ context.Context, _ string) (*domain.HeadersInfo, error) {
 	return &domain.HeadersInfo{StatusCode: 200}, nil
 }
+func okScreenshot(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
+	return &domain.ScreenshotInfo{StatusCode: 200, PNG: "iVBOR"}, nil
+}
 
 func failWhois(_ context.Context, _ string) (*domain.WhoisInfo, error) {
 	return nil, errors.New("whois failed")
@@ -67,17 +70,26 @@ func failSSL(_ context.Context, _ string) (*domain.SSLInfo, error) {
 func failHeaders(_ context.Context, _ string) (*domain.HeadersInfo, error) {
 	return nil, errors.New("headers failed")
 }
+func failScreenshot(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
+	return nil, errors.New("screenshot failed")
+}
 
 func newTestService(mc *mockCache) *DomainService {
 	return &DomainService{
-		cache:         mc,
-		cacheTTL:      5 * time.Minute,
-		lookupWhois:   okWhois,
-		lookupDNS:     okDNS,
-		lookupSSL:     okSSL,
-		lookupHeaders: okHeaders,
+		cache:             mc,
+		cacheTTL:          5 * time.Minute,
+		screenshotTimeout: 15 * time.Second,
+		lookupWhois:       okWhois,
+		lookupDNS:         okDNS,
+		lookupSSL:         okSSL,
+		lookupHeaders:     okHeaders,
+		lookupScreenshot:  okScreenshot,
 	}
 }
+
+func noOpts() domain.LookupOptions { return domain.LookupOptions{} }
+
+func screenshotOpts() domain.LookupOptions { return domain.LookupOptions{Screenshot: true} }
 
 func TestLookup_CacheHit(t *testing.T) {
 	mc := newMockCache()
@@ -92,7 +104,7 @@ func TestLookup_CacheHit(t *testing.T) {
 		return nil, nil
 	}
 
-	resp, hit := svc.Lookup(context.Background(), "cached.com")
+	resp, hit := svc.Lookup(context.Background(), "cached.com", noOpts())
 	if !hit {
 		t.Error("expected cache hit")
 	}
@@ -105,7 +117,7 @@ func TestLookup_CacheMiss_AllSucceed(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)
 
-	resp, hit := svc.Lookup(context.Background(), "example.com")
+	resp, hit := svc.Lookup(context.Background(), "example.com", noOpts())
 	if hit {
 		t.Error("expected cache miss")
 	}
@@ -137,15 +149,17 @@ func TestLookup_CacheMiss_AllSucceed(t *testing.T) {
 func TestLookup_CacheMiss_AllFail(t *testing.T) {
 	mc := newMockCache()
 	svc := &DomainService{
-		cache:         mc,
-		cacheTTL:      5 * time.Minute,
-		lookupWhois:   failWhois,
-		lookupDNS:     failDNS,
-		lookupSSL:     failSSL,
-		lookupHeaders: failHeaders,
+		cache:             mc,
+		cacheTTL:          5 * time.Minute,
+		screenshotTimeout: 15 * time.Second,
+		lookupWhois:       failWhois,
+		lookupDNS:         failDNS,
+		lookupSSL:         failSSL,
+		lookupHeaders:     failHeaders,
+		lookupScreenshot:  failScreenshot,
 	}
 
-	resp, hit := svc.Lookup(context.Background(), "fail.com")
+	resp, hit := svc.Lookup(context.Background(), "fail.com", noOpts())
 	if hit {
 		t.Error("expected cache miss")
 	}
@@ -162,15 +176,17 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
 	mc := newMockCache()
 	svc := &DomainService{
-		cache:         mc,
-		cacheTTL:      5 * time.Minute,
-		lookupWhois:   okWhois,
-		lookupDNS:     failDNS,
-		lookupSSL:     okSSL,
-		lookupHeaders: failHeaders,
+		cache:             mc,
+		cacheTTL:          5 * time.Minute,
+		screenshotTimeout: 15 * time.Second,
+		lookupWhois:       okWhois,
+		lookupDNS:         failDNS,
+		lookupSSL:         okSSL,
+		lookupHeaders:     failHeaders,
+		lookupScreenshot:  okScreenshot,
 	}
 
-	resp, hit := svc.Lookup(context.Background(), "partial.com")
+	resp, hit := svc.Lookup(context.Background(), "partial.com", noOpts())
 	if hit {
 		t.Error("expected cache miss")
 	}
@@ -195,7 +211,7 @@ func TestLookup_CacheGetError(t *testing.T) {
 	mc.getErr = errors.New("redis down")
 	svc := newTestService(mc)
 
-	resp, hit := svc.Lookup(context.Background(), "example.com")
+	resp, hit := svc.Lookup(context.Background(), "example.com", noOpts())
 	if hit {
 		t.Error("expected cache miss when Get errors")
 	}
@@ -217,11 +233,103 @@ func TestLookup_ConcurrentSafety(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp, _ := svc.Lookup(context.Background(), "concurrent.com")
+			resp, _ := svc.Lookup(context.Background(), "concurrent.com", noOpts())
 			if resp == nil {
 				t.Error("expected non-nil response")
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+func TestLookup_Screenshot_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", screenshotOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.Screenshot == nil {
+		t.Fatal("expected Screenshot to be populated")
+	}
+	if resp.Screenshot.StatusCode != 200 {
+		t.Errorf("Screenshot.StatusCode = %d, want 200", resp.Screenshot.StatusCode)
+	}
+	if resp.Screenshot.PNG != "iVBOR" {
+		t.Errorf("Screenshot.PNG = %q, want %q", resp.Screenshot.PNG, "iVBOR")
+	}
+}
+
+func TestLookup_Screenshot_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	// First: non-screenshot lookup caches under "example.com"
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	// Second: screenshot lookup caches under "example.com:screenshot"
+	svc.Lookup(context.Background(), "example.com", screenshotOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:screenshot"]; !ok {
+		t.Error("expected cache entry for screenshot key 'example.com:screenshot'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_Screenshot_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.Screenshot != nil {
+		t.Error("expected Screenshot to be nil when not requested")
+	}
+}
+
+func TestLookup_Screenshot_StatusCodeOnly(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupScreenshot = func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
+		return &domain.ScreenshotInfo{StatusCode: 301}, nil
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", screenshotOpts())
+	if resp.Screenshot == nil {
+		t.Fatal("expected Screenshot to be populated")
+	}
+	if resp.Screenshot.StatusCode != 301 {
+		t.Errorf("Screenshot.StatusCode = %d, want 301", resp.Screenshot.StatusCode)
+	}
+	if resp.Screenshot.PNG != "" {
+		t.Errorf("Screenshot.PNG = %q, want empty for non-200", resp.Screenshot.PNG)
+	}
+}
+
+func TestLookup_Screenshot_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupScreenshot = failScreenshot
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", screenshotOpts())
+	if resp.Screenshot != nil {
+		t.Error("expected Screenshot to be nil on failure")
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if e.Lookup == "screenshot" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected a screenshot error in resp.Errors")
+	}
 }

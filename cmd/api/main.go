@@ -40,6 +40,8 @@ func main() {
 		zap.String("golang_version", config.Config().GetString("environment.golang.version")),
 		zap.String("architecture", config.Config().GetString("environment.architecture")),
 		zap.String("os", config.Config().GetString("environment.os")),
+		zap.Duration("cache_ttl", config.Config().GetDuration("redis.cache_ttl")),
+		zap.Duration("screenshot_timeout", config.Config().GetDuration("screenshot.timeout")),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -68,7 +70,11 @@ func main() {
 		config.Config().GetInt("redis.db"),
 	)
 	cacheTTL := config.Config().GetDuration("redis.cache_ttl")
-	domainService := service.NewDomainService(redisCache, cacheTTL)
+	screenshotTimeout := config.Config().GetDuration("screenshot.timeout")
+	if screenshotTimeout == 0 {
+		screenshotTimeout = 15 * time.Second
+	}
+	domainService := service.NewDomainService(redisCache, cacheTTL, screenshotTimeout)
 	h := handler.New(domainService, version)
 
 	router := newRouter(ctx, h, cachedRepo)

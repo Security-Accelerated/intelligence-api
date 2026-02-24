@@ -28,8 +28,8 @@ type stubRepo struct {
 
 func newStubRepo() *stubRepo {
 	return &stubRepo{keys: map[string]*auth.Customer{
-		"test-admin-key":  {ID: 1, Name: "Test Admin", Active: true, Roles: []string{"admin", "domain"}},
-		"test-domain-key": {ID: 2, Name: "Test Domain User", Active: true, Roles: []string{"domain"}},
+		"test-admin-key":  {ID: 1, Name: "Test Admin", Active: true, Tier: "premium", Roles: []string{"admin", "domain"}},
+		"test-domain-key": {ID: 2, Name: "Test Domain User", Active: true, Tier: "basic", Roles: []string{"domain"}},
 	}}
 }
 
@@ -47,7 +47,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	mr := miniredis.RunT(t)
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
 
-	svc := service.NewDomainService(rc, 5*time.Minute)
+	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -61,6 +61,9 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		},
 		func(_ context.Context, _ string) (*domain.HeadersInfo, error) {
 			return &domain.HeadersInfo{StatusCode: 200, Headers: map[string]string{"Server": "test"}}, nil
+		},
+		func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
+			return &domain.ScreenshotInfo{StatusCode: 200, PNG: "c3R1Yg=="}, nil
 		},
 	)
 
@@ -244,5 +247,76 @@ func TestIntegration_Auth_DomainKeyCannotAccessInfo(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestIntegration_Screenshot_PremiumCanScreenshot(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Screenshot == nil {
+		t.Fatal("expected screenshot to be populated for premium customer")
+	}
+	if resp[0].Screenshot.StatusCode != 200 {
+		t.Errorf("Screenshot.StatusCode = %d, want 200", resp[0].Screenshot.StatusCode)
+	}
+	if resp[0].Screenshot.PNG == "" {
+		t.Error("expected Screenshot.PNG to be non-empty")
+	}
+}
+
+func TestIntegration_Screenshot_BasicGets403(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-domain-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Screenshot != nil {
+		t.Error("expected screenshot to be nil when not requested")
 	}
 }

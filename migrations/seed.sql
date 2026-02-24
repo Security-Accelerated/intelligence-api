@@ -15,3 +15,5 @@ INSERT INTO customer_roles (customer_id, role) VALUES
     (1, 'domain'),
     (2, 'domain')
 ON CONFLICT (customer_id, role) DO NOTHING;
+
+UPDATE customers SET tier = 'premium' WHERE name = 'Test Admin';

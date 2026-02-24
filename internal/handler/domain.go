@@ -27,6 +27,17 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		return
 	}
 
+	opts := domain.LookupOptions{Screenshot: req.Screenshot}
+	c.Set("screenshot_requested", req.Screenshot)
+
+	if req.Screenshot {
+		tier, _ := c.Get("api_key_tier")
+		if tier != "premium" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a premium tier subscription"})
+			return
+		}
+	}
+
 	type indexedResult struct {
 		index int
 		resp  *domain.DomainResponse
@@ -65,7 +76,7 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		wg.Add(1)
 		go func(idx int, name string) {
 			defer wg.Done()
-			result, cached := h.domainService.Lookup(c.Request.Context(), name)
+			result, cached := h.domainService.Lookup(c.Request.Context(), name, opts)
 			result.CacheHit = cached
 			ch <- indexedResult{index: idx, resp: result}
 		}(v.index, v.name)

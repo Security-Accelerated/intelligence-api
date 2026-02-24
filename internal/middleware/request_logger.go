@@ -29,6 +29,10 @@ func RequestLogger() gin.HandlerFunc {
 			fields = append(fields, zap.Bool("cache_hit", cacheHit.(bool)))
 		}
 
+		if screenshot, exists := c.Get("screenshot_requested"); exists {
+			fields = append(fields, zap.Bool("screenshot_requested", screenshot.(bool)))
+		}
+
 		logger.Info("request", fields...)
 	}
 }

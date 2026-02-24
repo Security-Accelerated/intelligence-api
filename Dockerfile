@@ -9,6 +9,7 @@ RUN go build -ldflags "-X main.version=${VERSION}" -o /app/intelligence-api ./cm
 
 FROM alpine:3.21
 
+RUN apk add --no-cache chromium
 RUN mkdir -p /etc/security-accelerated
 COPY --from=build /app/intelligence-api /usr/local/bin/intelligence-api
 
