@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"testing"
 )
 
@@ -207,5 +208,208 @@ func TestGenBitsquat(t *testing.T) {
 		if p.Domain == "example.com" {
 			t.Error("bitsquat should not include the original")
 		}
+	}
+}
+
+// --- Additional algorithm tests ---
+
+func TestGenAdjacentSub(t *testing.T) {
+	perms := genAdjacentSub("test", "com")
+	if len(perms) == 0 {
+		t.Fatal("expected adjacent substitution permutations")
+	}
+	// 't' is adjacent to 'r','y','f','g' on QWERTY
+	domains := make(map[string]bool)
+	for _, p := range perms {
+		domains[p.Domain] = true
+	}
+	if !domains["rest.com"] {
+		t.Error("expected rest.com (t→r)")
+	}
+	if !domains["yest.com"] {
+		t.Error("expected yest.com (t→y)")
+	}
+}
+
+func TestGenAdjacentSub_NonQWERTYChar(t *testing.T) {
+	// Characters not in the QWERTY map (e.g. hyphen) should be skipped
+	perms := genAdjacentSub("a-b", "com")
+	for _, p := range perms {
+		// The hyphen at index 1 should not produce adjacent substitutions
+		// Only 'a' and 'b' should be substituted
+		if p.Domain == "" {
+			t.Error("unexpected empty domain")
+		}
+	}
+}
+
+func TestGenVowelSwap(t *testing.T) {
+	perms := genVowelSwap("test", "com")
+	domains := make(map[string]bool)
+	for _, p := range perms {
+		domains[p.Domain] = true
+	}
+	// 'e' in test should swap to a, i, o, u
+	if !domains["tast.com"] {
+		t.Error("expected tast.com (e→a)")
+	}
+	if !domains["tist.com"] {
+		t.Error("expected tist.com (e→i)")
+	}
+	if !domains["tost.com"] {
+		t.Error("expected tost.com (e→o)")
+	}
+	if !domains["tust.com"] {
+		t.Error("expected tust.com (e→u)")
+	}
+}
+
+func TestGenVowelSwap_NoVowels(t *testing.T) {
+	perms := genVowelSwap("fly", "com")
+	if len(perms) != 0 {
+		t.Errorf("expected no vowel swaps for consonant-only SLD, got %d", len(perms))
+	}
+}
+
+func TestGenMissingDot(t *testing.T) {
+	perms := genMissingDot("example", "com")
+	if len(perms) == 0 {
+		t.Fatal("expected missing dot permutations")
+	}
+	domains := make(map[string]bool)
+	for _, p := range perms {
+		domains[p.Domain] = true
+	}
+	// "example" + "com" = "examplecom", registered under common TLDs
+	if !domains["examplecom.com"] {
+		t.Error("expected examplecom.com")
+	}
+	if !domains["examplecom.net"] {
+		t.Error("expected examplecom.net")
+	}
+}
+
+func TestGenMissingDot_MultiLevelTLD(t *testing.T) {
+	// For "example.co.uk", SLD="example", TLD="co.uk"
+	// concat = "example" + "couk" = "examplecouk"
+	perms := genMissingDot("example", "co.uk")
+	domains := make(map[string]bool)
+	for _, p := range perms {
+		domains[p.Domain] = true
+	}
+	if !domains["examplecouk.com"] {
+		t.Error("expected examplecouk.com for multi-level TLD")
+	}
+}
+
+func TestGenAddition(t *testing.T) {
+	perms := genAddition("ab", "com")
+	if len(perms) == 0 {
+		t.Fatal("expected addition permutations")
+	}
+	domains := make(map[string]bool)
+	for _, p := range perms {
+		domains[p.Domain] = true
+	}
+	// Should include prepend, insert, and append positions
+	if !domains["aab.com"] {
+		t.Error("expected aab.com (prepend 'a')")
+	}
+	if !domains["abb.com"] {
+		t.Error("expected abb.com (insert 'b' after 'a')")
+	}
+	if !domains["abc.com"] {
+		t.Error("expected abc.com (append 'c')")
+	}
+}
+
+// --- splitDomain tests ---
+
+func TestSplitDomain_Standard(t *testing.T) {
+	sld, tld := splitDomain("example.com")
+	if sld != "example" || tld != "com" {
+		t.Errorf("splitDomain(example.com) = (%q, %q), want (example, com)", sld, tld)
+	}
+}
+
+func TestSplitDomain_MultiLevelTLD(t *testing.T) {
+	sld, tld := splitDomain("example.co.uk")
+	if sld != "example" || tld != "co.uk" {
+		t.Errorf("splitDomain(example.co.uk) = (%q, %q), want (example, co.uk)", sld, tld)
+	}
+}
+
+func TestSplitDomain_NoDot(t *testing.T) {
+	sld, tld := splitDomain("localhost")
+	if sld != "localhost" || tld != "" {
+		t.Errorf("splitDomain(localhost) = (%q, %q), want (localhost, \"\")", sld, tld)
+	}
+}
+
+func TestSplitDomain_SingleCharSLD(t *testing.T) {
+	sld, tld := splitDomain("x.com")
+	if sld != "x" || tld != "com" {
+		t.Errorf("splitDomain(x.com) = (%q, %q), want (x, com)", sld, tld)
+	}
+}
+
+// --- LookupTyposquatting orchestrator tests ---
+
+func TestLookupTyposquatting_DefaultsToShallow(t *testing.T) {
+	resp, err := LookupTyposquatting(context.Background(), "example.com", TyposquattingOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Depth != "shallow" {
+		t.Errorf("Depth = %q, want %q", resp.Depth, "shallow")
+	}
+}
+
+func TestLookupTyposquatting_InvalidDepth(t *testing.T) {
+	_, err := LookupTyposquatting(context.Background(), "example.com", TyposquattingOptions{Depth: "medium"})
+	if err == nil {
+		t.Fatal("expected error for invalid depth")
+	}
+}
+
+func TestLookupTyposquatting_DefaultMaxPermutations(t *testing.T) {
+	resp, err := LookupTyposquatting(context.Background(), "example.com", TyposquattingOptions{
+		Depth: "deep",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Default cap is 500; deep on "example.com" produces many permutations
+	if resp.Count > 500 {
+		t.Errorf("Count = %d, should be capped at 500", resp.Count)
+	}
+}
+
+func TestLookupTyposquatting_CustomMaxPermutations(t *testing.T) {
+	resp, err := LookupTyposquatting(context.Background(), "example.com", TyposquattingOptions{
+		Depth:           "deep",
+		MaxPermutations: 5,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Count != 5 {
+		t.Errorf("Count = %d, want 5", resp.Count)
+	}
+	if !resp.Capped {
+		t.Error("expected Capped=true")
+	}
+}
+
+func TestLookupTyposquatting_ResponsePopulation(t *testing.T) {
+	resp, err := LookupTyposquatting(context.Background(), "test.com", TyposquattingOptions{Depth: "shallow"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Domain != "test.com" {
+		t.Errorf("Domain = %q, want %q", resp.Domain, "test.com")
+	}
+	if resp.Count != len(resp.Permutations) {
+		t.Errorf("Count = %d, len(Permutations) = %d, should match", resp.Count, len(resp.Permutations))
 	}
 }

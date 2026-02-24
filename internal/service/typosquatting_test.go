@@ -152,3 +152,57 @@ func TestTyposquatting_CacheGetError_StillWorks(t *testing.T) {
 		t.Errorf("Count = %d, want 2", resp.Count)
 	}
 }
+
+func TestTyposquatting_CacheUnmarshalError_FallsBackToLookup(t *testing.T) {
+	mc := newMockCache()
+	// Store invalid JSON in the cache
+	mc.store["typosquatting:example.com:shallow"] = []byte("{invalid json")
+	svc := newTestTyposquattingService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", false, "shallow")
+	if hit {
+		t.Error("expected cache miss when unmarshal fails")
+	}
+	// Should have fallen through to the live lookup
+	if resp.Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp.Domain, "example.com")
+	}
+	if resp.Count != 2 {
+		t.Errorf("Count = %d, want 2 (from live lookup)", resp.Count)
+	}
+}
+
+func TestTyposquatting_ConstructorDefaults(t *testing.T) {
+	mc := newMockCache()
+
+	// Zero values for maxPerms and concurrency should default
+	svc := NewTyposquattingService(mc, 5*time.Minute, 30*time.Second, 0, 0)
+	svc.SetLookup(func(_ context.Context, _ string, opts domain.TyposquattingOptions) (*domain.TyposquattingResponse, error) {
+		if opts.MaxPermutations != 500 {
+			t.Errorf("MaxPermutations = %d, want 500 (default)", opts.MaxPermutations)
+		}
+		if opts.Concurrency != 20 {
+			t.Errorf("Concurrency = %d, want 20 (default)", opts.Concurrency)
+		}
+		return &domain.TyposquattingResponse{Domain: "test.com"}, nil
+	})
+
+	svc.Lookup(context.Background(), "test.com", false, "shallow")
+}
+
+func TestTyposquatting_ConstructorRespectsCustomValues(t *testing.T) {
+	mc := newMockCache()
+
+	svc := NewTyposquattingService(mc, 5*time.Minute, 30*time.Second, 100, 5)
+	svc.SetLookup(func(_ context.Context, _ string, opts domain.TyposquattingOptions) (*domain.TyposquattingResponse, error) {
+		if opts.MaxPermutations != 100 {
+			t.Errorf("MaxPermutations = %d, want 100", opts.MaxPermutations)
+		}
+		if opts.Concurrency != 5 {
+			t.Errorf("Concurrency = %d, want 5", opts.Concurrency)
+		}
+		return &domain.TyposquattingResponse{Domain: "test.com"}, nil
+	})
+
+	svc.Lookup(context.Background(), "test.com", false, "shallow")
+}
