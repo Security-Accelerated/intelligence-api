@@ -24,6 +24,14 @@ RUN printf '%s\n' \
   '  password: ""' \
   '  db: 0' \
   '  cache_ttl: 60m' \
+  'auth:' \
+  '  cache_ttl: 5m' \
+  'screenshot:' \
+  '  timeout: 15s' \
+  'typosquatting:' \
+  '  timeout: 30s' \
+  '  max_permutations: 500' \
+  '  concurrency: 20' \
   'postgres:' \
   '  host: postgres' \
   '  port: 5432' \
