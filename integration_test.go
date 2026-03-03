@@ -97,7 +97,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 
 	r := gin.New()
 	r.Use(middleware.RequestLogger())
-	h := handler.New(svc, typosquattingSvc, "test")
+	h := handler.New(svc, typosquattingSvc, "test", nil, rc, cachedRepo)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, middleware.APIKeyAuth(cachedRepo))
 
