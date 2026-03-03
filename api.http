@@ -20,6 +20,7 @@ X-API-Key: {{adminKey}}
 POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
+X-Client-Request-ID: test-admin-001
 
 {
   "domains": ["example.com"]
@@ -29,6 +30,7 @@ X-API-Key: {{adminKey}}
 POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
+X-Client-Request-ID: test-lookup-001
 
 {
   "domains": ["example.com", "example.org"]
@@ -38,6 +40,7 @@ X-API-Key: {{lookupKey}}
 POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{enterpriseKey}}
+X-Client-Request-ID: test-enterprise-001
 
 {
   "domains": ["example.com"]
