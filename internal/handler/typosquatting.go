@@ -9,6 +9,8 @@ import (
 )
 
 func (h *Handler) TyposquattingLookup(c *gin.Context) {
+	c.Set("typosquatting_requested", true)
+
 	tier, _ := c.Get("api_key_tier")
 	if tier != "premium" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "typosquatting requires a premium tier subscription"})
@@ -29,8 +31,6 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "depth must be \"shallow\" or \"deep\""})
 		return
 	}
-
-	c.Set("typosquatting_requested", true)
 
 	type indexedResult struct {
 		index int
