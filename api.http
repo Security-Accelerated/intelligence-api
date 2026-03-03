@@ -142,32 +142,24 @@ X-API-Key: {{lookupKey}}
   "domains": ["example.com"]
 }
 
-### Subdomain enumeration (admin key)
-POST {{host}}/api/v1/domain/subdomains
-Content-Type: application/json
-X-API-Key: {{adminKey}}
-
-{
-  "domains": ["example.com"]
-}
-
-### Subdomain enumeration with live checks (admin key)
-POST {{host}}/api/v1/domain/subdomains
+### Domain lookup with subdomains (admin key)
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "check_live": true
+  "subdomains": true
 }
 
-### Subdomain - should return 403 (lookup key lacks subdomain feature)
-POST {{host}}/api/v1/domain/subdomains
+### Domain lookup with subdomains (lookup key - all tiers)
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
 {
-  "domains": ["example.com"]
+  "domains": ["example.com"],
+  "subdomains": true
 }
 
 ### Domain lookup - should return 401 (no key)
