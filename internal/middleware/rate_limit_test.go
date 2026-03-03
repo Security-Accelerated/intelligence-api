@@ -160,6 +160,39 @@ func TestRateLimit_RedisDown_FailOpen(t *testing.T) {
 	}
 }
 
+func TestRateLimit_AdminTier_Bypassed(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	core, _ := observer.New(zapcore.WarnLevel)
+	logger := zap.New(core)
+
+	cfg := RateLimitConfig{Basic: 1, Premium: 1}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("api_key_id", 1)
+		c.Set("api_key_tier", "admin")
+		c.Next()
+	})
+	r.Use(RateLimitWithLogger(client, cfg, logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// With limit=1, a second request would normally be rejected.
+	// Admin tier should bypass rate limiting entirely.
+	for i := 0; i < 5; i++ {
+		w := doRequest(r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
+		}
+		if got := w.Header().Get("X-RateLimit-Limit"); got != "" {
+			t.Errorf("request %d: X-RateLimit-Limit should not be set for admin, got %q", i+1, got)
+		}
+	}
+}
+
 func TestRateLimit_NoAuthContext_Passthrough(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
