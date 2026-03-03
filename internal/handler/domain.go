@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -31,24 +32,25 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		return
 	}
 
+	tier, _ := c.Get("api_key_tier")
+	tierStr, _ := tier.(string)
+	if max := h.maxDomains("domain", tierStr); max > 0 && len(req.Domains) > max {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many domains: maximum %d allowed for %s tier", max, tierStr)})
+		return
+	}
+
 	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation}
 	c.Set("screenshot_requested", req.Screenshot)
 	c.Set("reputation_requested", req.Reputation)
 
-	if req.Screenshot {
-		tier, _ := c.Get("api_key_tier")
-		if tier != "premium" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a premium tier subscription"})
-			return
-		}
+	if req.Screenshot && tierStr != "premium" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a premium tier subscription"})
+		return
 	}
 
-	if req.Reputation {
-		tier, _ := c.Get("api_key_tier")
-		if tier != "premium" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "reputation requires a premium tier subscription"})
-			return
-		}
+	if req.Reputation && tierStr != "premium" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "reputation requires a premium tier subscription"})
+		return
 	}
 
 	type indexedResult struct {

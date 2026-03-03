@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
@@ -37,6 +38,15 @@ func New(domainService DomainLookupService, typosquattingService TyposquattingLo
 		redisCache:           redisCache,
 		cachedRepo:           cachedRepo,
 	}
+}
+
+// maxDomains returns the configured maximum number of domains for the given
+// config prefix and tier. Returns 0 (no limit) if config is nil.
+func (h *Handler) maxDomains(prefix, tier string) int {
+	if h.cfg == nil {
+		return 0
+	}
+	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, tier))
 }
 
 // RegisterRoutes registers unauthenticated routes only (health check).

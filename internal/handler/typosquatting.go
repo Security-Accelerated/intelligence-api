@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"sync"
@@ -14,7 +15,8 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 	c.Set("check_live_requested", false)
 
 	tier, _ := c.Get("api_key_tier")
-	if tier != "premium" {
+	tierStr, _ := tier.(string)
+	if tierStr != "premium" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "typosquatting requires a premium tier subscription"})
 		return
 	}
@@ -22,6 +24,11 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 	var req domain.TyposquattingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: domains field is required and must be a non-empty array"})
+		return
+	}
+
+	if max := h.maxDomains("typosquatting", tierStr); max > 0 && len(req.Domains) > max {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many domains: maximum %d allowed for %s tier", max, tierStr)})
 		return
 	}
 

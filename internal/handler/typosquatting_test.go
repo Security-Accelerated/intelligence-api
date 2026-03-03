@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/spf13/viper"
 )
 
 type mockTyposquattingService struct {
@@ -445,6 +446,58 @@ func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
 			t.Errorf("context key %q not set by handler (logger will silently skip it)", key)
 		}
 	}
+}
+
+// --- Max domains per request ---
+
+func newTyposquattingRouterWithCfg(svc TyposquattingLookupService, tier string, cfg *viper.Viper) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(nil, svc, "test", cfg, nil, nil)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_tier", tier)
+		c.Next()
+	})
+	return r
+}
+
+func TestTyposquattingLookup_MaxDomains_ExceedsLimit(t *testing.T) {
+	cfg := testCfg(map[string]any{
+		"typosquatting.max_domains.premium": 2,
+	})
+
+	t.Run("premium tier over limit", func(t *testing.T) {
+		r := newTyposquattingRouterWithCfg(&mockTyposquattingService{}, "premium", cfg)
+		w := postTyposquatting(r, `{"domains":["a.com","b.com","c.com"]}`)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+		}
+		var body map[string]string
+		json.Unmarshal(w.Body.Bytes(), &body)
+		if body["error"] != "too many domains: maximum 2 allowed for premium tier" {
+			t.Errorf("error = %q", body["error"])
+		}
+	})
+
+	t.Run("premium tier at limit succeeds", func(t *testing.T) {
+		r := newTyposquattingRouterWithCfg(&mockTyposquattingService{}, "premium", cfg)
+		w := postTyposquatting(r, `{"domains":["a.com","b.com"]}`)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+
+	t.Run("nil config means no limit", func(t *testing.T) {
+		r := newTyposquattingRouterWithService(&mockTyposquattingService{})
+		w := postTyposquatting(r, `{"domains":["a.com","b.com","c.com","d.com","e.com"]}`)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
 }
 
 func TestTyposquattingLookup_CacheMissFlagFalse(t *testing.T) {

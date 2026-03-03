@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/spf13/viper"
 )
 
 type mockService struct {
@@ -505,6 +506,98 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- Max domains per request ---
+
+func testCfg(overrides map[string]any) *viper.Viper {
+	v := viper.New()
+	for k, val := range overrides {
+		v.Set(k, val)
+	}
+	return v
+}
+
+func newTestRouterWithCfg(svc DomainLookupService, tier string, cfg *viper.Viper) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(svc, nil, "test", cfg, nil, nil)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_tier", tier)
+		c.Next()
+	})
+	return r
+}
+
+func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
+	cfg := testCfg(map[string]any{
+		"domain.max_domains.basic":   2,
+		"domain.max_domains.premium": 3,
+	})
+
+	t.Run("basic tier over limit", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+		}
+		var body map[string]string
+		json.Unmarshal(w.Body.Bytes(), &body)
+		if body["error"] != "too many domains: maximum 2 allowed for basic tier" {
+			t.Errorf("error = %q", body["error"])
+		}
+	})
+
+	t.Run("premium tier over limit", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "premium", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+		}
+		var body map[string]string
+		json.Unmarshal(w.Body.Bytes(), &body)
+		if body["error"] != "too many domains: maximum 3 allowed for premium tier" {
+			t.Errorf("error = %q", body["error"])
+		}
+	})
+
+	t.Run("premium tier at limit succeeds", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "premium", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+
+	t.Run("nil config means no limit", func(t *testing.T) {
+		r := newTestRouterWithTier(&mockService{}, "basic")
+		w := httptest.NewRecorder()
+		// 10 domains, but nil config → no limit enforced
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com","f.com","g.com","h.com","i.com","j.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
 }
 
 func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
