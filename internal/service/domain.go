@@ -40,8 +40,9 @@ type DomainService struct {
 	lookupDNS        func(ctx context.Context, d string) (*domain.DNSInfo, error)
 	lookupSSL        func(ctx context.Context, d string) (*domain.SSLInfo, error)
 	lookupHeaders    func(ctx context.Context, d string) (*domain.HeadersInfo, error)
-	lookupScreenshot func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
-	lookupReputation  func(ctx context.Context, d string) (*domain.ReputationResult, []domain.LookupError)
+	lookupScreenshot     func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
+	lookupReputation     func(ctx context.Context, d string) (*domain.ReputationResult, []domain.LookupError)
+	lookupEmailSecurity  func(ctx context.Context, d string) (*domain.EmailSecurityInfo, error)
 }
 
 func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration) *DomainService {
@@ -53,8 +54,9 @@ func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration) 
 		lookupDNS:         domain.LookupDNS,
 		lookupSSL:         domain.LookupSSL,
 		lookupHeaders:     domain.LookupHeaders,
-		lookupScreenshot:  domain.LookupScreenshot,
-		lookupReputation:   domain.LookupReputation,
+		lookupScreenshot:    domain.LookupScreenshot,
+		lookupReputation:    domain.LookupReputation,
+		lookupEmailSecurity: domain.LookupEmailSecurity,
 	}
 }
 
@@ -74,8 +76,18 @@ func (s *DomainService) SetLookups(
 	s.lookupReputation = reputation
 }
 
+// SetEmailSecurityLookup replaces the email security lookup function (for testing).
+func (s *DomainService) SetEmailSecurityLookup(
+	fn func(context.Context, string) (*domain.EmailSecurityInfo, error),
+) {
+	s.lookupEmailSecurity = fn
+}
+
 func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	var suffixes []string
+	if opts.EmailSecurity {
+		suffixes = append(suffixes, "email_security")
+	}
 	if opts.Reputation {
 		suffixes = append(suffixes, "reputation")
 	}
@@ -212,9 +224,28 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		}()
 	}
 
+	if opts.EmailSecurity {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := s.lookupEmailSecurity(ctx, domainName)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "email_security"), zap.String("domain", domainName), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{
+					Lookup:  "email_security",
+					Message: sanitizeErr(err),
+				})
+				return
+			}
+			resp.EmailSecurity = result
+		}()
+	}
+
 	wg.Wait()
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil
 	if hasData {
 		if data, err := json.Marshal(resp); err != nil {
 			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))

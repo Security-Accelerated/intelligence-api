@@ -100,17 +100,27 @@ func failReputation(_ context.Context, _ string) (*domain.ReputationResult, []do
 	}
 }
 
+func okEmailSecurity(_ context.Context, _ string) (*domain.EmailSecurityInfo, error) {
+	return &domain.EmailSecurityInfo{
+		SPF: &domain.SPFRecord{Raw: "v=spf1 -all", Version: "spf1", All: "-all"},
+	}, nil
+}
+func failEmailSecurity(_ context.Context, _ string) (*domain.EmailSecurityInfo, error) {
+	return nil, errors.New("email_security failed")
+}
+
 func newTestService(mc *mockCache) *DomainService {
 	return &DomainService{
-		cache:             mc,
-		cacheTTL:          5 * time.Minute,
-		screenshotTimeout: 15 * time.Second,
-		lookupWhois:       okWhois,
-		lookupDNS:         okDNS,
-		lookupSSL:         okSSL,
-		lookupHeaders:     okHeaders,
-		lookupScreenshot:  okScreenshot,
-		lookupReputation:   okReputation,
+		cache:               mc,
+		cacheTTL:            5 * time.Minute,
+		screenshotTimeout:   15 * time.Second,
+		lookupWhois:         okWhois,
+		lookupDNS:           okDNS,
+		lookupSSL:           okSSL,
+		lookupHeaders:       okHeaders,
+		lookupScreenshot:    okScreenshot,
+		lookupReputation:    okReputation,
+		lookupEmailSecurity: okEmailSecurity,
 	}
 }
 
@@ -182,15 +192,16 @@ func TestLookup_CacheMiss_AllSucceed(t *testing.T) {
 func TestLookup_CacheMiss_AllFail(t *testing.T) {
 	mc := newMockCache()
 	svc := &DomainService{
-		cache:             mc,
-		cacheTTL:          5 * time.Minute,
-		screenshotTimeout: 15 * time.Second,
-		lookupWhois:       failWhois,
-		lookupDNS:         failDNS,
-		lookupSSL:         failSSL,
-		lookupHeaders:     failHeaders,
-		lookupScreenshot:  failScreenshot,
-		lookupReputation:   failReputation,
+		cache:               mc,
+		cacheTTL:            5 * time.Minute,
+		screenshotTimeout:   15 * time.Second,
+		lookupWhois:         failWhois,
+		lookupDNS:           failDNS,
+		lookupSSL:           failSSL,
+		lookupHeaders:       failHeaders,
+		lookupScreenshot:    failScreenshot,
+		lookupReputation:    failReputation,
+		lookupEmailSecurity: failEmailSecurity,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "fail.com", noOpts())
@@ -210,15 +221,16 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
 	mc := newMockCache()
 	svc := &DomainService{
-		cache:             mc,
-		cacheTTL:          5 * time.Minute,
-		screenshotTimeout: 15 * time.Second,
-		lookupWhois:       okWhois,
-		lookupDNS:         failDNS,
-		lookupSSL:         okSSL,
-		lookupHeaders:     failHeaders,
-		lookupScreenshot:  okScreenshot,
-		lookupReputation:   okReputation,
+		cache:               mc,
+		cacheTTL:            5 * time.Minute,
+		screenshotTimeout:   15 * time.Second,
+		lookupWhois:         okWhois,
+		lookupDNS:           failDNS,
+		lookupSSL:           okSSL,
+		lookupHeaders:       failHeaders,
+		lookupScreenshot:    okScreenshot,
+		lookupReputation:    okReputation,
+		lookupEmailSecurity: okEmailSecurity,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "partial.com", noOpts())
@@ -528,5 +540,96 @@ func TestLookup_CacheUnmarshalError_FallsBackToLookup(t *testing.T) {
 	}
 	if resp.Whois == nil {
 		t.Error("expected Whois to be populated from live lookup after cache unmarshal failure")
+	}
+}
+
+// --- Email Security tests ---
+
+func emailSecurityOpts() domain.LookupOptions { return domain.LookupOptions{EmailSecurity: true} }
+
+func TestLookup_EmailSecurity_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", emailSecurityOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.EmailSecurity == nil {
+		t.Fatal("expected EmailSecurity to be populated")
+	}
+	if resp.EmailSecurity.SPF == nil {
+		t.Fatal("expected SPF to be populated")
+	}
+	if resp.EmailSecurity.SPF.All != "-all" {
+		t.Errorf("SPF.All = %q, want %q", resp.EmailSecurity.SPF.All, "-all")
+	}
+}
+
+func TestLookup_EmailSecurity_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.EmailSecurity != nil {
+		t.Error("expected EmailSecurity to be nil when not requested")
+	}
+}
+
+func TestLookup_EmailSecurity_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupEmailSecurity = failEmailSecurity
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", emailSecurityOpts())
+	if resp.EmailSecurity != nil {
+		t.Error("expected EmailSecurity to be nil on failure")
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if e.Lookup == "email_security" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected an email_security error in resp.Errors")
+	}
+}
+
+func TestLookup_EmailSecurity_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	svc.Lookup(context.Background(), "example.com", emailSecurityOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:email_security"]; !ok {
+		t.Error("expected cache entry for email_security key 'example.com:email_security'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_SetEmailSecurityLookup(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	called := false
+	svc.SetEmailSecurityLookup(func(_ context.Context, _ string) (*domain.EmailSecurityInfo, error) {
+		called = true
+		return &domain.EmailSecurityInfo{}, nil
+	})
+
+	svc.Lookup(context.Background(), "example.com", emailSecurityOpts())
+	if !called {
+		t.Error("expected custom email security lookup to be called")
 	}
 }

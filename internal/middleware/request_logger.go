@@ -17,6 +17,8 @@ var ContextKeys = []string{
 	"screenshot_requested",
 	"typosquatting_requested",
 	"reputation_requested",
+	"email_security_requested",
+	"subdomain_requested",
 	"check_live_requested",
 }
 

@@ -3,14 +3,16 @@ package domain
 import "time"
 
 type DomainRequest struct {
-	Domains    []string `json:"domains" binding:"required,min=1"`
-	Screenshot bool     `json:"screenshot,omitempty"`
-	Reputation bool     `json:"reputation,omitempty"`
+	Domains       []string `json:"domains" binding:"required,min=1"`
+	Screenshot    bool     `json:"screenshot,omitempty"`
+	Reputation    bool     `json:"reputation,omitempty"`
+	EmailSecurity bool     `json:"email_security,omitempty"`
 }
 
 type LookupOptions struct {
-	Screenshot bool
-	Reputation bool
+	Screenshot    bool
+	Reputation    bool
+	EmailSecurity bool
 }
 
 type DomainResponse struct {
@@ -20,9 +22,10 @@ type DomainResponse struct {
 	DNS        *DNSInfo        `json:"dns,omitempty"`
 	SSL        *SSLInfo        `json:"ssl,omitempty"`
 	Headers    *HeadersInfo    `json:"headers,omitempty"`
-	Screenshot *ScreenshotInfo `json:"screenshot,omitempty"`
-	Reputation *ReputationResult `json:"reputation,omitempty"`
-	Errors     []LookupError   `json:"errors,omitempty"`
+	Screenshot    *ScreenshotInfo    `json:"screenshot,omitempty"`
+	Reputation    *ReputationResult  `json:"reputation,omitempty"`
+	EmailSecurity *EmailSecurityInfo `json:"email_security,omitempty"`
+	Errors        []LookupError      `json:"errors,omitempty"`
 }
 
 type ProviderResult struct {
@@ -141,4 +144,65 @@ type SecurityHeaders struct {
 type LookupError struct {
 	Lookup  string `json:"lookup"`
 	Message string `json:"message"`
+}
+
+// --- Email Security (optional field on domain lookup) ---
+
+type EmailSecurityInfo struct {
+	SPF   *SPFRecord   `json:"spf,omitempty"`
+	DMARC *DMARCRecord `json:"dmarc,omitempty"`
+	DKIM  []DKIMRecord `json:"dkim,omitempty"`
+}
+
+type SPFRecord struct {
+	Raw        string   `json:"raw"`
+	Version    string   `json:"version,omitempty"`
+	Mechanisms []string `json:"mechanisms,omitempty"`
+	All        string   `json:"all,omitempty"` // terminal qualifier: "+all", "-all", "~all", "?all"
+}
+
+type DMARCRecord struct {
+	Raw     string `json:"raw"`
+	Version string `json:"version,omitempty"`
+	Policy  string `json:"policy,omitempty"` // "none", "quarantine", "reject"
+	Pct     int    `json:"pct,omitempty"`
+	RUA     string `json:"rua,omitempty"`
+	RUF     string `json:"ruf,omitempty"`
+	SP      string `json:"sp,omitempty"` // subdomain policy
+}
+
+type DKIMRecord struct {
+	Selector string `json:"selector"`
+	Found    bool   `json:"found"`
+	Raw      string `json:"raw,omitempty"`
+}
+
+// --- Subdomain Enumeration (separate endpoint) ---
+
+type SubdomainRequest struct {
+	Domains   []string `json:"domains" binding:"required,min=1"`
+	CheckLive bool     `json:"check_live,omitempty"`
+}
+
+type SubdomainResponse struct {
+	Domain     string           `json:"domain"`
+	CacheHit   bool             `json:"cache_hit"`
+	Count      int              `json:"count"`
+	Capped     bool             `json:"capped"`
+	Subdomains []SubdomainEntry `json:"subdomains"`
+	Errors     []LookupError    `json:"errors,omitempty"`
+}
+
+type SubdomainEntry struct {
+	Domain     string `json:"domain"`
+	Source     string `json:"source"`
+	Registered *bool  `json:"registered,omitempty"`
+	Live       *bool  `json:"live,omitempty"`
+}
+
+type SubdomainOptions struct {
+	CheckLive   bool
+	Timeout     time.Duration
+	MaxResults  int
+	Concurrency int
 }

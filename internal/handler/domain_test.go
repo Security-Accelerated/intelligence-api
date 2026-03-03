@@ -38,7 +38,7 @@ func newTestRouter(svc DomainLookupService) *gin.Engine {
 func newTestRouterWithTier(svc DomainLookupService, tier string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, "test", nil, nil, nil)
+	h := New(svc, nil, nil, "test", nil, nil, nil)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_roles", []string{"admin"})
@@ -407,15 +407,17 @@ func TestDomainLookup_Screenshot_BasicForbidden(t *testing.T) {
 
 func TestDomainLookup_OptsPassedToService(t *testing.T) {
 	tests := []struct {
-		name           string
-		body           string
-		wantScreenshot bool
-		wantReputation bool
+		name              string
+		body              string
+		wantScreenshot    bool
+		wantReputation    bool
+		wantEmailSecurity bool
 	}{
-		{"no opts", `{"domains":["example.com"]}`, false, false},
-		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false},
-		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true},
-		{"both", `{"domains":["example.com"],"screenshot":true,"reputation":true}`, true, true},
+		{"no opts", `{"domains":["example.com"]}`, false, false, false},
+		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false},
+		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false},
+		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true},
+		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true}`, true, true, true},
 	}
 
 	for _, tt := range tests {
@@ -436,12 +438,15 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 			if svc.lastOpts.Reputation != tt.wantReputation {
 				t.Errorf("opts.Reputation = %v, want %v", svc.lastOpts.Reputation, tt.wantReputation)
 			}
+			if svc.lastOpts.EmailSecurity != tt.wantEmailSecurity {
+				t.Errorf("opts.EmailSecurity = %v, want %v", svc.lastOpts.EmailSecurity, tt.wantEmailSecurity)
+			}
 		})
 	}
 }
 
 // domainLoggerKeys derived from middleware.ContextKeys.
-var domainLoggerKeys = filterKeys("screenshot", "reputation", "cache_hit")
+var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "cache_hit")
 
 func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 	tests := []struct {
@@ -452,12 +457,12 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 		{
 			"no optional features",
 			`{"domains":["example.com"]}`,
-			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "cache_hit": false},
+			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "cache_hit": false},
 		},
 		{
 			"all optional features",
-			`{"domains":["example.com"],"screenshot":true,"reputation":true}`,
-			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "cache_hit": false},
+			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true}`,
+			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "cache_hit": false},
 		},
 	}
 
@@ -466,7 +471,7 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 			svc := &mockService{}
 			gin.SetMode(gin.TestMode)
 			r := gin.New()
-			h := New(svc, nil, "test", nil, nil, nil)
+			h := New(svc, nil, nil, "test", nil, nil, nil)
 
 			captured := make(map[string]any)
 			auth := func(c *gin.Context) {
@@ -521,7 +526,7 @@ func testCfg(overrides map[string]any) *viper.Viper {
 func newTestRouterWithCfg(svc DomainLookupService, tier string, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, "test", cfg, nil, nil)
+	h := New(svc, nil, nil, "test", cfg, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_roles", []string{"admin"})
 		c.Set("api_key_tier", tier)
@@ -598,6 +603,20 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 		}
 	})
+}
+
+func TestDomainLookup_EmailSecurity_AllTiersAllowed(t *testing.T) {
+	// email_security should NOT be gated behind premium
+	r := newTestRouterWithTier(&mockService{}, "basic")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"email_security":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
 }
 
 func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {

@@ -32,6 +32,14 @@ typosquatting:
     basic: 3
     premium: 5
 
+subdomain:
+  timeout: 30s
+  max_results: 500
+  concurrency: 20
+  max_domains:
+    basic: 3
+    premium: 5
+
 rate_limit:
   basic: 30
   premium: 120

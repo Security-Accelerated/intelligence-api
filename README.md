@@ -1,7 +1,7 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, and reputation lookups for one or more domains, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, and email security lookups for one or more domains, with subdomain enumeration via Certificate Transparency logs, and Redis caching.
 
 ## Authentication
 
@@ -13,8 +13,8 @@ Each customer has a `tier` that controls access to premium features:
 
 | Tier | Features |
 |------|----------|
-| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) |
-| `premium` | All basic features + page screenshots + reputation checks + typosquatting detection |
+| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) |
+| `premium` | All basic features + page screenshots + reputation checks + typosquatting detection + subdomain enumeration |
 
 The tier is stored in the `customers` table. New customers default to `basic`.
 
@@ -22,8 +22,8 @@ The tier is stored in the `customers` table. New customers default to `basic`.
 
 | Role | Access |
 |------|--------|
-| `admin` | All endpoints (`/hello`, `/info`, `/domain`, `/domain/typosquatting`) |
-| `domain` | `POST /api/v1/domain` and `POST /api/v1/domain/typosquatting` |
+| `admin` | All endpoints (`/hello`, `/info`, `/domain`, `/domain/typosquatting`, `/domain/subdomains`) |
+| `domain` | `POST /api/v1/domain`, `POST /api/v1/domain/typosquatting`, and `POST /api/v1/domain/subdomains` |
 
 A customer with both `admin` and `domain` roles has access to all endpoints. Requests without a valid key receive `401 Unauthorized`. Requests with a key whose customer lacks the required role receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
 
@@ -50,6 +50,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/api/v1/info` | `admin` | Application and environment info |
 | POST | `/api/v1/domain` | `admin`, `domain` | Domain intelligence lookup |
 | POST | `/api/v1/domain/typosquatting` | `admin`, `domain` | Typosquatting detection (premium) |
+| POST | `/api/v1/domain/subdomains` | `admin`, `domain` | Subdomain enumeration via CT logs (premium) |
 | POST | `/api/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 
 ### POST /api/v1/domain
@@ -59,7 +60,8 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 {
   "domains": ["example.com", "example.org"],
   "screenshot": true,
-  "reputation": true
+  "reputation": true,
+  "email_security": true
 }
 ```
 
@@ -68,6 +70,8 @@ The `domains` field accepts an array of domain names. Each entry accepts raw dom
 The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
 
 The optional `reputation` field (default `false`) checks each domain against multiple DNS-based blocklists concurrently (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) and returns a computed risk score. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
+
+The optional `email_security` field (default `false`) checks SPF, DMARC, and DKIM records for each domain via DNS lookups. Available to **all tiers** (basic and premium). DKIM probes 8 common selectors (`google`, `default`, `selector1`, `selector2`, `k1`, `s1`, `mail`, `dkim`).
 
 **Example:**
 ```sh
@@ -96,6 +100,24 @@ curl -X POST http://localhost:8080/api/v1/domain \
         { "listed": false, "provider": "surbl" },
         { "listed": false, "provider": "uribl" },
         { "listed": false, "provider": "spamhaus_zen" }
+      ]
+    },
+    "email_security": {
+      "spf": {
+        "raw": "v=spf1 include:_spf.google.com -all",
+        "version": "spf1",
+        "mechanisms": ["include:_spf.google.com"],
+        "all": "-all"
+      },
+      "dmarc": {
+        "raw": "v=DMARC1; p=reject; rua=mailto:dmarc@example.com",
+        "version": "DMARC1",
+        "policy": "reject",
+        "rua": "mailto:dmarc@example.com"
+      },
+      "dkim": [
+        { "selector": "google", "found": true, "raw": "v=DKIM1; k=rsa; p=MIGf..." },
+        { "selector": "default", "found": false }
       ]
     },
     "errors": []
@@ -169,6 +191,58 @@ curl -X POST http://localhost:8080/api/v1/domain/typosquatting \
 ```
 
 When `check_live` is `false`, `registered` and `live` fields are omitted. When `check_live` is `true` but a domain is not registered, `live` is omitted. A hard cap on permutations (default 500, configurable via `typosquatting.max_permutations`) prevents unbounded results — `capped: true` indicates truncation.
+
+### POST /api/v1/domain/subdomains
+
+Enumerates subdomains for one or more domains using Certificate Transparency (CT) logs via crt.sh. Requires a **premium** tier customer.
+
+**Request:**
+```json
+{
+  "domains": ["example.com"],
+  "check_live": true
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `domains` | *(required)* | Array of domain names to enumerate subdomains for |
+| `check_live` | `false` | When `true`, also checks DNS registration and HTTP liveness for each subdomain |
+
+**Example:**
+```sh
+curl -X POST http://localhost:8080/api/v1/domain/subdomains \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: test-admin-key' \
+  -d '{"domains":["example.com"],"check_live":true}'
+```
+
+**Response:**
+```json
+[
+  {
+    "domain": "example.com",
+    "cache_hit": false,
+    "count": 5,
+    "capped": false,
+    "subdomains": [
+      {
+        "domain": "api.example.com",
+        "source": "crt.sh",
+        "registered": true,
+        "live": true
+      },
+      {
+        "domain": "dev.example.com",
+        "source": "crt.sh",
+        "registered": false
+      }
+    ]
+  }
+]
+```
+
+When `check_live` is `false`, `registered` and `live` fields are omitted. Results are deduplicated, wildcards are filtered, and a hard cap (default 500, configurable via `subdomain.max_results`) prevents unbounded results — `capped: true` indicates truncation.
 
 ## Response Fields
 
@@ -285,6 +359,39 @@ Each provider entry contains:
 
 **Scoring:** Each provider listing adds points based on category severity. Multiple listings across providers stack. The score is capped at 100. Higher-trust, domain-specific providers (Spamhaus DBL) carry more weight than IP-based providers (Spamhaus ZEN).
 
+### `email_security` — Email Security (All Tiers)
+
+Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"email_security": true` is included in the request.
+
+**`spf`** — Sender Policy Framework record:
+
+| Field | What it means |
+|-------|---------------|
+| `raw` | The full SPF TXT record |
+| `version` | SPF version (typically `spf1`) |
+| `mechanisms` | Parsed mechanisms like `include:`, `ip4:`, `ip6:`, `a`, `mx` |
+| `all` | Terminal qualifier: `-all` (hard fail), `~all` (soft fail), `?all` (neutral), `+all` (pass all — dangerous) |
+
+**`dmarc`** — Domain-based Message Authentication, Reporting and Conformance:
+
+| Field | What it means |
+|-------|---------------|
+| `raw` | The full DMARC TXT record at `_dmarc.<domain>` |
+| `version` | DMARC version (typically `DMARC1`) |
+| `policy` | What to do with failing mail: `none` (monitor), `quarantine` (spam folder), `reject` (drop) |
+| `pct` | Percentage of messages the policy applies to (0–100) |
+| `rua` | Aggregate report destination (e.g. `mailto:dmarc@example.com`) |
+| `ruf` | Forensic report destination |
+| `sp` | Subdomain policy override |
+
+**`dkim`** — DomainKeys Identified Mail (probes 8 common selectors):
+
+| Field | What it means |
+|-------|---------------|
+| `selector` | The DKIM selector name that was probed |
+| `found` | Whether a DKIM record exists at `<selector>._domainkey.<domain>` |
+| `raw` | The full DKIM TXT record (only when found) |
+
 ### Typosquatting Detection (`/api/v1/domain/typosquatting`)
 
 | Field | What it means |
@@ -306,17 +413,40 @@ Each permutation contains:
 | `registered` | Whether the domain has DNS A records (only present when `check_live: true`) |
 | `live` | Whether the domain responds to HTTP requests (only present when registered) |
 
+### Subdomain Enumeration (`/api/v1/domain/subdomains`)
+
+| Field | What it means |
+|-------|---------------|
+| `domain` | The domain that was queried |
+| `cache_hit` | Whether the result was served from cache |
+| `count` | Total number of subdomains returned |
+| `capped` | Whether the results cap was hit (results truncated) |
+| `subdomains` | Array of discovered subdomains |
+| `errors` | Any errors that occurred during enumeration |
+
+Each subdomain entry contains:
+
+| Field | What it means |
+|-------|---------------|
+| `domain` | The discovered subdomain |
+| `source` | Data source (`crt.sh` — Certificate Transparency logs) |
+| `registered` | Whether the subdomain has DNS A records (only present when `check_live: true`) |
+| `live` | Whether the subdomain responds to HTTP requests (only present when registered) |
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
 
 Optional features use composite cache keys built from sorted feature suffixes. Each key is fully self-contained — all lookups for that feature combination are cached together:
 - `domain` — base lookups (WHOIS, DNS, SSL, headers)
+- `domain:email_security` — base + email security
 - `domain:reputation` — base + reputation
 - `domain:screenshot` — base + screenshot
-- `domain:reputation+screenshot` — base + reputation + screenshot
+- `domain:email_security+reputation+screenshot` — base + all optional features
 
 Typosquatting results are cached under their own keys based on depth and check_live flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+check_live:example.com:deep`).
+
+Subdomain results are cached similarly (e.g., `subdomain:example.com`, `subdomain+check_live:example.com`).
 
 ## Getting Started
 
@@ -355,6 +485,9 @@ Config values:
 | `typosquatting.timeout` | `30s` | Timeout for typosquatting detection (generation + active checks) |
 | `typosquatting.max_permutations` | `500` | Maximum number of permutations returned per domain |
 | `typosquatting.concurrency` | `20` | Max concurrent DNS/HTTP checks during active scanning |
+| `subdomain.timeout` | `30s` | Timeout for subdomain enumeration (CT log query + active checks) |
+| `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
+| `subdomain.concurrency` | `20` | Max concurrent DNS/HTTP checks during active scanning |
 | `rate_limit.basic` | `30` | Requests per minute for basic tier customers |
 | `rate_limit.premium` | `120` | Requests per minute for premium tier customers |
 | `postgres.host` | `localhost` | PostgreSQL host |
