@@ -254,6 +254,62 @@ func TestRequestLogger_IntContextKeysAbsent(t *testing.T) {
 	}
 }
 
+func TestRequestLogger_StringContextKeysPresent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.Set("client_request_id", "req-abc-123")
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	entry := logs.All()[0]
+	fieldMap := make(map[string]zap.Field, len(entry.Context))
+	for _, f := range entry.Context {
+		fieldMap[f.Key] = f
+	}
+
+	if f, ok := fieldMap["client_request_id"]; !ok {
+		t.Error("client_request_id not found in log entry")
+	} else if f.String != "req-abc-123" {
+		t.Errorf("client_request_id = %q, want %q", f.String, "req-abc-123")
+	}
+}
+
+func TestRequestLogger_StringContextKeysAbsent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	entry := logs.All()[0]
+	for _, f := range entry.Context {
+		for _, key := range StringContextKeys {
+			if f.Key == key {
+				t.Errorf("%s should not appear when not set", key)
+			}
+		}
+	}
+}
+
 func TestRequestLogger_ContextKeysAbsent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger, logs := newObserverLogger()

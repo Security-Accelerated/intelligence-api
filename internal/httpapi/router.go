@@ -22,6 +22,7 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 	router.Use(gin.Recovery())
 	router.Use(middleware.SecurityHeaders())
 	router.Use(middleware.BodyLimit(1 << 20)) // 1 MB
+	router.Use(middleware.ClientRequestID())
 	router.Use(middleware.RequestLogger())
 
 	authMW := middleware.APIKeyAuth(cachedRepo)

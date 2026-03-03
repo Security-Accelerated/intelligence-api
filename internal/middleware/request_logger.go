@@ -28,6 +28,11 @@ var IntContextKeys = []string{
 	"rate_limit_remaining",
 }
 
+// StringContextKeys lists string gin context keys logged per request.
+var StringContextKeys = []string{
+	ClientRequestIDKey,
+}
+
 // RequestLogger returns middleware that logs each request using the global logger.
 func RequestLogger() gin.HandlerFunc {
 	return RequestLoggerWithLogger(logging.Logger())
@@ -84,6 +89,14 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 			if val, exists := c.Get(key); exists {
 				if v, ok := val.(int); ok {
 					fields = append(fields, zap.Int(key, v))
+				}
+			}
+		}
+
+		for _, key := range StringContextKeys {
+			if val, exists := c.Get(key); exists {
+				if v, ok := val.(string); ok {
+					fields = append(fields, zap.String(key, v))
 				}
 			}
 		}
