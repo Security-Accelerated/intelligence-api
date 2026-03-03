@@ -42,6 +42,7 @@ func TestRequestLogger_BasicFields(t *testing.T) {
 	entry := entries[0]
 
 	wantFields := map[string]bool{
+		"request_id": true,
 		"method":     true,
 		"path":       true,
 		"status":     true,
@@ -66,6 +67,88 @@ func TestRequestLogger_BasicFields(t *testing.T) {
 	}
 	if fieldMap["user_agent"].String != "test-agent" {
 		t.Errorf("user_agent = %q, want %q", fieldMap["user_agent"].String, "test-agent")
+	}
+
+	// request_id should be a non-empty UUID in both the log and response header
+	logID := fieldMap["request_id"].String
+	if logID == "" {
+		t.Fatal("request_id log field is empty")
+	}
+	headerID := w.Header().Get("X-Request-ID")
+	if headerID == "" {
+		t.Fatal("X-Request-ID response header is empty")
+	}
+	if logID != headerID {
+		t.Errorf("request_id mismatch: log=%q, header=%q", logID, headerID)
+	}
+}
+
+func TestRequestLogger_AuthFieldsPresent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.Set("api_key_id", 42)
+		c.Set("api_key_tier", "premium")
+		c.Set("api_key_roles", []string{"admin", "domain"})
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	entry := logs.All()[0]
+	fieldMap := make(map[string]zap.Field, len(entry.Context))
+	for _, f := range entry.Context {
+		fieldMap[f.Key] = f
+	}
+
+	if f, ok := fieldMap["api_key_id"]; !ok {
+		t.Error("api_key_id not found in log entry")
+	} else if f.Integer != 42 {
+		t.Errorf("api_key_id = %d, want 42", f.Integer)
+	}
+
+	if f, ok := fieldMap["api_key_tier"]; !ok {
+		t.Error("api_key_tier not found in log entry")
+	} else if f.String != "premium" {
+		t.Errorf("api_key_tier = %q, want %q", f.String, "premium")
+	}
+
+	if _, ok := fieldMap["api_key_roles"]; !ok {
+		t.Error("api_key_roles not found in log entry")
+	}
+}
+
+func TestRequestLogger_AuthFieldsAbsent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	absent := []string{"api_key_id", "api_key_tier", "api_key_roles"}
+	entry := logs.All()[0]
+	for _, f := range entry.Context {
+		for _, key := range absent {
+			if f.Key == key {
+				t.Errorf("%s should not appear when not set", key)
+			}
+		}
 	}
 }
 

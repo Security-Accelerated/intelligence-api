@@ -28,8 +28,8 @@ type stubRepo struct {
 
 func newStubRepo() *stubRepo {
 	return &stubRepo{keys: map[string]*auth.Customer{
-		"test-admin-key":  {ID: 1, Name: "Test Admin", Active: true, Tier: "premium", Roles: []string{"admin", "domain"}},
-		"test-domain-key": {ID: 2, Name: "Test Domain User", Active: true, Tier: "basic", Roles: []string{"domain"}},
+		"test-admin-key":  {ID: 1, APIKeyID: 100, Name: "Test Admin", Active: true, Tier: "premium", Roles: []string{"admin", "domain"}},
+		"test-domain-key": {ID: 2, APIKeyID: 200, Name: "Test Domain User", Active: true, Tier: "basic", Roles: []string{"domain"}},
 	}}
 }
 
