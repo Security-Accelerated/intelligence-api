@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 func LookupHeaders(ctx context.Context, domain string) (*HeadersInfo, error) {
@@ -13,6 +15,7 @@ func LookupHeaders(ctx context.Context, domain string) (*HeadersInfo, error) {
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			DialContext:     safenet.SafeDialer(10 * time.Second).DialContext,
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse

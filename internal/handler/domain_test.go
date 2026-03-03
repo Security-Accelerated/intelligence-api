@@ -204,6 +204,50 @@ func TestDomainLookup_SingleInvalidDomain(t *testing.T) {
 	assertErrorBody(t, w)
 }
 
+func TestDomainLookup_RawIPRejectedWithMessage(t *testing.T) {
+	r := newTestRouter(&mockService{})
+
+	t.Run("single IP returns 400 with specific message", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["169.254.169.254"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		}
+		var body map[string]string
+		json.Unmarshal(w.Body.Bytes(), &body)
+		want := "raw IP addresses are not accepted; provide a domain name"
+		if body["error"] != want {
+			t.Errorf("error = %q, want %q", body["error"], want)
+		}
+	})
+
+	t.Run("IP in multi-domain returns validation error with specific message", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(`{"domains":["example.com","10.0.0.1"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+		var resp []*domain.DomainResponse
+		json.Unmarshal(w.Body.Bytes(), &resp)
+		if len(resp) != 2 {
+			t.Fatalf("len(resp) = %d, want 2", len(resp))
+		}
+		if len(resp[1].Errors) != 1 {
+			t.Fatalf("len(resp[1].Errors) = %d, want 1", len(resp[1].Errors))
+		}
+		want := "raw IP addresses are not accepted; provide a domain name"
+		if resp[1].Errors[0].Message != want {
+			t.Errorf("error message = %q, want %q", resp[1].Errors[0].Message, want)
+		}
+	})
+}
+
 func TestDomainLookup_StripsProtocolAndSlash(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -286,6 +330,9 @@ func TestNormalizeDomain(t *testing.T) {
 		{"empty", "", "", false},
 		{"no dot", "localhost", "localhost", false},
 		{"protocol only", "https://", "", false},
+		{"ipv4 address", "192.168.1.1", "192.168.1.1", false},
+		{"cloud metadata ip", "169.254.169.254", "169.254.169.254", false},
+		{"public ip", "8.8.8.8", "8.8.8.8", false},
 	}
 
 	for _, tt := range tests {

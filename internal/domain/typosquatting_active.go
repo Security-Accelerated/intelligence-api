@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 // CheckActive performs DNS and HTTP liveness checks on each permutation using
@@ -48,11 +50,22 @@ func checkOne(ctx context.Context, p *Permutation) {
 	p.Live = &live
 }
 
-// isDNSRegistered checks whether the domain has any A records.
+// isDNSRegistered checks whether the domain has any public A records.
+// Domains that only resolve to private/reserved addresses are treated as
+// unregistered to prevent SSRF via typosquatting active checks.
 func isDNSRegistered(ctx context.Context, domain string) bool {
 	resolver := &net.Resolver{}
 	addrs, err := resolver.LookupHost(ctx, domain)
-	return err == nil && len(addrs) > 0
+	if err != nil || len(addrs) == 0 {
+		return false
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip != nil && !safenet.IsPrivateIP(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // isHTTPLive does a quick HEAD request (HTTPS first, then HTTP) and returns
@@ -62,6 +75,7 @@ func isHTTPLive(ctx context.Context, domain string) bool {
 		Timeout: 2 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			DialContext:     safenet.SafeDialer(2 * time.Second).DialContext,
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse

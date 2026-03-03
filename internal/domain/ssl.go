@@ -5,8 +5,9 @@ import (
 	"crypto/tls"
 	"fmt"
 	"math"
-	"net"
 	"time"
+
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 func LookupSSL(ctx context.Context, domain string) (*SSLInfo, error) {
@@ -14,9 +15,7 @@ func LookupSSL(ctx context.Context, domain string) (*SSLInfo, error) {
 		Config: &tls.Config{
 			InsecureSkipVerify: true,
 		},
-		NetDialer: &net.Dialer{
-			Timeout: 10 * time.Second,
-		},
+		NetDialer: safenet.SafeDialer(10 * time.Second),
 	}
 
 	conn, err := dialer.DialContext(ctx, "tcp", domain+":443")

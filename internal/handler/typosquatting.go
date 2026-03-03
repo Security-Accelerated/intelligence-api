@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"net"
 	"net/http"
 	"sync"
 
@@ -49,10 +50,14 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 	for i, raw := range req.Domains {
 		d, ok := normalizeDomain(raw)
 		if !ok {
+			msg := "invalid domain name"
+			if net.ParseIP(d) != nil {
+				msg = "raw IP addresses are not accepted; provide a domain name"
+			}
 			results[i] = &domain.TyposquattingResponse{
 				Domain: raw,
 				Depth:  depth,
-				Errors: []domain.LookupError{{Lookup: "validation", Message: "invalid domain name"}},
+				Errors: []domain.LookupError{{Lookup: "validation", Message: msg}},
 			}
 			continue
 		}
@@ -63,7 +68,7 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 	}
 
 	if len(valid) == 0 && len(req.Domains) == 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid domain name"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": results[0].Errors[0].Message})
 		return
 	}
 

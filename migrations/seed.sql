@@ -5,10 +5,10 @@ INSERT INTO customers (id, name) VALUES
     (2, 'Test Domain User')
 ON CONFLICT (name) DO NOTHING;
 
-INSERT INTO api_keys (customer_id, key) VALUES
-    (1, 'test-admin-key'),
-    (2, 'test-domain-key')
-ON CONFLICT (key) DO NOTHING;
+INSERT INTO api_keys (customer_id, key_hash) VALUES
+    (1, encode(digest('test-admin-key', 'sha256'), 'hex')),
+    (2, encode(digest('test-domain-key', 'sha256'), 'hex'))
+ON CONFLICT (customer_id) DO NOTHING;
 
 INSERT INTO customer_roles (customer_id, role) VALUES
     (1, 'admin'),

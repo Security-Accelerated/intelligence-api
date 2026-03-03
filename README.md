@@ -353,13 +353,15 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 
 - `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables
 - `002_add_customer_tier.sql` — adds the `tier` column to `customers` (defaults to `basic`)
-- `seed.sql` — inserts test customers with keys and roles, sets Test Admin to `premium` tier
+- `003_hash_api_keys.sql` — replaces the plaintext `key` column with `key_hash` (SHA-256, hex-encoded)
+- `seed.sql` — inserts test customers with hashed keys and roles, sets Test Admin to `premium` tier
 
-To manage customers and API keys manually:
+API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
 
 ```sql
 INSERT INTO customers (name) VALUES ('Acme Corp');
-INSERT INTO api_keys (customer_id, key) VALUES (1, 'my-secret-key');
+INSERT INTO api_keys (customer_id, key_hash)
+    VALUES (1, encode(digest('my-secret-key', 'sha256'), 'hex'));
 INSERT INTO customer_roles (customer_id, role) VALUES (1, 'admin'), (1, 'domain');
 ```
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -11,8 +12,18 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 	"go.uber.org/zap"
 )
+
+// sanitizeErr replaces internal safenet errors with a user-friendly message.
+func sanitizeErr(err error) string {
+	var blocked *safenet.BlockedError
+	if errors.As(err, &blocked) {
+		return "domain resolves to a private/reserved IP address"
+	}
+	return err.Error()
+}
 
 type DomainService struct {
 	cache             cache.Cache
@@ -106,7 +117,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		if err != nil {
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "whois",
-				Message: err.Error(),
+				Message: sanitizeErr(err),
 			})
 			return
 		}
@@ -121,7 +132,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		if err != nil {
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "dns",
-				Message: err.Error(),
+				Message: sanitizeErr(err),
 			})
 			return
 		}
@@ -136,7 +147,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		if err != nil {
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "ssl",
-				Message: err.Error(),
+				Message: sanitizeErr(err),
 			})
 			return
 		}
@@ -151,7 +162,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		if err != nil {
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "headers",
-				Message: err.Error(),
+				Message: sanitizeErr(err),
 			})
 			return
 		}
@@ -168,7 +179,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			if err != nil {
 				resp.Errors = append(resp.Errors, domain.LookupError{
 					Lookup:  "screenshot",
-					Message: err.Error(),
+					Message: sanitizeErr(err),
 				})
 				return
 			}

@@ -18,13 +18,14 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 }
 
 func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Customer, error) {
+	keyHash := HashKey(key)
 	var c Customer
 	err := r.db.QueryRowContext(ctx,
 		`SELECT ak.id, c.id, c.name, c.active, c.tier, c.created_at
 		   FROM api_keys ak
 		   JOIN customers c ON c.id = ak.customer_id
-		  WHERE ak.key = $1 AND c.active = true`,
-		key,
+		  WHERE ak.key_hash = $1 AND c.active = true`,
+		keyHash,
 	).Scan(&c.APIKeyID, &c.ID, &c.Name, &c.Active, &c.Tier, &c.CreatedAt)
 	if err != nil {
 		return nil, err

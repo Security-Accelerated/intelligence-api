@@ -30,8 +30,10 @@ func NewCachedRepository(inner Repository, ttl time.Duration) *CachedRepository 
 }
 
 func (r *CachedRepository) GetByKey(ctx context.Context, key string) (*Customer, error) {
+	cacheKey := HashKey(key)
+
 	r.mu.RLock()
-	if e, ok := r.entries[key]; ok && time.Now().Before(e.expiresAt) {
+	if e, ok := r.entries[cacheKey]; ok && time.Now().Before(e.expiresAt) {
 		r.mu.RUnlock()
 		return e.customer, nil
 	}
@@ -43,7 +45,7 @@ func (r *CachedRepository) GetByKey(ctx context.Context, key string) (*Customer,
 	}
 
 	r.mu.Lock()
-	r.entries[key] = &cacheEntry{customer: customer, expiresAt: time.Now().Add(r.ttl)}
+	r.entries[cacheKey] = &cacheEntry{customer: customer, expiresAt: time.Now().Add(r.ttl)}
 	r.mu.Unlock()
 
 	return customer, nil
