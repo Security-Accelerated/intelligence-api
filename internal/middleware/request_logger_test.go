@@ -191,6 +191,69 @@ func TestRequestLogger_ContextKeysPresent(t *testing.T) {
 	}
 }
 
+func TestRequestLogger_IntContextKeysPresent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.Set("rate_limit", 120)
+		c.Set("rate_limit_remaining", 95)
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	entry := logs.All()[0]
+	fieldMap := make(map[string]zap.Field, len(entry.Context))
+	for _, f := range entry.Context {
+		fieldMap[f.Key] = f
+	}
+
+	if f, ok := fieldMap["rate_limit"]; !ok {
+		t.Error("rate_limit not found in log entry")
+	} else if f.Integer != 120 {
+		t.Errorf("rate_limit = %d, want 120", f.Integer)
+	}
+
+	if f, ok := fieldMap["rate_limit_remaining"]; !ok {
+		t.Error("rate_limit_remaining not found in log entry")
+	} else if f.Integer != 95 {
+		t.Errorf("rate_limit_remaining = %d, want 95", f.Integer)
+	}
+}
+
+func TestRequestLogger_IntContextKeysAbsent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	entry := logs.All()[0]
+	for _, f := range entry.Context {
+		for _, key := range IntContextKeys {
+			if f.Key == key {
+				t.Errorf("%s should not appear when not set", key)
+			}
+		}
+	}
+}
+
 func TestRequestLogger_ContextKeysAbsent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger, logs := newObserverLogger()

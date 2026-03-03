@@ -67,6 +67,9 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 		}
 		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
 
+		c.Set("rate_limit", limit)
+		c.Set("rate_limit_remaining", remaining)
+
 		if int(count) > limit {
 			retryAfter := 60 - (time.Now().Unix() % 60)
 			c.Header("Retry-After", strconv.FormatInt(retryAfter, 10))
