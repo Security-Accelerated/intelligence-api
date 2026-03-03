@@ -2,24 +2,15 @@ package domain
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 func LookupHeaders(ctx context.Context, domain string) (*HeadersInfo, error) {
-	// InsecureSkipVerify is intentional: as a domain intelligence tool we must
-	// inspect targets that have expired, self-signed, or otherwise invalid
-	// certificates. The SSL lookup reports certificate validity separately.
 	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			DialContext:     safenet.SafeDialer(10 * time.Second).DialContext,
-		},
+		Timeout:   10 * time.Second,
+		Transport: safeTransport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

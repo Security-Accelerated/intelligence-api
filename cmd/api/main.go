@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/security-accelerated/intelligence-api/internal/app"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
 )
@@ -15,6 +13,5 @@ func main() {
 
 	if err := app.Run(logger, version); err != nil {
 		logger.Fatal(err.Error())
-		os.Exit(1)
 	}
 }

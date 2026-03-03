@@ -31,6 +31,7 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestID := uuid.New().String()
 		c.Header("X-Request-ID", requestID)
+		c.Set("request_id", requestID)
 
 		start := time.Now()
 
@@ -44,24 +45,41 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 			zap.Duration("latency", time.Since(start)),
 			zap.String("client_ip", c.ClientIP()),
 			zap.String("user_agent", c.Request.UserAgent()),
+			zap.Int("response_bytes", c.Writer.Size()),
 		}
 
 		if apiKeyID, exists := c.Get("api_key_id"); exists {
-			fields = append(fields, zap.Int("api_key_id", apiKeyID.(int)))
+			if v, ok := apiKeyID.(int); ok {
+				fields = append(fields, zap.Int("api_key_id", v))
+			}
 		}
 		if tier, exists := c.Get("api_key_tier"); exists {
-			fields = append(fields, zap.String("api_key_tier", tier.(string)))
+			if v, ok := tier.(string); ok {
+				fields = append(fields, zap.String("api_key_tier", v))
+			}
 		}
 		if roles, exists := c.Get("api_key_roles"); exists {
-			fields = append(fields, zap.Strings("api_key_roles", roles.([]string)))
+			if v, ok := roles.([]string); ok {
+				fields = append(fields, zap.Strings("api_key_roles", v))
+			}
 		}
 
 		for _, key := range ContextKeys {
 			if val, exists := c.Get(key); exists {
-				fields = append(fields, zap.Bool(key, val.(bool)))
+				if v, ok := val.(bool); ok {
+					fields = append(fields, zap.Bool(key, v))
+				}
 			}
 		}
 
-		logger.Info("request", fields...)
+		status := c.Writer.Status()
+		switch {
+		case status >= 500:
+			logger.Error("request", fields...)
+		case status >= 400:
+			logger.Warn("request", fields...)
+		default:
+			logger.Info("request", fields...)
+		}
 	}
 }

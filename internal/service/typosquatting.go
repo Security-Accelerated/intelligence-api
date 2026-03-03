@@ -86,6 +86,7 @@ func (s *TyposquattingService) Lookup(ctx context.Context, domainName string, ch
 
 	resp, err := s.lookupTyposquatting(ctx, domainName, opts)
 	if err != nil {
+		logging.Logger().Warn("lookup failed", zap.String("lookup", "typosquatting"), zap.String("domain", domainName), zap.Error(err))
 		return &domain.TyposquattingResponse{
 			Domain: domainName,
 			Depth:  depth,

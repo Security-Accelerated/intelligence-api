@@ -7,7 +7,9 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
+	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"go.uber.org/zap"
 )
 
 // NewRouter builds the gin engine with all middleware and routes registered.
@@ -18,6 +20,8 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.BodyLimit(1 << 20)) // 1 MB
 	router.Use(middleware.RequestLogger())
 
 	authMW := middleware.APIKeyAuth(cachedRepo)
@@ -30,6 +34,14 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 	admin.Use(authMW, rateLimitMW, middleware.RequireRoles("admin"))
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
+		if v, ok := c.Get("api_key_id"); ok {
+			if id, ok := v.(int); ok {
+				logging.Logger().Info("auth cache invalidated",
+					zap.Int("api_key_id", id),
+					zap.String("client_ip", c.ClientIP()),
+				)
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
 	})
 

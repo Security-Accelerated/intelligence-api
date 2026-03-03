@@ -47,6 +47,12 @@ func Run(logger *zap.Logger, version string) error {
 		zap.Int("typosquatting_concurrency", cfg.GetInt("typosquatting.concurrency")),
 		zap.Int("rate_limit_basic", rlCfg.Basic),
 		zap.Int("rate_limit_premium", rlCfg.Premium),
+		zap.String("redis_addr", cfg.GetString("redis.addr")),
+		zap.Int("redis_db", cfg.GetInt("redis.db")),
+		zap.String("postgres_host", cfg.GetString("postgres.host")),
+		zap.Int("postgres_port", cfg.GetInt("postgres.port")),
+		zap.String("postgres_dbname", cfg.GetString("postgres.dbname")),
+		zap.String("postgres_sslmode", cfg.GetString("postgres.sslmode")),
 		zap.String("gin_mode", cfg.GetString("gin.mode")),
 	)
 
@@ -71,6 +77,12 @@ func Run(logger *zap.Logger, version string) error {
 		cfg.GetString("redis.password"),
 		cfg.GetInt("redis.db"),
 	)
+	defer redisCache.Close()
+
+	if err := redisCache.Ping(ctx); err != nil {
+		return fmt.Errorf("connect to redis: %w", err)
+	}
+	logger.Info("connected to redis")
 
 	// Services
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")

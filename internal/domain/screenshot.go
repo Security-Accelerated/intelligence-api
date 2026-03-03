@@ -2,14 +2,12 @@ package domain
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/chromedp/chromedp"
-	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 const maxPNGBytes = 5 << 20 // 5 MB
@@ -52,14 +50,9 @@ func probeURL(ctx context.Context, domain string) (string, int, error) {
 	// probeURL validates the resolved IP before Chrome navigates. Chrome does its
 	// own DNS resolution so there is a narrow theoretical DNS-rebinding window,
 	// but this is best-effort defence-in-depth for the screenshot path.
-	// InsecureSkipVerify is intentional: the screenshot probe must reach targets
-	// with invalid certificates. The SSL lookup reports certificate validity separately.
 	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			DialContext:     safenet.SafeDialer(10 * time.Second).DialContext,
-		},
+		Timeout:   10 * time.Second,
+		Transport: safeTransport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

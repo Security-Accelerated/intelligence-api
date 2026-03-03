@@ -16,13 +16,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// sanitizeErr replaces internal safenet errors with a user-friendly message.
+// sanitizeErr replaces internal error messages with user-friendly descriptions.
+// Full details are logged server-side; only safe summaries reach the API response.
 func sanitizeErr(err error) string {
 	var blocked *safenet.BlockedError
 	if errors.As(err, &blocked) {
 		return "domain resolves to a private/reserved IP address"
 	}
-	return err.Error()
+	msg := err.Error()
+	// Strip verbose internal details — expose only the final segment after ": ".
+	if i := strings.LastIndex(msg, ": "); i != -1 {
+		msg = msg[i+2:]
+	}
+	return msg
 }
 
 type DomainService struct {
@@ -109,12 +115,15 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 
 	wg.Add(4)
 
+	logger := logging.Logger()
+
 	go func() {
 		defer wg.Done()
 		result, err := s.lookupWhois(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
+			logger.Warn("lookup failed", zap.String("lookup", "whois"), zap.String("domain", domainName), zap.Error(err))
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "whois",
 				Message: sanitizeErr(err),
@@ -130,6 +139,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
+			logger.Warn("lookup failed", zap.String("lookup", "dns"), zap.String("domain", domainName), zap.Error(err))
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "dns",
 				Message: sanitizeErr(err),
@@ -145,6 +155,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
+			logger.Warn("lookup failed", zap.String("lookup", "ssl"), zap.String("domain", domainName), zap.Error(err))
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "ssl",
 				Message: sanitizeErr(err),
@@ -160,6 +171,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
+			logger.Warn("lookup failed", zap.String("lookup", "headers"), zap.String("domain", domainName), zap.Error(err))
 			resp.Errors = append(resp.Errors, domain.LookupError{
 				Lookup:  "headers",
 				Message: sanitizeErr(err),
@@ -177,6 +189,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "screenshot"), zap.String("domain", domainName), zap.Error(err))
 				resp.Errors = append(resp.Errors, domain.LookupError{
 					Lookup:  "screenshot",
 					Message: sanitizeErr(err),

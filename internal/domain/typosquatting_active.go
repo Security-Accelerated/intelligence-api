@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"crypto/tls"
 	"net"
 	"net/http"
 	"sync"
@@ -71,14 +70,9 @@ func isDNSRegistered(ctx context.Context, domain string) bool {
 // isHTTPLive does a quick HEAD request (HTTPS first, then HTTP) and returns
 // true if the server responds with any status code.
 func isHTTPLive(ctx context.Context, domain string) bool {
-	// InsecureSkipVerify is intentional: typosquatting liveness checks must
-	// reach targets regardless of certificate validity.
 	client := &http.Client{
-		Timeout: 2 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			DialContext:     safenet.SafeDialer(2 * time.Second).DialContext,
-		},
+		Timeout:   2 * time.Second,
+		Transport: safeFastTransport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
