@@ -84,13 +84,13 @@ func TestTyposquatting_SeparateCacheKeys(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestTyposquattingService(mc)
 
-	// Shallow, no active
+	// Shallow, no check_live
 	svc.Lookup(context.Background(), "example.com", false, "shallow")
-	// Deep, no active
+	// Deep, no check_live
 	svc.Lookup(context.Background(), "example.com", false, "deep")
-	// Shallow, active
+	// Shallow, check_live
 	svc.Lookup(context.Background(), "example.com", true, "shallow")
-	// Deep, active
+	// Deep, check_live
 	svc.Lookup(context.Background(), "example.com", true, "deep")
 
 	mc.mu.Lock()
@@ -99,8 +99,8 @@ func TestTyposquatting_SeparateCacheKeys(t *testing.T) {
 	expected := []string{
 		"typosquatting:example.com:shallow",
 		"typosquatting:example.com:deep",
-		"typosquatting+active:example.com:shallow",
-		"typosquatting+active:example.com:deep",
+		"typosquatting+check_live:example.com:shallow",
+		"typosquatting+check_live:example.com:deep",
 	}
 	for _, key := range expected {
 		if _, ok := mc.store[key]; !ok {

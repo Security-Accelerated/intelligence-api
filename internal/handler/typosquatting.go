@@ -71,7 +71,7 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 		wg.Add(1)
 		go func(idx int, name string) {
 			defer wg.Done()
-			result, cached := h.typosquattingService.Lookup(c.Request.Context(), name, req.Active, depth)
+			result, cached := h.typosquattingService.Lookup(c.Request.Context(), name, req.CheckLive, depth)
 			result.CacheHit = cached
 			ch <- indexedResult{index: idx, resp: result}
 		}(v.index, v.name)

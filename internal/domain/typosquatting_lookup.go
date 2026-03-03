@@ -24,7 +24,7 @@ func LookupTyposquatting(ctx context.Context, domainName string, opts Typosquatt
 
 	perms, capped := GeneratePermutations(domainName, depth, maxPerms)
 
-	if opts.Active && len(perms) > 0 {
+	if opts.CheckLive && len(perms) > 0 {
 		CheckActive(ctx, perms, opts.Concurrency)
 	}
 

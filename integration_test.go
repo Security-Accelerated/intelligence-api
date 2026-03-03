@@ -551,12 +551,12 @@ func TestIntegration_Typosquat_CacheRoundTrip(t *testing.T) {
 	}
 }
 
-func TestIntegration_Typosquat_ActiveParameter(t *testing.T) {
+func TestIntegration_Typosquat_CheckLiveParameter(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"],"active":true}`))
+		strings.NewReader(`{"domains":["example.com"],"check_live":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)

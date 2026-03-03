@@ -42,7 +42,7 @@ type ReputationResult struct {
 
 type TyposquattingRequest struct {
 	Domains []string `json:"domains" binding:"required,min=1"`
-	Active  bool     `json:"active,omitempty"`
+	CheckLive bool   `json:"check_live,omitempty"`
 	Depth   string   `json:"depth,omitempty"` // "shallow" (default) or "deep"
 }
 
@@ -64,7 +64,7 @@ type Permutation struct {
 }
 
 type TyposquattingOptions struct {
-	Active          bool
+	CheckLive       bool
 	Depth           string
 	Timeout         time.Duration
 	MaxPermutations int

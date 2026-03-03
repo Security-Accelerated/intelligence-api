@@ -13,7 +13,7 @@ type DomainLookupService interface {
 }
 
 type TyposquattingLookupService interface {
-	Lookup(ctx context.Context, domainName string, active bool, depth string) (*domain.TyposquattingResponse, bool)
+	Lookup(ctx context.Context, domainName string, checkLive bool, depth string) (*domain.TyposquattingResponse, bool)
 }
 
 type Handler struct {

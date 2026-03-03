@@ -105,7 +105,7 @@ Generates typosquatting permutations for one or more domains to detect potential
 {
   "domains": ["example.com"],
   "depth": "shallow",
-  "active": true
+  "check_live": true
 }
 ```
 
@@ -113,7 +113,7 @@ Generates typosquatting permutations for one or more domains to detect potential
 |-------|---------|-------------|
 | `domains` | *(required)* | Array of domain names to check |
 | `depth` | `"shallow"` | `"shallow"` (4 algorithms, ~30-80 results) or `"deep"` (10 algorithms, hundreds of results) |
-| `active` | `false` | When `true`, also checks DNS registration and HTTP liveness for each permutation |
+| `check_live` | `false` | When `true`, also checks DNS registration and HTTP liveness for each permutation |
 
 **Depth levels:**
 - **`shallow`** — character omission, character swap, homoglyphs, wrong TLD. Produces a manageable number of results for most domains.
@@ -124,7 +124,7 @@ Generates typosquatting permutations for one or more domains to detect potential
 curl -X POST http://localhost:8080/api/v1/domain/typosquatting \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: test-admin-key' \
-  -d '{"domains":["example.com"],"active":true}'
+  -d '{"domains":["example.com"],"check_live":true}'
 ```
 
 **Response:**
@@ -153,7 +153,7 @@ curl -X POST http://localhost:8080/api/v1/domain/typosquatting \
 ]
 ```
 
-When `active` is `false`, `registered` and `live` fields are omitted. When `active` is `true` but a domain is not registered, `live` is omitted. A hard cap on permutations (default 500, configurable via `typosquatting.max_permutations`) prevents unbounded results — `capped: true` indicates truncation.
+When `check_live` is `false`, `registered` and `live` fields are omitted. When `check_live` is `true` but a domain is not registered, `live` is omitted. A hard cap on permutations (default 500, configurable via `typosquatting.max_permutations`) prevents unbounded results — `capped: true` indicates truncation.
 
 ## Response Fields
 
@@ -288,7 +288,7 @@ Each permutation contains:
 |-------|---------------|
 | `domain` | The typosquatting candidate domain |
 | `technique` | Which algorithm generated it (`character_omission`, `character_swap`, `homoglyph`, `wrong_tld`, `adjacent_char`, `character_repeat`, `vowel_swap`, `missing_dot`, `addition`, `bitsquatting`) |
-| `registered` | Whether the domain has DNS A records (only present when `active: true`) |
+| `registered` | Whether the domain has DNS A records (only present when `check_live: true`) |
 | `live` | Whether the domain responds to HTTP requests (only present when registered) |
 
 ## Caching
@@ -301,7 +301,7 @@ Optional features use composite cache keys built from sorted feature suffixes. E
 - `domain:screenshot` — base + screenshot
 - `domain:reputation+screenshot` — base + reputation + screenshot
 
-Typosquatting results are cached under their own keys based on depth and active flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+active:example.com:deep`).
+Typosquatting results are cached under their own keys based on depth and check_live flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+check_live:example.com:deep`).
 
 ## Getting Started
 

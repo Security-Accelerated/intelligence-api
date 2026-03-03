@@ -46,11 +46,11 @@ func (s *TyposquattingService) SetLookup(
 }
 
 // cacheKey builds the Redis key for a typosquatting lookup.
-// Format: typosquatting:domain:depth or typosquatting+active:domain:depth
+// Format: typosquatting:domain:depth or typosquatting+check_live:domain:depth
 func cacheKey(domainName string, opts domain.TyposquattingOptions) string {
 	prefix := "typosquatting"
-	if opts.Active {
-		prefix = "typosquatting+active"
+	if opts.CheckLive {
+		prefix = "typosquatting+check_live"
 	}
 	depth := opts.Depth
 	if depth == "" {
@@ -59,9 +59,9 @@ func cacheKey(domainName string, opts domain.TyposquattingOptions) string {
 	return prefix + ":" + domainName + ":" + depth
 }
 
-func (s *TyposquattingService) Lookup(ctx context.Context, domainName string, active bool, depth string) (*domain.TyposquattingResponse, bool) {
+func (s *TyposquattingService) Lookup(ctx context.Context, domainName string, checkLive bool, depth string) (*domain.TyposquattingResponse, bool) {
 	opts := domain.TyposquattingOptions{
-		Active:          active,
+		CheckLive:       checkLive,
 		Depth:           depth,
 		Timeout:         s.timeout,
 		MaxPermutations: s.maxPermutations,

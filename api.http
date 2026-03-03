@@ -92,7 +92,7 @@ X-API-Key: {{adminKey}}
   "domains": ["example.com"]
 }
 
-### Typosquatting - deep with active checks (admin/premium key)
+### Typosquatting - deep with live checks (admin/premium key)
 POST {{host}}/api/v1/domain/typosquatting
 Content-Type: application/json
 X-API-Key: {{adminKey}}
@@ -100,7 +100,7 @@ X-API-Key: {{adminKey}}
 {
   "domains": ["example.com"],
   "depth": "deep",
-  "active": true
+  "check_live": true
 }
 
 ### Typosquatting - should return 403 (basic tier)

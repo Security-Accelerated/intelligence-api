@@ -124,7 +124,7 @@ func TestTyposquattingLookup_EmptyDomainsArray(t *testing.T) {
 
 func TestTyposquattingLookup_MissingDomainsField(t *testing.T) {
 	r := newTyposquattingRouter("premium")
-	w := postTyposquatting(r, `{"active":true}`)
+	w := postTyposquatting(r, `{"check_live":true}`)
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
