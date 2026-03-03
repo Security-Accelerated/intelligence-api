@@ -324,6 +324,76 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 	}
 }
 
+// loggerContextKeys lists the gin context keys that the request logger reads.
+// If a key is added to the logger but not set by the handler, this test catches
+// the drift. Keep in sync with middleware/request_logger.go.
+var domainLoggerKeys = []string{"screenshot_requested", "reputation_requested", "cache_hit"}
+
+func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want map[string]bool
+	}{
+		{
+			"no optional features",
+			`{"domains":["example.com"]}`,
+			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "cache_hit": false},
+		},
+		{
+			"all optional features",
+			`{"domains":["example.com"],"screenshot":true,"reputation":true}`,
+			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "cache_hit": false},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mockService{}
+			gin.SetMode(gin.TestMode)
+			r := gin.New()
+			h := New(svc, nil, "test")
+
+			captured := make(map[string]any)
+			auth := func(c *gin.Context) {
+				c.Set("api_key_roles", []string{"admin"})
+				c.Set("api_key_tier", "premium")
+				c.Next()
+				for _, key := range domainLoggerKeys {
+					if v, exists := c.Get(key); exists {
+						captured[key] = v
+					}
+				}
+			}
+
+			h.RegisterRoutes(r)
+			h.RegisterProtectedRoutes(r, auth)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+			}
+
+			for _, key := range domainLoggerKeys {
+				val, exists := captured[key]
+				if !exists {
+					t.Errorf("context key %q not set by handler (logger will silently skip it)", key)
+					continue
+				}
+				if want, ok := tt.want[key]; ok {
+					if val.(bool) != want {
+						t.Errorf("context key %q = %v, want %v", key, val, want)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
 	svc := &mockService{
 		resp: &domain.DomainResponse{Domain: "example.com"},

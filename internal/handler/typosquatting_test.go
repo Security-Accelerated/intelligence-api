@@ -318,6 +318,44 @@ func TestTyposquattingLookup_CacheHitPopulated(t *testing.T) {
 	}
 }
 
+var typosquattingLoggerKeys = []string{"typosquatting_requested", "cache_hit"}
+
+func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(nil, &mockTyposquattingService{}, "test")
+
+	captured := make(map[string]any)
+	auth := func(c *gin.Context) {
+		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_tier", "premium")
+		c.Next()
+		for _, key := range typosquattingLoggerKeys {
+			if v, exists := c.Get(key); exists {
+				captured[key] = v
+			}
+		}
+	}
+
+	h.RegisterProtectedRoutes(r, auth)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	for _, key := range typosquattingLoggerKeys {
+		if _, exists := captured[key]; !exists {
+			t.Errorf("context key %q not set by handler (logger will silently skip it)", key)
+		}
+	}
+}
+
 func TestTyposquattingLookup_CacheMissFlagFalse(t *testing.T) {
 	svc := &mockTyposquattingService{cached: false}
 	r := newTyposquattingRouterWithService(svc)
