@@ -6,6 +6,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/config"
 	"go.elastic.co/ecszap"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var appLogger *zap.Logger
@@ -41,7 +42,7 @@ func logger(env string) (*zap.Logger, error) {
 	case docker, production:
 		return productionLogger()
 	default:
-		return zap.NewDevelopment()
+		return zap.NewDevelopment(zap.AddStacktrace(zapcore.ErrorLevel))
 	}
 }
 

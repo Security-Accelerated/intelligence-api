@@ -73,12 +73,9 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 		}
 
 		status := c.Writer.Status()
-		switch {
-		case status >= 500:
+		if status >= 500 {
 			logger.Error("request", fields...)
-		case status >= 400:
-			logger.Warn("request", fields...)
-		default:
+		} else {
 			logger.Info("request", fields...)
 		}
 	}
