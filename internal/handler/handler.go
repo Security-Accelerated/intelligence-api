@@ -37,10 +37,10 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 }
 
 // RegisterProtectedRoutes registers routes that require API key authentication.
-// The authMiddleware validates the key; per-route role middleware controls access.
-func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, authMiddleware gin.HandlerFunc) {
+// Middleware are applied in order: typically auth first, then rate limiting.
+func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin.HandlerFunc) {
 	v1 := router.Group("/api/v1")
-	v1.Use(authMiddleware)
+	v1.Use(middlewares...)
 	v1.GET("/info", middleware.RequireRoles("admin"), h.Info)
 	v1.POST("/domain", middleware.RequireRoles("admin", "domain"), h.DomainLookup)
 	v1.POST("/domain/typosquatting", middleware.RequireRoles("admin", "domain"), h.TyposquattingLookup)

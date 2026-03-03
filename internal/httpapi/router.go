@@ -4,13 +4,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 )
 
 // NewRouter builds the gin engine with all middleware and routes registered.
-func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, mode string) *gin.Engine {
+func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClient *redis.Client, rlCfg middleware.RateLimitConfig, mode string) *gin.Engine {
 	if mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -19,11 +20,14 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, mode strin
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestLogger())
 
+	authMW := middleware.APIKeyAuth(cachedRepo)
+	rateLimitMW := middleware.RateLimit(redisClient, rlCfg)
+
 	h.RegisterRoutes(router)
-	h.RegisterProtectedRoutes(router, middleware.APIKeyAuth(cachedRepo))
+	h.RegisterProtectedRoutes(router, authMW, rateLimitMW)
 
 	admin := router.Group("/api/v1/admin")
-	admin.Use(middleware.APIKeyAuth(cachedRepo), middleware.RequireRoles("admin"))
+	admin.Use(authMW, rateLimitMW, middleware.RequireRoles("admin"))
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
 		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})

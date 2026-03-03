@@ -37,6 +37,12 @@ func (c *RedisCache) Set(ctx context.Context, key string, data []byte, ttl time.
 	return c.client.Set(ctx, cacheKey(key), data, ttl).Err()
 }
 
+// Client returns the underlying Redis client. This allows other components
+// (e.g. the rate limiter) to share the connection without creating a second one.
+func (c *RedisCache) Client() *redis.Client {
+	return c.client
+}
+
 func cacheKey(name string) string {
 	return fmt.Sprintf("intel:%s", name)
 }

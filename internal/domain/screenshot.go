@@ -52,6 +52,8 @@ func probeURL(ctx context.Context, domain string) (string, int, error) {
 	// probeURL validates the resolved IP before Chrome navigates. Chrome does its
 	// own DNS resolution so there is a narrow theoretical DNS-rebinding window,
 	// but this is best-effort defence-in-depth for the screenshot path.
+	// InsecureSkipVerify is intentional: the screenshot probe must reach targets
+	// with invalid certificates. The SSL lookup reports certificate validity separately.
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{

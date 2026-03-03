@@ -27,6 +27,21 @@ The tier is stored in the `customers` table. New customers default to `basic`.
 
 A customer with both `admin` and `domain` roles has access to all endpoints. Requests without a valid key receive `401 Unauthorized`. Requests with a key whose customer lacks the required role receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
 
+### Rate Limiting
+
+All authenticated endpoints are rate-limited per API key using a sliding-window counter backed by Redis. Limits are configurable per tier:
+
+| Tier | Default Limit |
+|------|---------------|
+| `basic` | 30 requests/minute |
+| `premium` | 120 requests/minute |
+
+Every response includes rate limit headers:
+- `X-RateLimit-Limit` — the maximum requests allowed per minute
+- `X-RateLimit-Remaining` — how many requests remain in the current window
+
+When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retry-After` header indicating seconds until the current window resets. If Redis is unavailable, rate limiting fails open (requests are allowed).
+
 ## API Endpoints
 
 | Method | Path | Auth | Description |
@@ -340,12 +355,14 @@ Config values:
 | `typosquatting.timeout` | `30s` | Timeout for typosquatting detection (generation + active checks) |
 | `typosquatting.max_permutations` | `500` | Maximum number of permutations returned per domain |
 | `typosquatting.concurrency` | `20` | Max concurrent DNS/HTTP checks during active scanning |
+| `rate_limit.basic` | `30` | Requests per minute for basic tier customers |
+| `rate_limit.premium` | `120` | Requests per minute for premium tier customers |
 | `postgres.host` | `localhost` | PostgreSQL host |
 | `postgres.port` | `5432` | PostgreSQL port |
 | `postgres.user` | `intelligence` | PostgreSQL user |
 | `postgres.password` | `intelligence` | PostgreSQL password |
 | `postgres.dbname` | `intelligence_api` | PostgreSQL database name |
-| `postgres.sslmode` | `disable` | PostgreSQL SSL mode |
+| `postgres.sslmode` | `require` | PostgreSQL SSL mode (`disable` for local dev) |
 
 ### Database Setup
 

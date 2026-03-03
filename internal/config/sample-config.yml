@@ -24,10 +24,14 @@ typosquatting:
   max_permutations: 500
   concurrency: 20
 
+rate_limit:
+  basic: 30
+  premium: 120
+
 postgres:
   host: localhost
   port: 5432
   user: intelligence
   password: intelligence
   dbname: intelligence_api
-  sslmode: disable
+  sslmode: require

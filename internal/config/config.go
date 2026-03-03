@@ -55,7 +55,9 @@ func init() {
 	config.SetDefault("typosquatting.timeout", "30s")
 	config.SetDefault("typosquatting.max_permutations", 500)
 	config.SetDefault("typosquatting.concurrency", 20)
-	config.SetDefault("postgres.sslmode", "disable")
+	config.SetDefault("rate_limit.basic", 30)
+	config.SetDefault("rate_limit.premium", 120)
+	config.SetDefault("postgres.sslmode", "require")
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

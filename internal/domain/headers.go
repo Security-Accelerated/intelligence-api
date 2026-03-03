@@ -11,6 +11,9 @@ import (
 )
 
 func LookupHeaders(ctx context.Context, domain string) (*HeadersInfo, error) {
+	// InsecureSkipVerify is intentional: as a domain intelligence tool we must
+	// inspect targets that have expired, self-signed, or otherwise invalid
+	// certificates. The SSL lookup reports certificate validity separately.
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{

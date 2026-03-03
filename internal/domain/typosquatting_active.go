@@ -71,6 +71,8 @@ func isDNSRegistered(ctx context.Context, domain string) bool {
 // isHTTPLive does a quick HEAD request (HTTPS first, then HTTP) and returns
 // true if the server responds with any status code.
 func isHTTPLive(ctx context.Context, domain string) bool {
+	// InsecureSkipVerify is intentional: typosquatting liveness checks must
+	// reach targets regardless of certificate validity.
 	client := &http.Client{
 		Timeout: 2 * time.Second,
 		Transport: &http.Transport{

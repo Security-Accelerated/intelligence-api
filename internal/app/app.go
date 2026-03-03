@@ -12,6 +12,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/httpapi"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/service"
 	"go.uber.org/zap"
 )
@@ -22,6 +23,11 @@ func Run(logger *zap.Logger, version string) error {
 	cfg := config.Config()
 
 	port := cfg.GetInt("application.port")
+	rlCfg := middleware.RateLimitConfig{
+		Basic:   cfg.GetInt("rate_limit.basic"),
+		Premium: cfg.GetInt("rate_limit.premium"),
+	}
+
 	logger.Info("initializing application",
 		zap.String("start_time", cfg.GetString("application.start.time")),
 		zap.String("application_name", cfg.GetString("application.name")),
@@ -39,6 +45,8 @@ func Run(logger *zap.Logger, version string) error {
 		zap.Duration("typosquatting_timeout", cfg.GetDuration("typosquatting.timeout")),
 		zap.Int("typosquatting_max_permutations", cfg.GetInt("typosquatting.max_permutations")),
 		zap.Int("typosquatting_concurrency", cfg.GetInt("typosquatting.concurrency")),
+		zap.Int("rate_limit_basic", rlCfg.Basic),
+		zap.Int("rate_limit_premium", rlCfg.Premium),
 		zap.String("gin_mode", cfg.GetString("gin.mode")),
 	)
 
@@ -75,7 +83,7 @@ func Run(logger *zap.Logger, version string) error {
 
 	// HTTP
 	h := handler.New(domainService, typosquattingService, version)
-	router := httpapi.NewRouter(h, cachedRepo, cfg.GetString("application.mode"))
+	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 
 	// Shutdown signal
