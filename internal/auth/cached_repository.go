@@ -51,6 +51,13 @@ func (r *CachedRepository) GetByKey(ctx context.Context, key string) (*Customer,
 	return customer, nil
 }
 
+// Size returns the number of entries currently in the cache.
+func (r *CachedRepository) Size() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.entries)
+}
+
 // InvalidateAll clears all cached entries.
 func (r *CachedRepository) InvalidateAll() {
 	r.mu.Lock()

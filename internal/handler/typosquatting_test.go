@@ -39,7 +39,7 @@ func (m *mockTyposquattingService) Lookup(_ context.Context, domainName string, 
 func newTyposquattingRouter(tier string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, &mockTyposquattingService{}, "test")
+	h := New(nil, &mockTyposquattingService{}, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_roles", []string{"admin"})
 		if tier != "" {
@@ -53,7 +53,7 @@ func newTyposquattingRouter(tier string) *gin.Engine {
 func newTyposquattingRouterWithService(svc TyposquattingLookupService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, svc, "test")
+	h := New(nil, svc, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_roles", []string{"admin"})
 		c.Set("api_key_tier", "premium")
@@ -414,7 +414,7 @@ func TestTyposquattingLookup_CacheHitPopulated(t *testing.T) {
 func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, &mockTyposquattingService{}, "test")
+	h := New(nil, &mockTyposquattingService{}, "test", nil, nil, nil)
 
 	captured := make(map[string]any)
 	auth := func(c *gin.Context) {

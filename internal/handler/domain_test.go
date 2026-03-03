@@ -37,7 +37,7 @@ func newTestRouter(svc DomainLookupService) *gin.Engine {
 func newTestRouterWithTier(svc DomainLookupService, tier string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, "test")
+	h := New(svc, nil, "test", nil, nil, nil)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_roles", []string{"admin"})
@@ -465,7 +465,7 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 			svc := &mockService{}
 			gin.SetMode(gin.TestMode)
 			r := gin.New()
-			h := New(svc, nil, "test")
+			h := New(svc, nil, "test", nil, nil, nil)
 
 			captured := make(map[string]any)
 			auth := func(c *gin.Context) {

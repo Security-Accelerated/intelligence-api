@@ -1,29 +1,78 @@
 package handler
 
 import (
+	"context"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/security-accelerated/intelligence-api/internal/config"
 )
 
 func (h *Handler) Info(c *gin.Context) {
-	cfg := config.Config()
-
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"application": gin.H{
-			"name":       cfg.GetString("application.name"),
+			"name":       h.cfg.GetString("application.name"),
 			"version":    h.version,
-			"mode":       cfg.GetString("application.mode"),
-			"start_time": cfg.GetString("application.start.time"),
-			"session_id": cfg.GetString("application.session.id"),
+			"mode":       h.cfg.GetString("application.mode"),
+			"start_time": h.cfg.GetString("application.start.time"),
+			"session_id": h.cfg.GetString("application.session.id"),
 		},
 		"environment": gin.H{
-			"host":           cfg.GetString("environment.host"),
-			"os":             cfg.GetString("environment.os"),
-			"kernel":         cfg.GetString("environment.kernel"),
-			"architecture":   cfg.GetString("environment.architecture"),
-			"golang_version": cfg.GetString("environment.golang.version"),
+			"host":           h.cfg.GetString("environment.host"),
+			"os":             h.cfg.GetString("environment.os"),
+			"kernel":         h.cfg.GetString("environment.kernel"),
+			"architecture":   h.cfg.GetString("environment.architecture"),
+			"golang_version": h.cfg.GetString("environment.golang.version"),
 		},
-	})
+		"config": gin.H{
+			"cache_ttl":                    h.cfg.GetDuration("redis.cache_ttl").String(),
+			"auth_cache_ttl":               h.cfg.GetDuration("auth.cache_ttl").String(),
+			"screenshot_timeout":           h.cfg.GetDuration("screenshot.timeout").String(),
+			"typosquatting_timeout":         h.cfg.GetDuration("typosquatting.timeout").String(),
+			"typosquatting_max_permutations": h.cfg.GetInt("typosquatting.max_permutations"),
+			"typosquatting_concurrency":     h.cfg.GetInt("typosquatting.concurrency"),
+			"rate_limit_basic":             h.cfg.GetInt("rate_limit.basic"),
+			"rate_limit_premium":           h.cfg.GetInt("rate_limit.premium"),
+			"postgres_host":                h.cfg.GetString("postgres.host"),
+			"postgres_port":                h.cfg.GetInt("postgres.port"),
+			"postgres_dbname":              h.cfg.GetString("postgres.dbname"),
+			"postgres_sslmode":             h.cfg.GetString("postgres.sslmode"),
+		},
+	}
+
+	if h.redisCache != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+
+		client := h.redisCache.Client()
+		redisInfo := gin.H{
+			"addr": h.cfg.GetString("redis.addr"),
+			"db":   h.cfg.GetInt("redis.db"),
+		}
+
+		if keyCount, err := client.DBSize(ctx).Result(); err == nil {
+			redisInfo["key_count"] = keyCount
+		}
+
+		if info, err := client.Info(ctx, "memory").Result(); err == nil {
+			for _, line := range strings.Split(info, "\r\n") {
+				if strings.HasPrefix(line, "used_memory_human:") {
+					redisInfo["memory_used"] = strings.TrimPrefix(line, "used_memory_human:")
+					break
+				}
+			}
+		}
+
+		resp["redis"] = redisInfo
+	}
+
+	if h.cachedRepo != nil {
+		resp["auth_cache"] = gin.H{
+			"ttl":  h.cfg.GetDuration("auth.cache_ttl").String(),
+			"size": h.cachedRepo.Size(),
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

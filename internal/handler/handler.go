@@ -4,8 +4,11 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/security-accelerated/intelligence-api/internal/auth"
+	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/spf13/viper"
 )
 
 type DomainLookupService interface {
@@ -17,16 +20,22 @@ type TyposquattingLookupService interface {
 }
 
 type Handler struct {
-	domainService    DomainLookupService
+	domainService        DomainLookupService
 	typosquattingService TyposquattingLookupService
-	version          string
+	version              string
+	cfg                  *viper.Viper
+	redisCache           *cache.RedisCache
+	cachedRepo           *auth.CachedRepository
 }
 
-func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, version string) *Handler {
+func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
 	return &Handler{
-		domainService:    domainService,
+		domainService:        domainService,
 		typosquattingService: typosquattingService,
-		version:          version,
+		version:              version,
+		cfg:                  cfg,
+		redisCache:           redisCache,
+		cachedRepo:           cachedRepo,
 	}
 }
 

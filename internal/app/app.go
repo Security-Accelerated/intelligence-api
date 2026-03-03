@@ -94,7 +94,7 @@ func Run(logger *zap.Logger, version string) error {
 	)
 
 	// HTTP
-	h := handler.New(domainService, typosquattingService, version)
+	h := handler.New(domainService, typosquattingService, version, cfg, redisCache, cachedRepo)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 
