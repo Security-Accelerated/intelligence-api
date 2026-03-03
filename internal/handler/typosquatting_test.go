@@ -42,7 +42,7 @@ func newTyposquattingRouter(tier string) *gin.Engine {
 	r := gin.New()
 	h := New(nil, &mockTyposquattingService{}, nil, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		if tier != "" {
 			c.Set("api_key_tier", tier)
 		}
@@ -56,7 +56,7 @@ func newTyposquattingRouterWithService(svc TyposquattingLookupService) *gin.Engi
 	r := gin.New()
 	h := New(nil, svc, nil, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", "premium")
 		c.Next()
 	})
@@ -111,9 +111,9 @@ func assertErrorBody(t *testing.T, w *httptest.ResponseRecorder) {
 // typosquattingLoggerKeys derived from middleware.ContextKeys.
 var typosquattingLoggerKeys = filterKeys("typosquatting", "cache_hit", "check_live")
 
-// --- Tier gating ---
+// --- Feature gating ---
 
-func TestTyposquattingLookup_PremiumTierAllowed(t *testing.T) {
+func TestTyposquattingLookup_FeatureAllowed(t *testing.T) {
 	r := newTyposquattingRouter("premium")
 	w := postTyposquatting(r, `{"domains":["example.com"]}`)
 
@@ -122,24 +122,21 @@ func TestTyposquattingLookup_PremiumTierAllowed(t *testing.T) {
 	}
 }
 
-func TestTyposquattingLookup_BasicTierForbidden(t *testing.T) {
-	r := newTyposquattingRouter("basic")
+func TestTyposquattingLookup_WrongFeatureForbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(nil, &mockTyposquattingService{}, nil, "test", nil, nil, nil)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_features", []string{"lookup"})
+		c.Set("api_key_tier", "premium")
+		c.Next()
+	})
+
 	w := postTyposquatting(r, `{"domains":["example.com"]}`)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
 	}
-	assertErrorBody(t, w)
-}
-
-func TestTyposquattingLookup_NoTierForbidden(t *testing.T) {
-	r := newTyposquattingRouter("")
-	w := postTyposquatting(r, `{"domains":["example.com"]}`)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
-	}
-	assertErrorBody(t, w)
 }
 
 // --- Input validation ---
@@ -419,7 +416,7 @@ func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
 
 	captured := make(map[string]any)
 	auth := func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", "premium")
 		c.Next()
 		for _, key := range typosquattingLoggerKeys {
@@ -455,7 +452,7 @@ func newTyposquattingRouterWithCfg(svc TyposquattingLookupService, tier string, 
 	r := gin.New()
 	h := New(nil, svc, nil, "test", cfg, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", tier)
 		c.Next()
 	})

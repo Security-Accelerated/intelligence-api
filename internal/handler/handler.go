@@ -66,8 +66,8 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin.HandlerFunc) {
 	v1 := router.Group("/api/v1")
 	v1.Use(middlewares...)
-	v1.GET("/info", middleware.RequireRoles("admin"), h.Info)
-	v1.POST("/domain", middleware.RequireRoles("admin", "domain"), h.DomainLookup)
-	v1.POST("/domain/typosquatting", middleware.RequireRoles("admin", "domain"), h.TyposquattingLookup)
-	v1.POST("/domain/subdomains", middleware.RequireRoles("admin", "domain"), h.SubdomainLookup)
+	v1.GET("/info", middleware.RequireFeatures("admin"), h.Info)
+	v1.POST("/domain/lookup", middleware.RequireFeatures("admin", "lookup"), h.DomainLookup)
+	v1.POST("/domain/typosquatting", middleware.RequireFeatures("admin", "typosquatting"), h.TyposquattingLookup)
+	v1.POST("/domain/subdomains", middleware.RequireFeatures("admin", "subdomain"), h.SubdomainLookup)
 }

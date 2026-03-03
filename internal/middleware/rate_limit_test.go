@@ -173,7 +173,7 @@ func TestRateLimit_AdminTier_Bypassed(t *testing.T) {
 	r.Use(func(c *gin.Context) {
 		c.Set("api_key_id", 1)
 		c.Set("api_key_tier", "premium")
-		c.Set("api_key_roles", []string{"admin", "domain"})
+		c.Set("api_key_features", []string{"admin", "domain"})
 		c.Next()
 	})
 	r.Use(RateLimitWithLogger(client, cfg, logger))

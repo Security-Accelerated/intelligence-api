@@ -43,7 +43,7 @@ func newSubdomainRouter(tier string) *gin.Engine {
 	r := gin.New()
 	h := New(nil, nil, &mockSubdomainService{}, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		if tier != "" {
 			c.Set("api_key_tier", tier)
 		}
@@ -57,7 +57,7 @@ func newSubdomainRouterWithService(svc SubdomainLookupService) *gin.Engine {
 	r := gin.New()
 	h := New(nil, nil, svc, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", "premium")
 		c.Next()
 	})
@@ -72,7 +72,7 @@ func postSubdomain(r *gin.Engine, body string) *httptest.ResponseRecorder {
 	return w
 }
 
-func TestSubdomainLookup_PremiumTierAllowed(t *testing.T) {
+func TestSubdomainLookup_FeatureAllowed(t *testing.T) {
 	r := newSubdomainRouter("premium")
 	w := postSubdomain(r, `{"domains":["example.com"]}`)
 
@@ -92,8 +92,16 @@ func TestSubdomainLookup_PremiumTierAllowed(t *testing.T) {
 	}
 }
 
-func TestSubdomainLookup_BasicTierForbidden(t *testing.T) {
-	r := newSubdomainRouter("basic")
+func TestSubdomainLookup_WrongFeatureForbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(nil, nil, &mockSubdomainService{}, "test", nil, nil, nil)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_features", []string{"lookup"})
+		c.Set("api_key_tier", "premium")
+		c.Next()
+	})
+
 	w := postSubdomain(r, `{"domains":["example.com"]}`)
 
 	if w.Code != http.StatusForbidden {
@@ -204,7 +212,7 @@ func TestSubdomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	cfg.Set("subdomain.max_domains.premium", 1)
 	h := New(nil, nil, &mockSubdomainService{}, "test", cfg, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", "premium")
 		c.Next()
 	})

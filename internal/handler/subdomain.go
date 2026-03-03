@@ -16,10 +16,6 @@ func (h *Handler) SubdomainLookup(c *gin.Context) {
 
 	tier, _ := c.Get("api_key_tier")
 	tierStr, _ := tier.(string)
-	if tierStr != "premium" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "subdomain enumeration requires a premium tier subscription"})
-		return
-	}
 
 	var req domain.SubdomainRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

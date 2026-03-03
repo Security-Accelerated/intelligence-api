@@ -28,9 +28,9 @@ func newInfoRouter(version string, cfg *viper.Viper, rc *cache.RedisCache, cr *a
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := New(nil, nil, nil, version, cfg, rc, cr)
-	// Simulate admin auth so RequireRoles passes
+	// Simulate admin auth so RequireFeatures passes
 	r.GET("/api/v1/info", func(c *gin.Context) {
-		c.Set("api_key_roles", []string{"admin"})
+		c.Set("api_key_features", []string{"admin"})
 		c.Next()
 	}, h.Info)
 	return r

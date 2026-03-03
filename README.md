@@ -5,27 +5,31 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header,
 
 ## Authentication
 
-All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and can be assigned multiple roles.
+All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and can be assigned multiple features.
 
 ### Customer Tiers
 
-Each customer has a `tier` that controls access to premium features:
+Each customer has a `tier` that controls rate limits and access to premium options within domain lookups:
 
-| Tier | Features |
-|------|----------|
+| Tier | Capabilities |
+|------|-------------|
 | `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) |
-| `premium` | All basic features + page screenshots + reputation checks + typosquatting detection + subdomain enumeration |
+| `premium` | All basic capabilities + page screenshots + reputation checks |
 
 The tier is stored in the `customers` table. New customers default to `basic`.
 
-### Roles
+### Features
 
-| Role | Access |
-|------|--------|
-| `admin` | All endpoints (`/hello`, `/info`, `/domain`, `/domain/typosquatting`, `/domain/subdomains`) |
-| `domain` | `POST /api/v1/domain`, `POST /api/v1/domain/typosquatting`, and `POST /api/v1/domain/subdomains` |
+Features control which endpoints a customer can access. Each customer can be assigned one or more features:
 
-A customer with both `admin` and `domain` roles has access to all endpoints. Requests without a valid key receive `401 Unauthorized`. Requests with a key whose customer lacks the required role receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
+| Feature | Access |
+|---------|--------|
+| `admin` | All endpoints |
+| `lookup` | `POST /api/v1/domain/lookup` |
+| `typosquatting` | `POST /api/v1/domain/typosquatting` |
+| `subdomain` | `POST /api/v1/domain/subdomains` |
+
+Requests without a valid key receive `401 Unauthorized`. Requests with a key whose customer lacks the required feature receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
 
 ### Rate Limiting
 
@@ -44,16 +48,16 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 
 ## API Endpoints
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
+| Method | Path | Feature | Description |
+|--------|------|---------|-------------|
 | GET | `/api/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
 | GET | `/api/v1/info` | `admin` | Application and environment info |
-| POST | `/api/v1/domain` | `admin`, `domain` | Domain intelligence lookup |
-| POST | `/api/v1/domain/typosquatting` | `admin`, `domain` | Typosquatting detection (premium) |
-| POST | `/api/v1/domain/subdomains` | `admin`, `domain` | Subdomain enumeration via CT logs (premium) |
+| POST | `/api/v1/domain/lookup` | `admin`, `lookup` | Domain intelligence lookup |
+| POST | `/api/v1/domain/typosquatting` | `admin`, `typosquatting` | Typosquatting detection |
+| POST | `/api/v1/domain/subdomains` | `admin`, `subdomain` | Subdomain enumeration via CT logs |
 | POST | `/api/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 
-### POST /api/v1/domain
+### POST /api/v1/domain/lookup
 
 **Request:**
 ```json
@@ -75,7 +79,7 @@ The optional `email_security` field (default `false`) checks SPF, DMARC, and DKI
 
 **Example:**
 ```sh
-curl -X POST http://localhost:8080/api/v1/domain \
+curl -X POST http://localhost:8080/api/v1/domain/lookup \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: test-admin-key' \
   -d '{"domains":["example.com"]}'
@@ -246,7 +250,7 @@ When `check_live` is `false`, `registered` and `live` fields are omitted. Result
 
 ## Response Fields
 
-### Domain Lookup (`/api/v1/domain`)
+### Domain Lookup (`/api/v1/domain/lookup`)
 
 ### `domain` / `cache_hit` / `errors`
 
@@ -501,10 +505,11 @@ Config values:
 
 The `migrations/` directory contains SQL files that are automatically applied when using Docker Compose (mounted to `/docker-entrypoint-initdb.d/`).
 
-- `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables
+- `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables (renamed to `customer_features` in migration 004)
 - `002_add_customer_tier.sql` — adds the `tier` column to `customers` (defaults to `basic`)
 - `003_hash_api_keys.sql` — replaces the plaintext `key` column with `key_hash` (SHA-256, hex-encoded)
-- `seed.sql` — inserts test customers with hashed keys and roles, sets Test Admin to `premium` tier
+- `004_rename_roles_to_features.sql` — renames `customer_roles` table to `customer_features` and `role` column to `feature`
+- `seed.sql` — inserts test customers with hashed keys and features, sets Test Admin to `premium` tier
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
 
@@ -512,7 +517,7 @@ API keys are stored as SHA-256 hashes. When inserting a key manually, hash it fi
 INSERT INTO customers (name) VALUES ('Acme Corp');
 INSERT INTO api_keys (customer_id, key_hash)
     VALUES (1, encode(digest('my-secret-key', 'sha256'), 'hex'));
-INSERT INTO customer_roles (customer_id, role) VALUES (1, 'admin'), (1, 'domain');
+INSERT INTO customer_features (customer_id, feature) VALUES (1, 'lookup'), (1, 'typosquatting');
 ```
 
 ### Run with Docker (recommended)

@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// APIKeyAuth validates the X-API-Key header and sets "api_key_roles" on the context.
+// APIKeyAuth validates the X-API-Key header and sets "api_key_features" on the context.
 func APIKeyAuth(repo auth.Repository) gin.HandlerFunc {
 	return APIKeyAuthWithLogger(repo, logging.Logger())
 }
@@ -49,25 +49,25 @@ func APIKeyAuthWithLogger(repo auth.Repository, logger *zap.Logger) gin.HandlerF
 		}
 
 		c.Set("api_key_id", customer.APIKeyID)
-		c.Set("api_key_roles", customer.Roles)
+		c.Set("api_key_features", customer.Features)
 		c.Set("api_key_tier", customer.Tier)
 		c.Next()
 	}
 }
 
-// RequireRoles returns middleware that checks the authenticated roles (set by
-// APIKeyAuth) against a set of allowed roles. Returns 403 if none of the
-// customer's roles are in the allowed set.
-func RequireRoles(allowed ...string) gin.HandlerFunc {
+// RequireFeatures returns middleware that checks the authenticated features (set by
+// APIKeyAuth) against a set of allowed features. Returns 403 if none of the
+// customer's features are in the allowed set.
+func RequireFeatures(allowed ...string) gin.HandlerFunc {
 	set := make(map[string]struct{}, len(allowed))
-	for _, r := range allowed {
-		set[r] = struct{}{}
+	for _, f := range allowed {
+		set[f] = struct{}{}
 	}
 	return func(c *gin.Context) {
-		val, _ := c.Get("api_key_roles")
-		roles, _ := val.([]string)
-		for _, r := range roles {
-			if _, ok := set[r]; ok {
+		val, _ := c.Get("api_key_features")
+		features, _ := val.([]string)
+		for _, f := range features {
+			if _, ok := set[f]; ok {
 				c.Next()
 				return
 			}

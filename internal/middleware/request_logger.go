@@ -66,9 +66,9 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 				fields = append(fields, zap.String("api_key_tier", v))
 			}
 		}
-		if roles, exists := c.Get("api_key_roles"); exists {
-			if v, ok := roles.([]string); ok {
-				fields = append(fields, zap.Strings("api_key_roles", v))
+		if features, exists := c.Get("api_key_features"); exists {
+			if v, ok := features.([]string); ok {
+				fields = append(fields, zap.Strings("api_key_features", v))
 			}
 		}
 

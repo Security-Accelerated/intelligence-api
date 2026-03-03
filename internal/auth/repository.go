@@ -32,7 +32,7 @@ func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Custome
 	}
 
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT role FROM customer_roles WHERE customer_id = $1`, c.ID,
+		`SELECT feature FROM customer_features WHERE customer_id = $1`, c.ID,
 	)
 	if err != nil {
 		return nil, err
@@ -40,11 +40,11 @@ func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Custome
 	defer rows.Close()
 
 	for rows.Next() {
-		var role string
-		if err := rows.Scan(&role); err != nil {
+		var feature string
+		if err := rows.Scan(&feature); err != nil {
 			return nil, err
 		}
-		c.Roles = append(c.Roles, role)
+		c.Features = append(c.Features, feature)
 	}
 	return &c, rows.Err()
 }

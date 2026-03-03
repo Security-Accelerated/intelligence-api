@@ -31,7 +31,7 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 	h.RegisterProtectedRoutes(router, authMW, rateLimitMW)
 
 	admin := router.Group("/api/v1/admin")
-	admin.Use(authMW, rateLimitMW, middleware.RequireRoles("admin"))
+	admin.Use(authMW, rateLimitMW, middleware.RequireFeatures("admin"))
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
 		if v, ok := c.Get("api_key_id"); ok {

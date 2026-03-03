@@ -5,7 +5,9 @@
 
 @host = http://localhost:8080
 @adminKey = test-admin-key
-@domainKey = test-domain-key
+@lookupKey = test-lookup-key
+@typosquattingKey = test-typosquatting-key
+@enterpriseKey = test-enterprise-key
 
 ### Health check (no auth required)
 GET {{host}}/api/v1/hello
@@ -15,7 +17,7 @@ GET {{host}}/api/v1/info
 X-API-Key: {{adminKey}}
 
 ### Domain lookup (admin key)
-POST {{host}}/api/v1/domain
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -23,17 +25,26 @@ X-API-Key: {{adminKey}}
   "domains": ["example.com"]
 }
 
-### Domain lookup (domain key)
-POST {{host}}/api/v1/domain
+### Domain lookup (lookup key - basic tier)
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
-X-API-Key: {{domainKey}}
+X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com", "example.org"]
 }
 
-### Domain lookup with screenshot (admin/premium key)
-POST {{host}}/api/v1/domain
+### Domain lookup (enterprise key - premium tier)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{enterpriseKey}}
+
+{
+  "domains": ["example.com"]
+}
+
+### Domain lookup with screenshot (admin key, premium tier)
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -43,17 +54,17 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with screenshot - should return 403 (basic tier)
-POST {{host}}/api/v1/domain
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
-X-API-Key: {{domainKey}}
+X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
   "screenshot": true
 }
 
-### Domain lookup with reputation (admin/premium key)
-POST {{host}}/api/v1/domain
+### Domain lookup with reputation (admin key, premium tier)
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -63,17 +74,17 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with reputation - should return 403 (basic tier)
-POST {{host}}/api/v1/domain
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
-X-API-Key: {{domainKey}}
+X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
   "reputation": true
 }
 
-### Domain lookup with screenshot + reputation (admin/premium key)
-POST {{host}}/api/v1/domain
+### Domain lookup with screenshot + reputation (admin key, premium tier)
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -83,7 +94,17 @@ X-API-Key: {{adminKey}}
   "reputation": true
 }
 
-### Typosquatting - shallow (admin/premium key)
+### Domain lookup with email security (lookup key - all tiers)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{lookupKey}}
+
+{
+  "domains": ["example.com"],
+  "email_security": true
+}
+
+### Typosquatting - shallow (admin key)
 POST {{host}}/api/v1/domain/typosquatting
 Content-Type: application/json
 X-API-Key: {{adminKey}}
@@ -92,10 +113,19 @@ X-API-Key: {{adminKey}}
   "domains": ["example.com"]
 }
 
-### Typosquatting - deep with live checks (admin/premium key)
+### Typosquatting (typosquatting key)
 POST {{host}}/api/v1/domain/typosquatting
 Content-Type: application/json
-X-API-Key: {{adminKey}}
+X-API-Key: {{typosquattingKey}}
+
+{
+  "domains": ["example.com"]
+}
+
+### Typosquatting - deep with live checks (enterprise key)
+POST {{host}}/api/v1/domain/typosquatting
+Content-Type: application/json
+X-API-Key: {{enterpriseKey}}
 
 {
   "domains": ["example.com"],
@@ -103,26 +133,54 @@ X-API-Key: {{adminKey}}
   "check_live": true
 }
 
-### Typosquatting - should return 403 (basic tier)
+### Typosquatting - should return 403 (lookup key lacks typosquatting feature)
 POST {{host}}/api/v1/domain/typosquatting
 Content-Type: application/json
-X-API-Key: {{domainKey}}
+X-API-Key: {{lookupKey}}
+
+{
+  "domains": ["example.com"]
+}
+
+### Subdomain enumeration (admin key)
+POST {{host}}/api/v1/domain/subdomains
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"]
+}
+
+### Subdomain enumeration with live checks (admin key)
+POST {{host}}/api/v1/domain/subdomains
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "check_live": true
+}
+
+### Subdomain - should return 403 (lookup key lacks subdomain feature)
+POST {{host}}/api/v1/domain/subdomains
+Content-Type: application/json
+X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"]
 }
 
 ### Domain lookup - should return 401 (no key)
-POST {{host}}/api/v1/domain
+POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json
 
 {
   "domains": ["example.com"]
 }
 
-### Info - should return 403 (domain key lacks access)
+### Info - should return 403 (lookup key lacks admin feature)
 GET {{host}}/api/v1/info
-X-API-Key: {{domainKey}}
+X-API-Key: {{lookupKey}}
 
 ### Invalidate auth cache (admin only)
 POST {{host}}/api/v1/admin/auth/cache/invalidate

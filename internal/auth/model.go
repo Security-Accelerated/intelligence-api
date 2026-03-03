@@ -8,6 +8,6 @@ type Customer struct {
 	Name      string
 	Active    bool
 	Tier      string
-	Roles     []string
+	Features  []string
 	CreatedAt time.Time
 }

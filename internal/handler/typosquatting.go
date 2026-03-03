@@ -16,10 +16,6 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 
 	tier, _ := c.Get("api_key_tier")
 	tierStr, _ := tier.(string)
-	if tierStr != "premium" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "typosquatting requires a premium tier subscription"})
-		return
-	}
 
 	var req domain.TyposquattingRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
