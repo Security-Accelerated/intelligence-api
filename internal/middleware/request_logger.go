@@ -8,9 +8,25 @@ import (
 	"go.uber.org/zap"
 )
 
-func RequestLogger() gin.HandlerFunc {
-	logger := logging.Logger()
+// ContextKeys lists every gin context key that the request logger reads.
+// Handlers must set these keys so the logger can include them. Tests use this
+// slice as the single source of truth for drift detection.
+var ContextKeys = []string{
+	"cache_hit",
+	"screenshot_requested",
+	"typosquatting_requested",
+	"reputation_requested",
+	"check_live_requested",
+}
 
+// RequestLogger returns middleware that logs each request using the global logger.
+func RequestLogger() gin.HandlerFunc {
+	return RequestLoggerWithLogger(logging.Logger())
+}
+
+// RequestLoggerWithLogger returns request-logging middleware that writes to the
+// supplied logger. This allows tests to inject an observable logger.
+func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 
@@ -25,24 +41,10 @@ func RequestLogger() gin.HandlerFunc {
 			zap.String("user_agent", c.Request.UserAgent()),
 		}
 
-		if cacheHit, exists := c.Get("cache_hit"); exists {
-			fields = append(fields, zap.Bool("cache_hit", cacheHit.(bool)))
-		}
-
-		if screenshot, exists := c.Get("screenshot_requested"); exists {
-			fields = append(fields, zap.Bool("screenshot_requested", screenshot.(bool)))
-		}
-
-		if typosquatting, exists := c.Get("typosquatting_requested"); exists {
-			fields = append(fields, zap.Bool("typosquatting_requested", typosquatting.(bool)))
-		}
-
-		if reputation, exists := c.Get("reputation_requested"); exists {
-			fields = append(fields, zap.Bool("reputation_requested", reputation.(bool)))
-		}
-
-		if checkLive, exists := c.Get("check_live_requested"); exists {
-			fields = append(fields, zap.Bool("check_live_requested", checkLive.(bool)))
+		for _, key := range ContextKeys {
+			if val, exists := c.Get(key); exists {
+				fields = append(fields, zap.Bool(key, val.(bool)))
+			}
 		}
 
 		logger.Info("request", fields...)

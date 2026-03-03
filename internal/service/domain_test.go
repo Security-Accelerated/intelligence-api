@@ -497,3 +497,36 @@ func TestLookup_ReputationAndScreenshot_CombinedCacheKey(t *testing.T) {
 		t.Error("expected cache entry for combined key 'example.com:reputation+screenshot'")
 	}
 }
+
+func TestLookup_DomainNameReachesLookups(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	var captured string
+	svc.lookupWhois = func(_ context.Context, d string) (*domain.WhoisInfo, error) {
+		captured = d
+		return &domain.WhoisInfo{DomainName: d}, nil
+	}
+
+	svc.Lookup(context.Background(), "forwarded.com", noOpts())
+	if captured != "forwarded.com" {
+		t.Errorf("whois received domain = %q, want %q", captured, "forwarded.com")
+	}
+}
+
+func TestLookup_CacheUnmarshalError_FallsBackToLookup(t *testing.T) {
+	mc := newMockCache()
+	mc.store["example.com"] = []byte("{invalid json")
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", noOpts())
+	if hit {
+		t.Error("expected cache miss when unmarshal fails")
+	}
+	if resp.Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp.Domain, "example.com")
+	}
+	if resp.Whois == nil {
+		t.Error("expected Whois to be populated from live lookup after cache unmarshal failure")
+	}
+}

@@ -38,5 +38,5 @@ func (c *RedisCache) Set(ctx context.Context, key string, data []byte, ttl time.
 }
 
 func cacheKey(name string) string {
-	return fmt.Sprintf("domain:%s", name)
+	return fmt.Sprintf("intel:%s", name)
 }

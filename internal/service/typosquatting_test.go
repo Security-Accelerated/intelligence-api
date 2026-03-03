@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -205,4 +206,38 @@ func TestTyposquatting_ConstructorRespectsCustomValues(t *testing.T) {
 	})
 
 	svc.Lookup(context.Background(), "test.com", false, "shallow")
+}
+
+func TestTyposquatting_DomainNameReachesLookup(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestTyposquattingService(mc)
+
+	var captured string
+	svc.SetLookup(func(_ context.Context, d string, _ domain.TyposquattingOptions) (*domain.TyposquattingResponse, error) {
+		captured = d
+		return &domain.TyposquattingResponse{Domain: d, Depth: "shallow"}, nil
+	})
+
+	svc.Lookup(context.Background(), "forwarded.com", false, "shallow")
+	if captured != "forwarded.com" {
+		t.Errorf("lookup received domain = %q, want %q", captured, "forwarded.com")
+	}
+}
+
+func TestTyposquatting_ConcurrentSafety(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestTyposquattingService(mc)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, _ := svc.Lookup(context.Background(), "concurrent.com", false, "shallow")
+			if resp == nil {
+				t.Error("expected non-nil response")
+			}
+		}()
+	}
+	wg.Wait()
 }

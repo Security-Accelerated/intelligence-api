@@ -17,7 +17,7 @@ func setup(t *testing.T) (*RedisCache, *miniredis.Miniredis) {
 
 func TestCacheKey(t *testing.T) {
 	got := cacheKey("example.com")
-	want := "domain:example.com"
+	want := "intel:example.com"
 	if got != want {
 		t.Errorf("cacheKey() = %q, want %q", got, want)
 	}
@@ -36,7 +36,7 @@ func TestGet_Miss(t *testing.T) {
 
 func TestGet_Hit(t *testing.T) {
 	rc, mr := setup(t)
-	mr.Set("domain:example.com", `{"domain":"example.com","whois":{"domain_name":"example.com"}}`)
+	mr.Set("intel:example.com", `{"domain":"example.com","whois":{"domain_name":"example.com"}}`)
 
 	data, err := rc.Get(context.Background(), "example.com")
 	if err != nil {
@@ -70,5 +70,20 @@ func TestSetThenGet_RoundTrip(t *testing.T) {
 	}
 	if string(got) != string(original) {
 		t.Errorf("data = %q, want %q", string(got), string(original))
+	}
+}
+
+func TestSet_AppliesTTL(t *testing.T) {
+	rc, mr := setup(t)
+	ctx := context.Background()
+
+	ttl := 3 * time.Minute
+	if err := rc.Set(ctx, "ttl-test.com", []byte(`{}`), ttl); err != nil {
+		t.Fatalf("unexpected Set error: %v", err)
+	}
+
+	got := mr.TTL("intel:ttl-test.com")
+	if got != ttl {
+		t.Errorf("TTL = %v, want %v", got, ttl)
 	}
 }

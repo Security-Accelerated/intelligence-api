@@ -175,6 +175,7 @@ func TestDomainLookup_MissingBody(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestDomainLookup_EmptyArray(t *testing.T) {
@@ -187,6 +188,7 @@ func TestDomainLookup_EmptyArray(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestDomainLookup_SingleInvalidDomain(t *testing.T) {
@@ -199,6 +201,7 @@ func TestDomainLookup_SingleInvalidDomain(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestDomainLookup_StripsProtocolAndSlash(t *testing.T) {
@@ -263,6 +266,43 @@ func TestDomainLookup_WhitespaceTrimming(t *testing.T) {
 	}
 }
 
+// --- normalizeDomain unit tests ---
+
+func TestNormalizeDomain(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantOK  bool
+	}{
+		{"plain domain", "example.com", "example.com", true},
+		{"https prefix", "https://example.com", "example.com", true},
+		{"http prefix", "http://example.com", "example.com", true},
+		{"trailing slash", "example.com/", "example.com", true},
+		{"path segments", "https://example.com/foo/bar", "example.com/foo/bar", true},
+		{"double prefix", "https://https://example.com", "https://example.com", true},
+		{"ftp prefix preserved", "ftp://example.com", "ftp://example.com", true},
+		{"whitespace", "  example.com  ", "example.com", true},
+		{"empty", "", "", false},
+		{"no dot", "localhost", "localhost", false},
+		{"protocol only", "https://", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := normalizeDomain(tt.input)
+			if ok != tt.wantOK {
+				t.Errorf("normalizeDomain(%q) ok = %v, want %v", tt.input, ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Errorf("normalizeDomain(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- Tier gating ---
+
 func TestDomainLookup_Reputation_PremiumAllowed(t *testing.T) {
 	r := newTestRouterWithTier(&mockService{}, "premium")
 	w := httptest.NewRecorder()
@@ -287,6 +327,34 @@ func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
 	}
+	assertErrorBody(t, w)
+}
+
+func TestDomainLookup_Screenshot_PremiumAllowed(t *testing.T) {
+	r := newTestRouterWithTier(&mockService{}, "premium")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_Screenshot_BasicForbidden(t *testing.T) {
+	r := newTestRouterWithTier(&mockService{}, "basic")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain",
+		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+	assertErrorBody(t, w)
 }
 
 func TestDomainLookup_OptsPassedToService(t *testing.T) {
@@ -324,10 +392,8 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 	}
 }
 
-// loggerContextKeys lists the gin context keys that the request logger reads.
-// If a key is added to the logger but not set by the handler, this test catches
-// the drift. Keep in sync with middleware/request_logger.go.
-var domainLoggerKeys = []string{"screenshot_requested", "reputation_requested", "cache_hit"}
+// domainLoggerKeys derived from middleware.ContextKeys.
+var domainLoggerKeys = filterKeys("screenshot", "reputation", "cache_hit")
 
 func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 	tests := []struct {

@@ -93,12 +93,20 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	})
 
 	repo := newStubRepo()
+	cachedRepo := auth.NewCachedRepository(repo, 5*time.Minute)
 
 	r := gin.New()
 	r.Use(middleware.RequestLogger())
 	h := handler.New(svc, typosquattingSvc, "test")
 	h.RegisterRoutes(r)
-	h.RegisterProtectedRoutes(r, middleware.APIKeyAuth(repo))
+	h.RegisterProtectedRoutes(r, middleware.APIKeyAuth(cachedRepo))
+
+	admin := r.Group("/api/v1/admin")
+	admin.Use(middleware.APIKeyAuth(cachedRepo), middleware.RequireRoles("admin"))
+	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
+		cachedRepo.InvalidateAll()
+		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
+	})
 
 	return r, mr
 }
@@ -190,6 +198,15 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 	}
 	if resp2[0].Whois == nil || resp2[0].Whois.Registrar != "Test Registrar" {
 		t.Errorf("cached response Whois = %+v, want Registrar=Test Registrar", resp2[0].Whois)
+	}
+	if resp2[0].DNS == nil || len(resp2[0].DNS.A) == 0 {
+		t.Errorf("cached DNS.A = %v, want non-empty", resp2[0].DNS)
+	}
+	if resp2[0].SSL == nil || resp2[0].SSL.Subject != "example.com" {
+		t.Errorf("cached SSL = %+v, want Subject=example.com", resp2[0].SSL)
+	}
+	if resp2[0].Headers == nil || resp2[0].Headers.StatusCode != 200 {
+		t.Errorf("cached Headers = %+v, want StatusCode=200", resp2[0].Headers)
 	}
 }
 
@@ -693,5 +710,53 @@ func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
 	}
 	if resp[0].Screenshot.PNG == "" {
 		t.Error("expected Screenshot.PNG to be non-empty")
+	}
+}
+
+// --- Admin cache invalidate ---
+
+func TestIntegration_AdminCacheInvalidate_AdminAllowed(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/cache/invalidate", nil)
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body["message"] != "auth cache invalidated" {
+		t.Errorf("message = %q, want %q", body["message"], "auth cache invalidated")
+	}
+}
+
+func TestIntegration_AdminCacheInvalidate_NonAdminForbidden(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/cache/invalidate", nil)
+	req.Header.Set("X-API-Key", "test-domain-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_AdminCacheInvalidate_NoKeyUnauthorized(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/cache/invalidate", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusUnauthorized, w.Body.String())
 	}
 }

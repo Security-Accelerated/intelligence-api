@@ -204,10 +204,24 @@ func TestGenBitsquat(t *testing.T) {
 	if len(perms) == 0 {
 		t.Fatal("expected bitsquat permutations")
 	}
+	domains := make(map[string]bool)
 	for _, p := range perms {
 		if p.Domain == "example.com" {
 			t.Error("bitsquat should not include the original")
 		}
+		domains[p.Domain] = true
+	}
+	// 'e' (0x65) XOR bit 2 → 'a' (0x61)
+	if !domains["axample.com"] {
+		t.Error("expected axample.com (e→a bit flip)")
+	}
+	// 'x' (0x78) XOR bit 0 → 'y' (0x79)
+	if !domains["eyample.com"] {
+		t.Error("expected eyample.com (x→y bit flip)")
+	}
+	// 'e' (0x65) XOR bit 0 → 'd' (0x64)
+	if !domains["dxample.com"] {
+		t.Error("expected dxample.com (e→d bit flip)")
 	}
 }
 

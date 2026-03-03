@@ -6,18 +6,27 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
 )
 
 type mockTyposquattingService struct {
-	resp   *domain.TyposquattingResponse
-	cached bool
+	mu            sync.Mutex
+	resp          *domain.TyposquattingResponse
+	cached        bool
+	lastCheckLive bool
+	lastDepth     string
 }
 
-func (m *mockTyposquattingService) Lookup(_ context.Context, domainName string, _ bool, depth string) (*domain.TyposquattingResponse, bool) {
+func (m *mockTyposquattingService) Lookup(_ context.Context, domainName string, checkLive bool, depth string) (*domain.TyposquattingResponse, bool) {
+	m.mu.Lock()
+	m.lastCheckLive = checkLive
+	m.lastDepth = depth
+	m.mu.Unlock()
 	if m.resp != nil {
 		return m.resp, m.cached
 	}
@@ -61,6 +70,46 @@ func postTyposquatting(r *gin.Engine, body string) *httptest.ResponseRecorder {
 	return w
 }
 
+// --- Shared test helpers (same package, used by domain_test.go too) ---
+
+// filterKeys returns the subset of middleware.ContextKeys that match any of the
+// given prefixes. Pass a nil/empty list to get all keys.
+func filterKeys(prefixes ...string) []string {
+	if len(prefixes) == 0 {
+		return middleware.ContextKeys
+	}
+	var out []string
+	for _, key := range middleware.ContextKeys {
+		for _, p := range prefixes {
+			if strings.Contains(key, p) {
+				out = append(out, key)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// assertErrorBody checks that the response body is {"error":"..."} with a
+// non-empty error message.
+func assertErrorBody(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to unmarshal error body: %v", err)
+	}
+	msg, ok := body["error"]
+	if !ok {
+		t.Fatalf("response body missing 'error' key: %s", w.Body.String())
+	}
+	if msg == "" {
+		t.Fatal("error message is empty")
+	}
+}
+
+// typosquattingLoggerKeys derived from middleware.ContextKeys.
+var typosquattingLoggerKeys = filterKeys("typosquatting", "cache_hit", "check_live")
+
 // --- Tier gating ---
 
 func TestTyposquattingLookup_PremiumTierAllowed(t *testing.T) {
@@ -79,6 +128,7 @@ func TestTyposquattingLookup_BasicTierForbidden(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestTyposquattingLookup_NoTierForbidden(t *testing.T) {
@@ -88,6 +138,7 @@ func TestTyposquattingLookup_NoTierForbidden(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
 	}
+	assertErrorBody(t, w)
 }
 
 // --- Input validation ---
@@ -102,6 +153,7 @@ func TestTyposquattingLookup_MissingBody(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestTyposquattingLookup_MalformedJSON(t *testing.T) {
@@ -111,6 +163,7 @@ func TestTyposquattingLookup_MalformedJSON(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestTyposquattingLookup_EmptyDomainsArray(t *testing.T) {
@@ -120,6 +173,7 @@ func TestTyposquattingLookup_EmptyDomainsArray(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestTyposquattingLookup_MissingDomainsField(t *testing.T) {
@@ -129,6 +183,7 @@ func TestTyposquattingLookup_MissingDomainsField(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 // --- Depth validation ---
@@ -140,6 +195,7 @@ func TestTyposquattingLookup_InvalidDepth(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestTyposquattingLookup_EmptyDepthDefaultsShallow(t *testing.T) {
@@ -176,6 +232,42 @@ func TestTyposquattingLookup_DeepDepthAccepted(t *testing.T) {
 	}
 	if resp[0].Depth != "deep" {
 		t.Errorf("Depth = %q, want %q", resp[0].Depth, "deep")
+	}
+}
+
+// --- check_live forwarding ---
+
+func TestTyposquattingLookup_CheckLiveForwarded(t *testing.T) {
+	svc := &mockTyposquattingService{}
+	r := newTyposquattingRouterWithService(svc)
+	w := postTyposquatting(r, `{"domains":["example.com"],"check_live":true}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	svc.mu.Lock()
+	got := svc.lastCheckLive
+	svc.mu.Unlock()
+	if !got {
+		t.Error("expected check_live=true to be forwarded to service")
+	}
+}
+
+func TestTyposquattingLookup_CheckLiveDefaultFalse(t *testing.T) {
+	svc := &mockTyposquattingService{}
+	r := newTyposquattingRouterWithService(svc)
+	w := postTyposquatting(r, `{"domains":["example.com"]}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	svc.mu.Lock()
+	got := svc.lastCheckLive
+	svc.mu.Unlock()
+	if got {
+		t.Error("expected check_live to default to false when omitted")
 	}
 }
 
@@ -224,6 +316,7 @@ func TestTyposquattingLookup_SingleInvalidDomain(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
+	assertErrorBody(t, w)
 }
 
 // --- Multi-domain ---
@@ -317,8 +410,6 @@ func TestTyposquattingLookup_CacheHitPopulated(t *testing.T) {
 		t.Errorf("CacheHit = false, want true")
 	}
 }
-
-var typosquattingLoggerKeys = []string{"typosquatting_requested", "cache_hit", "check_live_requested"}
 
 func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
