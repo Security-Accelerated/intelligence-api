@@ -47,6 +47,7 @@ func main() {
 		zap.Duration("typosquatting_timeout", config.Config().GetDuration("typosquatting.timeout")),
 		zap.Int("typosquatting_max_permutations", config.Config().GetInt("typosquatting.max_permutations")),
 		zap.Int("typosquatting_concurrency", config.Config().GetInt("typosquatting.concurrency")),
+		zap.String("gin_mode", config.Config().GetString("gin.mode")),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
