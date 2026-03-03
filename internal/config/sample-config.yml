@@ -8,7 +8,7 @@ gin:
   mode: debug
 
 redis:
-  addr: localhost:6379
+  addr: redis:6379
   password: ""
   db: 0
   cache_ttl: 60m
@@ -37,9 +37,9 @@ rate_limit:
   premium: 120
 
 postgres:
-  host: localhost
+  host: postgres
   port: 5432
   user: intelligence
   password: intelligence
   dbname: intelligence_api
-  sslmode: require
+  sslmode: disable
