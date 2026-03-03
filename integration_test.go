@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,7 +38,7 @@ func (r *stubRepo) GetByKey(_ context.Context, key string) (*auth.Customer, erro
 	if c, ok := r.keys[key]; ok {
 		return c, nil
 	}
-	return nil, context.DeadlineExceeded // any non-nil error triggers 401
+	return nil, sql.ErrNoRows
 }
 
 func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
