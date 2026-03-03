@@ -179,6 +179,12 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 	if len(resp1) != 1 || len(resp2) != 1 {
 		t.Fatalf("expected 1 result each, got %d and %d", len(resp1), len(resp2))
 	}
+	if resp1[0].CacheHit {
+		t.Error("first request should be a cache miss")
+	}
+	if !resp2[0].CacheHit {
+		t.Error("second request should be a cache hit")
+	}
 	if resp1[0].Domain != resp2[0].Domain {
 		t.Errorf("Domain mismatch: %q vs %q", resp1[0].Domain, resp2[0].Domain)
 	}
@@ -671,9 +677,21 @@ func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].Reputation == nil {
-		t.Error("expected reputation to be populated")
+		t.Fatal("expected reputation to be populated")
+	}
+	if resp[0].Reputation.Score != 35 {
+		t.Errorf("Reputation.Score = %d, want 35", resp[0].Reputation.Score)
+	}
+	if len(resp[0].Reputation.Providers) != 4 {
+		t.Errorf("len(Reputation.Providers) = %d, want 4", len(resp[0].Reputation.Providers))
 	}
 	if resp[0].Screenshot == nil {
-		t.Error("expected screenshot to be populated")
+		t.Fatal("expected screenshot to be populated")
+	}
+	if resp[0].Screenshot.StatusCode != 200 {
+		t.Errorf("Screenshot.StatusCode = %d, want 200", resp[0].Screenshot.StatusCode)
+	}
+	if resp[0].Screenshot.PNG == "" {
+		t.Error("expected Screenshot.PNG to be non-empty")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -13,11 +14,16 @@ import (
 )
 
 type mockService struct {
-	resp   *domain.DomainResponse
-	cached bool
+	mu       sync.Mutex
+	resp     *domain.DomainResponse
+	cached   bool
+	lastOpts domain.LookupOptions
 }
 
-func (m *mockService) Lookup(_ context.Context, domainName string, _ domain.LookupOptions) (*domain.DomainResponse, bool) {
+func (m *mockService) Lookup(_ context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool) {
+	m.mu.Lock()
+	m.lastOpts = opts
+	m.mu.Unlock()
 	if m.resp != nil {
 		return m.resp, m.cached
 	}
@@ -280,6 +286,41 @@ func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestDomainLookup_OptsPassedToService(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           string
+		wantScreenshot bool
+		wantReputation bool
+	}{
+		{"no opts", `{"domains":["example.com"]}`, false, false},
+		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false},
+		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true},
+		{"both", `{"domains":["example.com"],"screenshot":true,"reputation":true}`, true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &mockService{}
+			r := newTestRouter(svc)
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/domain", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+			}
+			if svc.lastOpts.Screenshot != tt.wantScreenshot {
+				t.Errorf("opts.Screenshot = %v, want %v", svc.lastOpts.Screenshot, tt.wantScreenshot)
+			}
+			if svc.lastOpts.Reputation != tt.wantReputation {
+				t.Errorf("opts.Reputation = %v, want %v", svc.lastOpts.Reputation, tt.wantReputation)
+			}
+		})
 	}
 }
 
