@@ -8,14 +8,21 @@ services:
     volumes:
       - /etc/security-accelerated/intelligence-api.yaml:/etc/security-accelerated/intelligence-api.yaml:ro
     depends_on:
-      - redis
-      - postgres
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
   postgres:
     image: postgres:16-alpine
     environment:
@@ -27,6 +34,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intelligence -d intelligence_api"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
 
 volumes:
   redis-data:

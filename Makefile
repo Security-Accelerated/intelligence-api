@@ -2,7 +2,7 @@ APP_NAME := intelligence-api
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty)
 
-.PHONY: all build clean test test-integration run release
+.PHONY: all build clean test test-integration run release docker-reset
 
 all: test build
 
@@ -25,3 +25,6 @@ release:
 	@test -n "$(V)" || (echo "usage: make release V=v0.1.0" && exit 1)
 	git tag -a $(V) -m "Release $(V)"
 	git push origin $(V)
+
+docker-reset:
+	./scripts/docker-reset.sh
