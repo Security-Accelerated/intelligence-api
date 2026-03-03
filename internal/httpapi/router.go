@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -11,16 +10,13 @@ import (
 )
 
 // NewRouter builds the gin engine with all middleware and routes registered.
-func NewRouter(ctx context.Context, h *handler.Handler, cachedRepo *auth.CachedRepository, mode string) *gin.Engine {
+func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, mode string) *gin.Engine {
 	if mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
-	router.Use(func(c *gin.Context) {
-		c.Request = c.Request.WithContext(ctx)
-		c.Next()
-	})
+	router.Use(gin.Recovery())
 	router.Use(middleware.RequestLogger())
 
 	h.RegisterRoutes(router)

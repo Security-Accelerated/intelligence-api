@@ -2,23 +2,20 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	_ "github.com/lib/pq"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/httpapi"
 	"github.com/security-accelerated/intelligence-api/internal/service"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
+
 
 // Run wires up all dependencies and runs the server until shutdown.
 func Run(logger *zap.Logger, version string) error {
@@ -58,11 +55,7 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Auth
 	authRepo := auth.NewPostgresRepository(db)
-	authCacheTTL := cfg.GetDuration("auth.cache_ttl")
-	if authCacheTTL == 0 {
-		authCacheTTL = 5 * time.Minute
-	}
-	cachedRepo := auth.NewCachedRepository(authRepo, authCacheTTL)
+	cachedRepo := auth.NewCachedRepository(authRepo, cfg.GetDuration("auth.cache_ttl"))
 
 	// Cache
 	redisCache := cache.NewRedisCache(
@@ -73,62 +66,27 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Services
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")
-
-	screenshotTimeout := cfg.GetDuration("screenshot.timeout")
-	if screenshotTimeout == 0 {
-		screenshotTimeout = 15 * time.Second
-	}
-	domainService := service.NewDomainService(redisCache, cacheTTL, screenshotTimeout)
-
-	typosquattingTimeout := cfg.GetDuration("typosquatting.timeout")
-	if typosquattingTimeout == 0 {
-		typosquattingTimeout = 30 * time.Second
-	}
+	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"))
 	typosquattingService := service.NewTyposquattingService(
-		redisCache, cacheTTL, typosquattingTimeout,
+		redisCache, cacheTTL, cfg.GetDuration("typosquatting.timeout"),
 		cfg.GetInt("typosquatting.max_permutations"),
 		cfg.GetInt("typosquatting.concurrency"),
 	)
 
 	// HTTP
 	h := handler.New(domainService, typosquattingService, version)
-	router := httpapi.NewRouter(ctx, h, cachedRepo, cfg.GetString("application.mode"))
+	router := httpapi.NewRouter(h, cachedRepo, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 
 	// Shutdown signal
-	shutdown := make(chan struct{})
-	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-		<-sig
-		cancel()
-		close(shutdown)
-	}()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
-	if err := httpapi.Serve(server, shutdown, logger); err != nil {
+	if err := httpapi.Serve(server, sigCh, cancel, logger); err != nil {
 		return err
 	}
 
 	logger.Info("application stopped")
 	return nil
-}
-
-func openDB(ctx context.Context, cfg *viper.Viper) (*sql.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.GetString("postgres.host"),
-		cfg.GetInt("postgres.port"),
-		cfg.GetString("postgres.user"),
-		cfg.GetString("postgres.password"),
-		cfg.GetString("postgres.dbname"),
-		cfg.GetString("postgres.sslmode"),
-	)
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return nil, err
-	}
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return db, nil
 }

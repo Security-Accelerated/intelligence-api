@@ -47,6 +47,15 @@ func init() {
 		config.Set("environment.kernel", charsToString(uname.Release[:]))
 	}
 
+	// defaults (overridden by config file, then env vars)
+	config.SetDefault("application.port", 8080)
+	config.SetDefault("redis.cache_ttl", "60m")
+	config.SetDefault("auth.cache_ttl", "5m")
+	config.SetDefault("screenshot.timeout", "15s")
+	config.SetDefault("typosquatting.timeout", "30s")
+	config.SetDefault("typosquatting.max_permutations", 500)
+	config.SetDefault("typosquatting.concurrency", 20)
+	config.SetDefault("postgres.sslmode", "disable")
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
