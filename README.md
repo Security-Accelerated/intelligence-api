@@ -553,6 +553,7 @@ make run    # builds and starts the server
 | `make release V=v0.1.0` | Tag and push a release |
 | `make deploy` | Deploy to Fly.io with git version baked in |
 | `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
+| `./scripts/smoke-test.sh` | **Dev only.** Hit every endpoint with every key/tier combo and check expected status codes against a running instance |
 
 ## Testing
 
