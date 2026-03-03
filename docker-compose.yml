@@ -1,6 +1,9 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
     ports:
       - "8080:8080"
     environment:

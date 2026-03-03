@@ -3,6 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+VERSION=$(git describe --tags --always --dirty)
+export VERSION
+
 echo "==> Stopping containers..."
 docker compose down
 
