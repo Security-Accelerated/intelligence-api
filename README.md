@@ -551,6 +551,8 @@ make run    # builds and starts the server
 | `make run` | Build and run the server |
 | `make clean` | Remove build artifacts |
 | `make release V=v0.1.0` | Tag and push a release |
+| `make deploy` | Deploy to Fly.io with git version baked in |
+| `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
 
 ## Testing
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# DEV ONLY — tears down all containers and WIPES the database and Redis
+# volumes, then rebuilds from scratch. Do not run against production data.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
