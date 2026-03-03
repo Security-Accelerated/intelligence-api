@@ -23,7 +23,7 @@ type crtShEntry struct {
 // LookupSubdomains queries Certificate Transparency logs via crt.sh for
 // subdomains of the given domain. It deduplicates, filters wildcards, and
 // caps results at opts.MaxResults.
-func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOptions) (*SubdomainResponse, error) {
+func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOptions) (*SubdomainInfo, error) {
 	url := fmt.Sprintf(crtShURL, domainName)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -33,7 +33,6 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 	req.Header.Set("User-Agent", "IntelligenceAPI/1.0")
 
 	client := &http.Client{
-		Timeout:   opts.Timeout,
 		Transport: safeTransport,
 	}
 
@@ -68,12 +67,7 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 		}
 	}
 
-	if opts.CheckLive && len(entries) > 0 {
-		CheckSubdomainActive(ctx, entries, opts.Concurrency)
-	}
-
-	return &SubdomainResponse{
-		Domain:     domainName,
+	return &SubdomainInfo{
 		Count:      len(entries),
 		Capped:     capped,
 		Subdomains: entries,

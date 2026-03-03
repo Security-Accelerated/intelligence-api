@@ -35,6 +35,7 @@ type DomainService struct {
 	cache             cache.Cache
 	cacheTTL          time.Duration
 	screenshotTimeout time.Duration
+	subdomainMaxResults int
 
 	lookupWhois      func(ctx context.Context, d string) (*domain.WhoisInfo, error)
 	lookupDNS        func(ctx context.Context, d string) (*domain.DNSInfo, error)
@@ -43,20 +44,26 @@ type DomainService struct {
 	lookupScreenshot     func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
 	lookupReputation     func(ctx context.Context, d string) (*domain.ReputationResult, []domain.LookupError)
 	lookupEmailSecurity  func(ctx context.Context, d string) (*domain.EmailSecurityInfo, error)
+	lookupSubdomains     func(ctx context.Context, d string, opts domain.SubdomainOptions) (*domain.SubdomainInfo, error)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults int) *DomainService {
+	if subdomainMaxResults <= 0 {
+		subdomainMaxResults = 500
+	}
 	return &DomainService{
-		cache:             c,
-		cacheTTL:          cacheTTL,
-		screenshotTimeout: screenshotTimeout,
-		lookupWhois:       domain.LookupWhois,
-		lookupDNS:         domain.LookupDNS,
-		lookupSSL:         domain.LookupSSL,
-		lookupHeaders:     domain.LookupHeaders,
+		cache:               c,
+		cacheTTL:            cacheTTL,
+		screenshotTimeout:   screenshotTimeout,
+		subdomainMaxResults: subdomainMaxResults,
+		lookupWhois:         domain.LookupWhois,
+		lookupDNS:           domain.LookupDNS,
+		lookupSSL:           domain.LookupSSL,
+		lookupHeaders:       domain.LookupHeaders,
 		lookupScreenshot:    domain.LookupScreenshot,
 		lookupReputation:    domain.LookupReputation,
 		lookupEmailSecurity: domain.LookupEmailSecurity,
+		lookupSubdomains:    domain.LookupSubdomains,
 	}
 }
 
@@ -83,6 +90,13 @@ func (s *DomainService) SetEmailSecurityLookup(
 	s.lookupEmailSecurity = fn
 }
 
+// SetSubdomainLookup replaces the subdomain lookup function (for testing).
+func (s *DomainService) SetSubdomainLookup(
+	fn func(context.Context, string, domain.SubdomainOptions) (*domain.SubdomainInfo, error),
+) {
+	s.lookupSubdomains = fn
+}
+
 func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	var suffixes []string
 	if opts.EmailSecurity {
@@ -93,6 +107,9 @@ func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	}
 	if opts.Screenshot {
 		suffixes = append(suffixes, "screenshot")
+	}
+	if opts.Subdomains {
+		suffixes = append(suffixes, "subdomains")
 	}
 	if len(suffixes) == 0 {
 		return domainName
@@ -243,9 +260,30 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		}()
 	}
 
+	if opts.Subdomains {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := s.lookupSubdomains(ctx, domainName, domain.SubdomainOptions{
+				MaxResults: s.subdomainMaxResults,
+			})
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "subdomains"), zap.String("domain", domainName), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{
+					Lookup:  "subdomains",
+					Message: sanitizeErr(err),
+				})
+				return
+			}
+			resp.Subdomains = result
+		}()
+	}
+
 	wg.Wait()
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil
 	if hasData {
 		if data, err := json.Marshal(resp); err != nil {
 			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))

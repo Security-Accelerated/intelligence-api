@@ -49,11 +49,7 @@ func Run(logger *zap.Logger, version string) error {
 		zap.Int("domain_max_domains_premium", cfg.GetInt("domain.max_domains.premium")),
 		zap.Int("typosquatting_max_domains_basic", cfg.GetInt("typosquatting.max_domains.basic")),
 		zap.Int("typosquatting_max_domains_premium", cfg.GetInt("typosquatting.max_domains.premium")),
-		zap.Duration("subdomain_timeout", cfg.GetDuration("subdomain.timeout")),
 		zap.Int("subdomain_max_results", cfg.GetInt("subdomain.max_results")),
-		zap.Int("subdomain_concurrency", cfg.GetInt("subdomain.concurrency")),
-		zap.Int("subdomain_max_domains_basic", cfg.GetInt("subdomain.max_domains.basic")),
-		zap.Int("subdomain_max_domains_premium", cfg.GetInt("subdomain.max_domains.premium")),
 		zap.Int("rate_limit_basic", rlCfg.Basic),
 		zap.Int("rate_limit_premium", rlCfg.Premium),
 		zap.String("redis_addr", cfg.GetString("redis.addr")),
@@ -95,20 +91,15 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Services
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")
-	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"))
+	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"))
 	typosquattingService := service.NewTyposquattingService(
 		redisCache, cacheTTL, cfg.GetDuration("typosquatting.timeout"),
 		cfg.GetInt("typosquatting.max_permutations"),
 		cfg.GetInt("typosquatting.concurrency"),
 	)
-	subdomainService := service.NewSubdomainService(
-		redisCache, cacheTTL, cfg.GetDuration("subdomain.timeout"),
-		cfg.GetInt("subdomain.max_results"),
-		cfg.GetInt("subdomain.concurrency"),
-	)
 
 	// HTTP
-	h := handler.New(domainService, typosquattingService, subdomainService, version, cfg, redisCache, cachedRepo)
+	h := handler.New(domainService, typosquattingService, version, cfg, redisCache, cachedRepo)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 

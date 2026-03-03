@@ -20,25 +20,19 @@ type TyposquattingLookupService interface {
 	Lookup(ctx context.Context, domainName string, checkLive bool, depth string) (*domain.TyposquattingResponse, bool)
 }
 
-type SubdomainLookupService interface {
-	Lookup(ctx context.Context, domainName string, checkLive bool) (*domain.SubdomainResponse, bool)
-}
-
 type Handler struct {
 	domainService        DomainLookupService
 	typosquattingService TyposquattingLookupService
-	subdomainService     SubdomainLookupService
 	version              string
 	cfg                  *viper.Viper
 	redisCache           *cache.RedisCache
 	cachedRepo           *auth.CachedRepository
 }
 
-func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, subdomainService SubdomainLookupService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
+func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
 	return &Handler{
 		domainService:        domainService,
 		typosquattingService: typosquattingService,
-		subdomainService:     subdomainService,
 		version:              version,
 		cfg:                  cfg,
 		redisCache:           redisCache,
@@ -69,5 +63,4 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin
 	v1.GET("/info", middleware.RequireFeatures("admin"), h.Info)
 	v1.POST("/domain/lookup", middleware.RequireFeatures("admin", "lookup"), h.DomainLookup)
 	v1.POST("/domain/typosquatting", middleware.RequireFeatures("admin", "typosquatting"), h.TyposquattingLookup)
-	v1.POST("/domain/subdomains", middleware.RequireFeatures("admin", "subdomain"), h.SubdomainLookup)
 }

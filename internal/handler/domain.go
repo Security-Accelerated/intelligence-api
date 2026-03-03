@@ -39,10 +39,11 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		return
 	}
 
-	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation, EmailSecurity: req.EmailSecurity}
+	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation, EmailSecurity: req.EmailSecurity, Subdomains: req.Subdomains}
 	c.Set("screenshot_requested", req.Screenshot)
 	c.Set("reputation_requested", req.Reputation)
 	c.Set("email_security_requested", req.EmailSecurity)
+	c.Set("subdomain_requested", req.Subdomains)
 
 	if req.Screenshot && tierStr != "premium" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a premium tier subscription"})

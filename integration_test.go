@@ -51,7 +51,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	mr := miniredis.RunT(t)
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
 
-	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second)
+	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -94,6 +94,16 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		}, nil
 	})
 
+	svc.SetSubdomainLookup(func(_ context.Context, d string, _ domain.SubdomainOptions) (*domain.SubdomainInfo, error) {
+		return &domain.SubdomainInfo{
+			Count: 2,
+			Subdomains: []domain.SubdomainEntry{
+				{Domain: "www." + d, Source: "crt.sh"},
+				{Domain: "mail." + d, Source: "crt.sh"},
+			},
+		}, nil
+	})
+
 	typosquattingSvc := service.NewTyposquattingService(rc, 5*time.Minute, 30*time.Second, 500, 20)
 	typosquattingSvc.SetLookup(func(_ context.Context, d string, opts domain.TyposquattingOptions) (*domain.TyposquattingResponse, error) {
 		return &domain.TyposquattingResponse{
@@ -107,18 +117,6 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		}, nil
 	})
 
-	subdomainSvc := service.NewSubdomainService(rc, 5*time.Minute, 30*time.Second, 500, 20)
-	subdomainSvc.SetLookup(func(_ context.Context, d string, opts domain.SubdomainOptions) (*domain.SubdomainResponse, error) {
-		return &domain.SubdomainResponse{
-			Domain: d,
-			Count:  2,
-			Subdomains: []domain.SubdomainEntry{
-				{Domain: "www." + d, Source: "crt.sh"},
-				{Domain: "mail." + d, Source: "crt.sh"},
-			},
-		}, nil
-	})
-
 	repo := newStubRepo()
 	cachedRepo := auth.NewCachedRepository(repo, 5*time.Minute)
 
@@ -126,7 +124,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 
 	r := gin.New()
 	r.Use(middleware.RequestLoggerWithLogger(nop))
-	h := handler.New(svc, typosquattingSvc, subdomainSvc, "test", nil, rc, cachedRepo)
+	h := handler.New(svc, typosquattingSvc, "test", nil, rc, cachedRepo)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, middleware.APIKeyAuthWithLogger(cachedRepo, nop))
 
@@ -855,14 +853,14 @@ func TestIntegration_EmailSecurity_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-// --- Subdomain Enumeration ---
+// --- Subdomain Enumeration (via domain lookup) ---
 
-func TestIntegration_Subdomain_PremiumCanAccess(t *testing.T) {
+func TestIntegration_Subdomain_IncludedWhenRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/subdomains",
-		strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"subdomains":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -871,89 +869,68 @@ func TestIntegration_Subdomain_PremiumCanAccess(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.SubdomainResponse
+	var resp []*domain.DomainResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	if resp[0].Subdomains == nil {
+		t.Fatal("expected subdomains to be populated")
 	}
-	if resp[0].Count != 2 {
-		t.Errorf("Count = %d, want 2", resp[0].Count)
+	if resp[0].Subdomains.Count != 2 {
+		t.Errorf("Subdomains.Count = %d, want 2", resp[0].Subdomains.Count)
 	}
-	if len(resp[0].Subdomains) != 2 {
-		t.Errorf("len(Subdomains) = %d, want 2", len(resp[0].Subdomains))
+	if len(resp[0].Subdomains.Subdomains) != 2 {
+		t.Errorf("len(Subdomains.Subdomains) = %d, want 2", len(resp[0].Subdomains.Subdomains))
 	}
 }
 
-func TestIntegration_Subdomain_LookupKeyGets403(t *testing.T) {
+func TestIntegration_Subdomain_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/subdomains",
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-lookup-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-}
-
-func TestIntegration_Subdomain_CacheRoundTrip(t *testing.T) {
-	r, _ := setupRouter(t)
-	body := `{"domains":["example.com"]}`
-
-	// First request — cache miss
-	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/subdomains", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w1, req1)
-
-	if w1.Code != http.StatusOK {
-		t.Fatalf("first: status = %d, want %d", w1.Code, http.StatusOK)
-	}
-
-	var resp1 []*domain.SubdomainResponse
-	json.Unmarshal(w1.Body.Bytes(), &resp1)
-	if resp1[0].CacheHit {
-		t.Error("first request should be a cache miss")
-	}
-
-	// Second request — should be served from cache
-	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/subdomains", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w2, req2)
-
-	if w2.Code != http.StatusOK {
-		t.Fatalf("second: status = %d, want %d", w2.Code, http.StatusOK)
-	}
-
-	var resp2 []*domain.SubdomainResponse
-	json.Unmarshal(w2.Body.Bytes(), &resp2)
-	if !resp2[0].CacheHit {
-		t.Error("second request should be a cache hit")
-	}
-}
-
-func TestIntegration_Subdomain_SingleInvalidDomain(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/subdomains",
-		strings.NewReader(`{"domains":["notadomain"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Subdomains != nil {
+		t.Error("expected subdomains to be nil when not requested")
+	}
+}
+
+func TestIntegration_Subdomain_BasicTierCanAccess(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"subdomains":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Subdomains == nil {
+		t.Fatal("expected subdomains to be populated for basic tier")
 	}
 }

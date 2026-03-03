@@ -109,11 +109,25 @@ func failEmailSecurity(_ context.Context, _ string) (*domain.EmailSecurityInfo, 
 	return nil, errors.New("email_security failed")
 }
 
+func okSubdomains(_ context.Context, _ string, _ domain.SubdomainOptions) (*domain.SubdomainInfo, error) {
+	return &domain.SubdomainInfo{
+		Count: 2,
+		Subdomains: []domain.SubdomainEntry{
+			{Domain: "www.example.com", Source: "crt.sh"},
+			{Domain: "mail.example.com", Source: "crt.sh"},
+		},
+	}, nil
+}
+func failSubdomains(_ context.Context, _ string, _ domain.SubdomainOptions) (*domain.SubdomainInfo, error) {
+	return nil, errors.New("subdomains failed")
+}
+
 func newTestService(mc *mockCache) *DomainService {
 	return &DomainService{
 		cache:               mc,
 		cacheTTL:            5 * time.Minute,
 		screenshotTimeout:   15 * time.Second,
+		subdomainMaxResults: 500,
 		lookupWhois:         okWhois,
 		lookupDNS:           okDNS,
 		lookupSSL:           okSSL,
@@ -121,6 +135,7 @@ func newTestService(mc *mockCache) *DomainService {
 		lookupScreenshot:    okScreenshot,
 		lookupReputation:    okReputation,
 		lookupEmailSecurity: okEmailSecurity,
+		lookupSubdomains:    okSubdomains,
 	}
 }
 
@@ -631,5 +646,96 @@ func TestLookup_SetEmailSecurityLookup(t *testing.T) {
 	svc.Lookup(context.Background(), "example.com", emailSecurityOpts())
 	if !called {
 		t.Error("expected custom email security lookup to be called")
+	}
+}
+
+// --- Subdomain tests ---
+
+func subdomainsOpts() domain.LookupOptions { return domain.LookupOptions{Subdomains: true} }
+
+func TestLookup_Subdomains_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", subdomainsOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.Subdomains == nil {
+		t.Fatal("expected Subdomains to be populated")
+	}
+	if resp.Subdomains.Count != 2 {
+		t.Errorf("Subdomains.Count = %d, want 2", resp.Subdomains.Count)
+	}
+	if len(resp.Subdomains.Subdomains) != 2 {
+		t.Errorf("len(Subdomains.Subdomains) = %d, want 2", len(resp.Subdomains.Subdomains))
+	}
+}
+
+func TestLookup_Subdomains_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.Subdomains != nil {
+		t.Error("expected Subdomains to be nil when not requested")
+	}
+}
+
+func TestLookup_Subdomains_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupSubdomains = failSubdomains
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", subdomainsOpts())
+	if resp.Subdomains != nil {
+		t.Error("expected Subdomains to be nil on failure")
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if e.Lookup == "subdomains" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected a subdomains error in resp.Errors")
+	}
+}
+
+func TestLookup_Subdomains_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	svc.Lookup(context.Background(), "example.com", subdomainsOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:subdomains"]; !ok {
+		t.Error("expected cache entry for subdomains key 'example.com:subdomains'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_SetSubdomainLookup(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	called := false
+	svc.SetSubdomainLookup(func(_ context.Context, _ string, _ domain.SubdomainOptions) (*domain.SubdomainInfo, error) {
+		called = true
+		return &domain.SubdomainInfo{}, nil
+	})
+
+	svc.Lookup(context.Background(), "example.com", subdomainsOpts())
+	if !called {
+		t.Error("expected custom subdomain lookup to be called")
 	}
 }
