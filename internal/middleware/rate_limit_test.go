@@ -172,7 +172,8 @@ func TestRateLimit_AdminTier_Bypassed(t *testing.T) {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("api_key_id", 1)
-		c.Set("api_key_tier", "admin")
+		c.Set("api_key_tier", "premium")
+		c.Set("api_key_roles", []string{"admin", "domain"})
 		c.Next()
 	})
 	r.Use(RateLimitWithLogger(client, cfg, logger))
@@ -181,7 +182,7 @@ func TestRateLimit_AdminTier_Bypassed(t *testing.T) {
 	})
 
 	// With limit=1, a second request would normally be rejected.
-	// Admin tier should bypass rate limiting entirely.
+	// Admin role should bypass rate limiting entirely.
 	for i := 0; i < 5; i++ {
 		w := doRequest(r)
 		if w.Code != http.StatusOK {

@@ -40,9 +40,15 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 		tier, _ := c.Get("api_key_tier")
 		tierStr, _ := tier.(string)
 
-		if tierStr == "admin" {
-			c.Next()
-			return
+		if roles, ok := c.Get("api_key_roles"); ok {
+			if rs, ok := roles.([]string); ok {
+				for _, r := range rs {
+					if r == "admin" {
+						c.Next()
+						return
+					}
+				}
+			}
 		}
 
 		limit := cfg.Basic
