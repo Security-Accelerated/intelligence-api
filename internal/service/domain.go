@@ -24,7 +24,7 @@ type DomainService struct {
 	lookupSSL        func(ctx context.Context, d string) (*domain.SSLInfo, error)
 	lookupHeaders    func(ctx context.Context, d string) (*domain.HeadersInfo, error)
 	lookupScreenshot func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
-	lookupReputation  func(ctx context.Context, d string) (*domain.ReputationInfo, error)
+	lookupReputation  func(ctx context.Context, d string) (*domain.ReputationResult, []domain.LookupError)
 }
 
 func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration) *DomainService {
@@ -47,7 +47,7 @@ func (s *DomainService) SetLookups(
 	ssl func(context.Context, string) (*domain.SSLInfo, error),
 	headers func(context.Context, string) (*domain.HeadersInfo, error),
 	screenshot func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error),
-	reputation func(context.Context, string) (*domain.ReputationInfo, error),
+	reputation func(context.Context, string) (*domain.ReputationResult, []domain.LookupError),
 ) {
 	s.lookupWhois = whois
 	s.lookupDNS = dns
@@ -180,16 +180,10 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			result, err := s.lookupReputation(ctx, domainName)
+			result, errs := s.lookupReputation(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
-			if err != nil {
-				resp.Errors = append(resp.Errors, domain.LookupError{
-					Lookup:  "reputation",
-					Message: err.Error(),
-				})
-				return
-			}
+			resp.Errors = append(resp.Errors, errs...)
 			resp.Reputation = result
 		}()
 	}

@@ -65,8 +65,17 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
 			return &domain.ScreenshotInfo{StatusCode: 200, PNG: "c3R1Yg=="}, nil
 		},
-		func(_ context.Context, _ string) (*domain.ReputationInfo, error) {
-			return &domain.ReputationInfo{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"}, nil
+		func(_ context.Context, _ string) (*domain.ReputationResult, []domain.LookupError) {
+			return &domain.ReputationResult{
+				Score: 35,
+				Risk:  "medium",
+				Providers: []*domain.ProviderResult{
+					{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"},
+					{Listed: false, Provider: "surbl"},
+					{Listed: false, Provider: "uribl"},
+					{Listed: false, Provider: "spamhaus_zen"},
+				},
+			}, nil
 		},
 	)
 
@@ -586,14 +595,18 @@ func TestIntegration_Reputation_PremiumCanAccess(t *testing.T) {
 	if resp[0].Reputation == nil {
 		t.Fatal("expected reputation to be populated for premium customer")
 	}
-	if !resp[0].Reputation.Listed {
-		t.Error("expected Reputation.Listed = true")
+	if resp[0].Reputation.Score != 35 {
+		t.Errorf("Reputation.Score = %d, want 35", resp[0].Reputation.Score)
 	}
-	if resp[0].Reputation.Category != "phishing" {
-		t.Errorf("Reputation.Category = %q, want %q", resp[0].Reputation.Category, "phishing")
+	if resp[0].Reputation.Risk != "medium" {
+		t.Errorf("Reputation.Risk = %q, want %q", resp[0].Reputation.Risk, "medium")
 	}
-	if resp[0].Reputation.Provider != "spamhaus_dbl" {
-		t.Errorf("Reputation.Provider = %q, want %q", resp[0].Reputation.Provider, "spamhaus_dbl")
+	if len(resp[0].Reputation.Providers) != 4 {
+		t.Fatalf("len(Reputation.Providers) = %d, want 4", len(resp[0].Reputation.Providers))
+	}
+	dbl := resp[0].Reputation.Providers[0]
+	if !dbl.Listed || dbl.Category != "phishing" || dbl.Provider != "spamhaus_dbl" {
+		t.Errorf("first provider = %+v, want listed phishing from spamhaus_dbl", dbl)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -74,11 +75,29 @@ func failScreenshot(_ context.Context, _ string, _ time.Duration) (*domain.Scree
 	return nil, errors.New("screenshot failed")
 }
 
-func okReputation(_ context.Context, _ string) (*domain.ReputationInfo, error) {
-	return &domain.ReputationInfo{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"}, nil
+func okReputation(_ context.Context, _ string) (*domain.ReputationResult, []domain.LookupError) {
+	return &domain.ReputationResult{
+		Score: 35,
+		Risk:  "medium",
+		Providers: []*domain.ProviderResult{
+			{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"},
+			{Listed: false, Provider: "surbl"},
+			{Listed: false, Provider: "uribl"},
+			{Listed: false, Provider: "spamhaus_zen"},
+		},
+	}, nil
 }
-func failReputation(_ context.Context, _ string) (*domain.ReputationInfo, error) {
-	return nil, errors.New("reputation failed")
+func failReputation(_ context.Context, _ string) (*domain.ReputationResult, []domain.LookupError) {
+	return &domain.ReputationResult{
+		Score:     0,
+		Risk:      "clean",
+		Providers: nil,
+	}, []domain.LookupError{
+		{Lookup: "reputation:spamhaus_dbl", Message: "spamhaus_dbl lookup: connection refused"},
+		{Lookup: "reputation:surbl", Message: "surbl lookup: connection refused"},
+		{Lookup: "reputation:uribl", Message: "uribl lookup: connection refused"},
+		{Lookup: "reputation:spamhaus_zen", Message: "spamhaus_zen lookup: connection refused"},
+	}
 }
 
 func newTestService(mc *mockCache) *DomainService {
@@ -361,14 +380,14 @@ func TestLookup_Reputation_Populated(t *testing.T) {
 	if resp.Reputation == nil {
 		t.Fatal("expected Reputation to be populated")
 	}
-	if !resp.Reputation.Listed {
-		t.Error("expected Reputation.Listed = true")
+	if resp.Reputation.Score != 35 {
+		t.Errorf("Reputation.Score = %d, want 35", resp.Reputation.Score)
 	}
-	if resp.Reputation.Category != "phishing" {
-		t.Errorf("Reputation.Category = %q, want %q", resp.Reputation.Category, "phishing")
+	if resp.Reputation.Risk != "medium" {
+		t.Errorf("Reputation.Risk = %q, want %q", resp.Reputation.Risk, "medium")
 	}
-	if resp.Reputation.Provider != "spamhaus_dbl" {
-		t.Errorf("Reputation.Provider = %q, want %q", resp.Reputation.Provider, "spamhaus_dbl")
+	if len(resp.Reputation.Providers) != 4 {
+		t.Fatalf("len(Reputation.Providers) = %d, want 4", len(resp.Reputation.Providers))
 	}
 }
 
@@ -388,18 +407,59 @@ func TestLookup_Reputation_Failure(t *testing.T) {
 	svc.lookupReputation = failReputation
 
 	resp, _ := svc.Lookup(context.Background(), "example.com", reputationOpts())
-	if resp.Reputation != nil {
-		t.Error("expected Reputation to be nil on failure")
+	if resp.Reputation == nil {
+		t.Fatal("expected Reputation to be non-nil (always returned)")
+	}
+	if resp.Reputation.Score != 0 {
+		t.Errorf("expected Score = 0 when all providers fail, got %d", resp.Reputation.Score)
 	}
 	found := false
 	for _, e := range resp.Errors {
-		if e.Lookup == "reputation" {
+		if strings.HasPrefix(e.Lookup, "reputation:") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("expected a reputation error in resp.Errors")
+		t.Error("expected reputation provider errors in resp.Errors")
+	}
+}
+
+func TestLookup_Reputation_PartialProviderFailure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupReputation = func(_ context.Context, _ string) (*domain.ReputationResult, []domain.LookupError) {
+		return &domain.ReputationResult{
+			Score: 35,
+			Risk:  "medium",
+			Providers: []*domain.ProviderResult{
+				{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"},
+				{Listed: false, Provider: "spamhaus_zen"},
+			},
+		}, []domain.LookupError{
+			{Lookup: "reputation:surbl", Message: "surbl lookup: timeout"},
+			{Lookup: "reputation:uribl", Message: "uribl lookup: rate limited"},
+		}
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", reputationOpts())
+	if resp.Reputation == nil {
+		t.Fatal("expected Reputation to be populated")
+	}
+	if resp.Reputation.Score != 35 {
+		t.Errorf("Reputation.Score = %d, want 35", resp.Reputation.Score)
+	}
+	if len(resp.Reputation.Providers) != 2 {
+		t.Errorf("len(Providers) = %d, want 2", len(resp.Reputation.Providers))
+	}
+	reputationErrs := 0
+	for _, e := range resp.Errors {
+		if strings.HasPrefix(e.Lookup, "reputation:") {
+			reputationErrs++
+		}
+	}
+	if reputationErrs != 2 {
+		t.Errorf("expected 2 reputation errors, got %d", reputationErrs)
 	}
 }
 

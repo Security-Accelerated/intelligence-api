@@ -21,15 +21,21 @@ type DomainResponse struct {
 	SSL        *SSLInfo        `json:"ssl,omitempty"`
 	Headers    *HeadersInfo    `json:"headers,omitempty"`
 	Screenshot *ScreenshotInfo `json:"screenshot,omitempty"`
-	Reputation *ReputationInfo `json:"reputation,omitempty"`
+	Reputation *ReputationResult `json:"reputation,omitempty"`
 	Errors     []LookupError   `json:"errors,omitempty"`
 }
 
-type ReputationInfo struct {
+type ProviderResult struct {
 	Listed     bool   `json:"listed"`
 	Category   string `json:"category,omitempty"`
 	Provider   string `json:"provider"`
 	ReturnCode string `json:"return_code,omitempty"`
+}
+
+type ReputationResult struct {
+	Score     int               `json:"score"`
+	Risk      string            `json:"risk"`
+	Providers []*ProviderResult `json:"providers"`
 }
 
 // --- Typosquatting (separate endpoint) ---

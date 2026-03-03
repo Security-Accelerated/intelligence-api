@@ -52,7 +52,7 @@ The `domains` field accepts an array of domain names. Each entry accepts raw dom
 
 The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
 
-The optional `reputation` field (default `false`) checks each domain against the Spamhaus DBL blocklist via DNS. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
+The optional `reputation` field (default `false`) checks each domain against multiple DNS-based blocklists concurrently (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) and returns a computed risk score. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
 
 **Example:**
 ```sh
@@ -73,7 +73,16 @@ curl -X POST http://localhost:8080/api/v1/domain \
     "ssl": { "subject": "...", "issuer": "...", "..." : "..." },
     "headers": { "status_code": 200, "headers": {}, "security_headers": {} },
     "screenshot": { "status_code": 200, "png": "<base64-encoded PNG>" },
-    "reputation": { "listed": true, "category": "phishing", "provider": "spamhaus_dbl", "return_code": "127.0.1.4" },
+    "reputation": {
+      "score": 35,
+      "risk": "medium",
+      "providers": [
+        { "listed": true, "category": "phishing", "provider": "spamhaus_dbl", "return_code": "127.0.1.4" },
+        { "listed": false, "provider": "surbl" },
+        { "listed": false, "provider": "uribl" },
+        { "listed": false, "provider": "spamhaus_zen" }
+      ]
+    },
     "errors": []
   }
 ]
@@ -233,14 +242,33 @@ The screenshot lookup first tries HTTPS, then falls back to HTTP. Non-200 respon
 
 ### `reputation` — Domain Reputation (Premium Only)
 
-Checks whether the domain is listed on the Spamhaus Domain Block List (DBL) via DNS. Only present when `"reputation": true` is included in the request.
+Checks the domain against 4 DNS-based blocklists concurrently and computes a risk score. Only present when `"reputation": true` is included in the request.
 
 | Field | What it means |
 |-------|---------------|
-| `listed` | Whether the domain appears on the blocklist (`true` = listed, `false` = clean) |
-| `category` | The classification if listed: `spam`, `phishing`, `malware`, `botnet_cc`, `abused_spam`, `abused_spammed_redirector`, `abused_phishing`, `abused_malware`, `abused_botnet_cc`, or `unknown` |
-| `provider` | Always `spamhaus_dbl` — identifies which blocklist was queried |
-| `return_code` | The raw DNS return code (e.g. `127.0.1.4` for phishing). Only present when listed. |
+| `score` | Computed risk score from 0 (clean) to 100 (maximum risk) |
+| `risk` | Risk level: `clean` (0), `low` (1–29), `medium` (30–59), `high` (60–100) |
+| `providers` | Array of per-provider results |
+
+Each provider entry contains:
+
+| Field | What it means |
+|-------|---------------|
+| `listed` | Whether the domain appears on this blocklist |
+| `category` | The classification if listed (varies by provider) |
+| `provider` | Which blocklist was queried |
+| `return_code` | The raw DNS return code. Only present when listed. |
+
+**Providers:**
+
+| Provider | Type | Categories |
+|----------|------|-----------|
+| `spamhaus_dbl` | Domain blocklist | `spam`, `phishing`, `malware`, `botnet_cc`, `abused_spam`, `abused_spammed_redirector`, `abused_phishing`, `abused_malware`, `abused_botnet_cc` |
+| `surbl` | Domain blocklist | `malware`, `abuse`, `cracked`, `suspicious` (bitmask — categories stack with `+`, e.g. `malware+abuse`) |
+| `uribl` | Domain blocklist | `spam`, `grey`, `red` |
+| `spamhaus_zen` | IP-based (resolves domain A records first) | `sbl_spam`, `xbl_exploits`, `pbl_policy` |
+
+**Scoring:** Each provider listing adds points based on category severity. Multiple listings across providers stack. The score is capped at 100. Higher-trust, domain-specific providers (Spamhaus DBL) carry more weight than IP-based providers (Spamhaus ZEN).
 
 ### Typosquatting Detection (`/api/v1/domain/typosquatting`)
 
