@@ -15,6 +15,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
+	"go.uber.org/zap"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
@@ -96,14 +97,16 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	repo := newStubRepo()
 	cachedRepo := auth.NewCachedRepository(repo, 5*time.Minute)
 
+	nop := zap.NewNop()
+
 	r := gin.New()
-	r.Use(middleware.RequestLogger())
+	r.Use(middleware.RequestLoggerWithLogger(nop))
 	h := handler.New(svc, typosquattingSvc, "test", nil, rc, cachedRepo)
 	h.RegisterRoutes(r)
-	h.RegisterProtectedRoutes(r, middleware.APIKeyAuth(cachedRepo))
+	h.RegisterProtectedRoutes(r, middleware.APIKeyAuthWithLogger(cachedRepo, nop))
 
 	admin := r.Group("/api/v1/admin")
-	admin.Use(middleware.APIKeyAuth(cachedRepo), middleware.RequireRoles("admin"))
+	admin.Use(middleware.APIKeyAuthWithLogger(cachedRepo, nop), middleware.RequireRoles("admin"))
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
 		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
