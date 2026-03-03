@@ -10,6 +10,7 @@ import (
 
 func (h *Handler) TyposquattingLookup(c *gin.Context) {
 	c.Set("typosquatting_requested", true)
+	c.Set("check_live_requested", false)
 
 	tier, _ := c.Get("api_key_tier")
 	if tier != "premium" {
@@ -22,6 +23,8 @@ func (h *Handler) TyposquattingLookup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: domains field is required and must be a non-empty array"})
 		return
 	}
+
+	c.Set("check_live_requested", req.CheckLive)
 
 	depth := req.Depth
 	if depth == "" {

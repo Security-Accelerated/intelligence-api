@@ -318,7 +318,7 @@ func TestTyposquattingLookup_CacheHitPopulated(t *testing.T) {
 	}
 }
 
-var typosquattingLoggerKeys = []string{"typosquatting_requested", "cache_hit"}
+var typosquattingLoggerKeys = []string{"typosquatting_requested", "cache_hit", "check_live_requested"}
 
 func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)

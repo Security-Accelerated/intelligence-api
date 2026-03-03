@@ -41,6 +41,10 @@ func RequestLogger() gin.HandlerFunc {
 			fields = append(fields, zap.Bool("reputation_requested", reputation.(bool)))
 		}
 
+		if checkLive, exists := c.Get("check_live_requested"); exists {
+			fields = append(fields, zap.Bool("check_live_requested", checkLive.(bool)))
+		}
+
 		logger.Info("request", fields...)
 	}
 }
