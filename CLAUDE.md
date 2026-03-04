@@ -1,0 +1,135 @@
+# CLAUDE.md — Intelligence API
+
+## Project Overview
+
+Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, and subdomain lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
+
+**Module:** `github.com/securityaccelerateddevelopment/intelligence-api`
+
+## Architecture
+
+```
+cmd/api/main.go              → Entry point, version via ldflags
+internal/app/app.go           → Dependency wiring, bootstrap, shutdown
+internal/handler/             → HTTP handlers, route registration, request validation
+internal/service/             → Business logic, lookup orchestration, caching
+internal/domain/              → Lookup implementations + domain types (model.go)
+internal/middleware/           → Auth, rate limiting, logging, security headers, body limit, client request ID
+internal/httpapi/             → Gin router assembly, middleware chain, server lifecycle
+internal/cache/               → Cache interface + Redis implementation
+internal/auth/                → Customer model, PostgreSQL repository, in-memory cached repository, key hashing
+internal/safenet/             → SSRF prevention (blocks private/reserved IPs at dial time)
+internal/logging/             → Zap logger init (ECS format in production, pretty in dev)
+internal/config/              → Viper config with YAML files + env var overrides
+migrations/                   → PostgreSQL schema (applied via Docker initdb on first start only)
+scripts/                      → docker-reset.sh (dev), smoke-test.sh (dev)
+docs/                         → Sales slick, developer guide
+```
+
+## Key Design Decisions
+
+### Function-based dependency injection
+Services use function fields (`lookupWhois`, `lookupDNS`, etc.) instead of interfaces for each lookup. The constructor wires in real implementations from the `domain` package. Tests swap them via `SetLookups()` and per-feature setters (`SetEmailSecurityLookup`, `SetSubdomainLookup`). This avoids interface pollution while keeping tests fully deterministic.
+
+### Concurrent fan-out with shared response
+`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains) only spawn when requested. A 30-second context timeout covers the entire operation.
+
+### Partial failure tolerance
+Each lookup goroutine catches its own errors. Failures are appended to `resp.Errors` with sanitized messages — the rest of the response still returns. Full errors are logged server-side; users see only safe summaries via `sanitizeErr()`.
+
+### Composite cache keys
+Cache keys are built from the domain name plus sorted feature suffixes: `example.com:email_security+reputation`. This ensures each feature combination caches independently. Typosquatting uses its own key format: `typosquatting:example.com:shallow`.
+
+### SSRF prevention at the dialer level
+The `safenet` package provides a `DialControl` function that rejects connections to private, loopback, link-local, multicast, unspecified, and CGNAT IPs. It fires after DNS resolution (no TOCTOU race). All HTTP clients in the `domain` package use `safenet.SafeDialer()` via shared transports in `domain/transport.go`.
+
+### Hashed API keys
+Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after role changes.
+
+### Tier-based access control
+Two dimensions: **features** control which endpoints a key can access (`admin`, `lookup`, `typosquatting`); **tier** controls access to premium options within endpoints (`basic` vs `premium`). Rate limits are also tier-aware. Admins bypass rate limiting entirely.
+
+### Error sanitization
+`sanitizeErr()` strips internal error details before including them in API responses. `safenet.BlockedError` gets a specific user-friendly message. Other errors are truncated to the final segment after `: `. Full context is always logged server-side.
+
+## Middleware Chain (order matters)
+
+1. `gin.Recovery()` — catches panics, returns 500
+2. `SecurityHeaders()` — adds defensive headers (X-Content-Type-Options, X-Frame-Options, Cache-Control: no-store)
+3. `BodyLimit(1MB)` — rejects oversized request bodies
+4. `ClientRequestID()` — validates/echoes X-Client-Request-ID header, sets context key
+5. `RequestLogger()` — structured request logging with context keys (runs after `c.Next()` returns)
+6. *(protected routes only)* `APIKeyAuth()` — validates key, sets api_key_id/tier/features in context
+7. *(protected routes only)* `RateLimit()` — per-key sliding window via Redis, fail-open
+8. *(specific routes)* `RequireFeatures()` — checks feature set against route requirements
+
+## Development Workflow
+
+- `make test` — unit tests with race detector (always run before presenting work as done)
+- `make test-integration` — integration tests using miniredis + stub auth
+- `make docker-reset` — **dev only**, wipes volumes and rebuilds everything
+- `./scripts/smoke-test.sh` — **dev only**, hits every endpoint with every key/tier combo
+- `make deploy` — deploys to Fly.io with git version baked in
+- `make release V=v0.X.Y` — tags and pushes a release
+- `go mod tidy` — always run before committing
+
+### Commit conventions
+- Commit directly to main or short-lived branches that merge immediately
+- Only push to `main` — push to `release` only when explicitly asked
+- No Co-Authored-By lines
+- Keep README.md in sync when changes affect endpoints, config, make targets, or structure
+
+## Testing Strategy
+
+### Unit tests
+Each package has `*_test.go` files. Handler tests use `httptest` with a gin test router. Service tests swap lookup functions via `SetLookups()`. Middleware tests inject `zap.NewNop()` via `*WithLogger()` variants.
+
+### Integration tests
+`integration_test.go` at project root, gated behind `//go:build integration`. Uses `miniredis` for an in-memory Redis and `stubRepo` for auth. Tests the full middleware → handler → service → (stubbed) domain flow. Covers auth, feature gates, tier access, caching, validation, and rate limiting.
+
+### Smoke tests
+`scripts/smoke-test.sh` hits a running Docker instance with curl. Checks every endpoint with every API key and verifies expected HTTP status codes. Catches issues that unit/integration tests miss (like database migration problems).
+
+## Config
+
+Viper-based. Reads YAML from `/etc/security-accelerated/intelligence-api.yaml` (production) or `config/` (relative). Environment variables override config: `POSTGRES_HOST` → `postgres.host`. Defaults are set in `config/config.go` for all values.
+
+Sample config: `internal/config/sample-config.yml`
+
+## Database
+
+PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration.
+
+Tables: `customers`, `api_keys` (key_hash), `customer_features` (customer_id, feature).
+
+## Infrastructure
+
+- **Docker Compose** for local dev (API + Redis + PostgreSQL with healthchecks)
+- **Fly.io** for production deployment
+- **GitHub Actions** builds Docker images on push to main or version tags, pushes to GHCR
+- Version is baked in at build time via `-ldflags "-X main.version=..."` — passed as Docker build arg
+
+## Adding a New Lookup Type
+
+1. Create `internal/domain/newlookup.go` with a function matching the pattern: `func LookupThing(ctx context.Context, domain string) (*ThingInfo, error)`
+2. Add the result type to `internal/domain/model.go`
+3. Add a function field to `DomainService` in `internal/service/domain.go`
+4. Wire it in `NewDomainService()` constructor
+5. Add a goroutine in `service.Lookup()` following the existing pattern (wg.Add, go func, mu.Lock)
+6. If opt-in, add a bool to `DomainRequest`, `LookupOptions`, and the cache key builder
+7. Update handler to pass the option through
+8. Add a setter method for tests (`SetThingLookup`)
+9. Update all test files that call `New()` or `SetLookups()`
+10. Update README, developer guide, integration tests
+
+## Adding a New Endpoint
+
+1. Define request/response types in `internal/domain/model.go`
+2. Create a service in `internal/service/`
+3. Add a handler method in `internal/handler/`
+4. Define a service interface in `internal/handler/handler.go`
+5. Register the route in `RegisterProtectedRoutes()` with appropriate `RequireFeatures()`
+6. Wire the service in `internal/app/app.go`
+7. Update handler `New()` signature and all test call sites
+8. Add context keys to `middleware/request_logger.go` if needed
+9. Update README, developer guide, api.http, smoke test, integration tests
