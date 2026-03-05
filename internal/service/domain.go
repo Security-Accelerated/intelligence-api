@@ -36,6 +36,7 @@ type DomainService struct {
 	cacheTTL          time.Duration
 	screenshotTimeout time.Duration
 	subdomainMaxResults int
+	ctLogsMaxEntries    int
 
 	lookupWhois      func(ctx context.Context, d string) (*domain.WhoisInfo, error)
 	lookupDNS        func(ctx context.Context, d string) (*domain.DNSInfo, error)
@@ -45,17 +46,23 @@ type DomainService struct {
 	lookupReputation     func(ctx context.Context, d string) (*domain.ReputationResult, []domain.LookupError)
 	lookupEmailSecurity  func(ctx context.Context, d string) (*domain.EmailSecurityInfo, error)
 	lookupSubdomains     func(ctx context.Context, d string, opts domain.SubdomainOptions) (*domain.SubdomainInfo, error)
+	lookupCTLogs         func(ctx context.Context, d string, maxEntries int) (*domain.CTLogsInfo, error)
+	lookupBGP            func(ctx context.Context, d string) (*domain.BGPInfo, error)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults int) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
+	}
+	if ctLogsMaxEntries <= 0 {
+		ctLogsMaxEntries = 100
 	}
 	return &DomainService{
 		cache:               c,
 		cacheTTL:            cacheTTL,
 		screenshotTimeout:   screenshotTimeout,
 		subdomainMaxResults: subdomainMaxResults,
+		ctLogsMaxEntries:    ctLogsMaxEntries,
 		lookupWhois:         domain.LookupWhois,
 		lookupDNS:           domain.LookupDNS,
 		lookupSSL:           domain.LookupSSL,
@@ -64,6 +71,8 @@ func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, 
 		lookupReputation:    domain.LookupReputation,
 		lookupEmailSecurity: domain.LookupEmailSecurity,
 		lookupSubdomains:    domain.LookupSubdomains,
+		lookupCTLogs:        domain.LookupCTLogs,
+		lookupBGP:           domain.LookupBGP,
 	}
 }
 
@@ -97,8 +106,28 @@ func (s *DomainService) SetSubdomainLookup(
 	s.lookupSubdomains = fn
 }
 
+// SetCTLogsLookup replaces the CT logs lookup function (for testing).
+func (s *DomainService) SetCTLogsLookup(
+	fn func(context.Context, string, int) (*domain.CTLogsInfo, error),
+) {
+	s.lookupCTLogs = fn
+}
+
+// SetBGPLookup replaces the BGP/ASN lookup function (for testing).
+func (s *DomainService) SetBGPLookup(
+	fn func(context.Context, string) (*domain.BGPInfo, error),
+) {
+	s.lookupBGP = fn
+}
+
 func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	var suffixes []string
+	if opts.BGP {
+		suffixes = append(suffixes, "bgp")
+	}
+	if opts.CTLogs {
+		suffixes = append(suffixes, "ct_logs")
+	}
 	if opts.EmailSecurity {
 		suffixes = append(suffixes, "email_security")
 	}
@@ -281,9 +310,47 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		}()
 	}
 
+	if opts.CTLogs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := s.lookupCTLogs(ctx, domainName, s.ctLogsMaxEntries)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "ct_logs"), zap.String("domain", domainName), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{
+					Lookup:  "ct_logs",
+					Message: sanitizeErr(err),
+				})
+				return
+			}
+			resp.CTLogs = result
+		}()
+	}
+
+	if opts.BGP {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := s.lookupBGP(ctx, domainName)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "bgp"), zap.String("domain", domainName), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{
+					Lookup:  "bgp",
+					Message: sanitizeErr(err),
+				})
+				return
+			}
+			resp.BGP = result
+		}()
+	}
+
 	wg.Wait()
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil
 	if hasData {
 		if data, err := json.Marshal(resp); err != nil {
 			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))

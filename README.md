@@ -1,7 +1,7 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, and subdomain enumeration lookups for one or more domains, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, subdomain enumeration, certificate transparency, and BGP/ASN lookups for one or more domains, with Redis caching.
 
 ## Authentication
 
@@ -13,7 +13,7 @@ Each customer has a `tier` that controls rate limits and access to premium optio
 
 | Tier | Capabilities |
 |------|-------------|
-| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) + subdomain enumeration |
+| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) + subdomain enumeration + CT logs + BGP/ASN |
 | `premium` | All basic capabilities + page screenshots + reputation checks |
 
 The tier is stored in the `customers` table. New customers default to `basic`.
@@ -64,7 +64,9 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
   "screenshot": true,
   "reputation": true,
   "email_security": true,
-  "subdomains": true
+  "subdomains": true,
+  "ct_logs": true,
+  "bgp": true
 }
 ```
 
@@ -77,6 +79,10 @@ The optional `reputation` field (default `false`) checks each domain against mul
 The optional `email_security` field (default `false`) checks SPF, DMARC, and DKIM records for each domain via DNS lookups. Available to **all tiers** (basic and premium). DKIM probes 8 common selectors (`google`, `default`, `selector1`, `selector2`, `k1`, `s1`, `mail`, `dkim`).
 
 The optional `subdomains` field (default `false`) enumerates subdomains via Certificate Transparency logs (crt.sh). Available to **all tiers**. Results are deduplicated, wildcards are filtered, and a hard cap (default 500, configurable via `subdomain.max_results`) prevents unbounded results.
+
+The optional `ct_logs` field (default `false`) queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Returns full certificate metadata (issuer, dates, serial number, SANs). Available to **all tiers**. Results are deduplicated by serial number, sorted newest-first, and capped (default 100, configurable via `ct_logs.max_entries`).
+
+The optional `bgp` field (default `false`) resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service for BGP/ASN information. Returns ASN number, IP prefix, country, registry, and organization name. Available to **all tiers**. Useful for identifying hosting providers and detecting bulletproof hosting.
 
 **Example:**
 ```sh
@@ -132,6 +138,33 @@ curl -X POST http://localhost:8080/api/v1/domain/lookup \
         { "domain": "api.example.com", "source": "crt.sh" },
         { "domain": "mail.example.com", "source": "crt.sh" },
         { "domain": "www.example.com", "source": "crt.sh" }
+      ]
+    },
+    "ct_logs": {
+      "count": 2,
+      "capped": false,
+      "entries": [
+        {
+          "logged_at": "2024-01-15T00:00:00",
+          "not_before": "2024-01-15T00:00:00",
+          "not_after": "2024-04-14T23:59:59",
+          "issuer": "C=US, O=Let's Encrypt, CN=R3",
+          "common_name": "example.com",
+          "name_value": "example.com",
+          "serial": "04:3a:f5:..."
+        }
+      ]
+    },
+    "bgp": {
+      "records": [
+        {
+          "ip": "93.184.216.34",
+          "asn": 15133,
+          "prefix": "93.184.216.0/24",
+          "country": "US",
+          "registry": "arin",
+          "description": "EDGECAST, US"
+        }
       ]
     },
     "errors": []
@@ -392,6 +425,51 @@ Each subdomain entry contains:
 | `domain` | The discovered subdomain |
 | `source` | Data source (`crt.sh` — Certificate Transparency logs) |
 
+### `ct_logs` — Certificate Transparency Logs (All Tiers)
+
+Queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Only present when `"ct_logs": true` is included in the request.
+
+| Field | What it means |
+|-------|---------------|
+| `count` | Total number of certificate entries returned |
+| `capped` | Whether the results cap was hit (results truncated) |
+| `entries` | Array of certificate log entries, sorted newest-first |
+
+Each entry contains:
+
+| Field | What it means |
+|-------|---------------|
+| `logged_at` | When the certificate was logged to the CT log |
+| `not_before` | Certificate validity start date |
+| `not_after` | Certificate validity end date |
+| `issuer` | Certificate Authority that issued the certificate |
+| `common_name` | The CN field of the certificate |
+| `name_value` | All names covered by the certificate (may include wildcards) |
+| `serial` | Unique serial number of the certificate |
+
+Useful for detecting phishing infrastructure (unexpected issuers), identifying related domains, and tracking certificate issuance patterns.
+
+### `bgp` — BGP / ASN Enrichment (All Tiers)
+
+Resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service. Only present when `"bgp": true` is included in the request.
+
+| Field | What it means |
+|-------|---------------|
+| `records` | Array of ASN records, deduplicated by ASN |
+
+Each record contains:
+
+| Field | What it means |
+|-------|---------------|
+| `ip` | The resolved IP address |
+| `asn` | Autonomous System Number |
+| `prefix` | IP prefix (CIDR notation) |
+| `country` | Country code of the ASN registration |
+| `registry` | Regional Internet Registry (arin, ripe, apnic, etc.) |
+| `description` | Organization name and country |
+
+Useful for identifying hosting providers, detecting bulletproof hosting, and pivot analysis. Multiple IPs sharing the same ASN are merged (only the first IP is shown).
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
@@ -402,7 +480,9 @@ Optional features use composite cache keys built from sorted feature suffixes. E
 - `domain:reputation` — base + reputation
 - `domain:screenshot` — base + screenshot
 - `domain:subdomains` — base + subdomain enumeration
-- `domain:email_security+reputation+screenshot+subdomains` — base + all optional features
+- `domain:bgp` — base + BGP/ASN
+- `domain:ct_logs` — base + CT logs
+- `domain:bgp+ct_logs+email_security+reputation+screenshot+subdomains` — base + all optional features
 
 Typosquatting results are cached under their own keys based on depth and check_live flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+check_live:example.com:deep`).
 
@@ -444,6 +524,7 @@ Config values:
 | `typosquatting.max_permutations` | `500` | Maximum number of permutations returned per domain |
 | `typosquatting.concurrency` | `20` | Max concurrent DNS/HTTP checks during active scanning |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
+| `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
 | `rate_limit.basic` | `30` | Requests per minute for basic tier customers |
 | `rate_limit.premium` | `120` | Requests per minute for premium tier customers |
 | `postgres.host` | `localhost` | PostgreSQL host |

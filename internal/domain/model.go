@@ -8,6 +8,8 @@ type DomainRequest struct {
 	Reputation    bool     `json:"reputation,omitempty"`
 	EmailSecurity bool     `json:"email_security,omitempty"`
 	Subdomains    bool     `json:"subdomains,omitempty"`
+	CTLogs        bool     `json:"ct_logs,omitempty"`
+	BGP           bool     `json:"bgp,omitempty"`
 }
 
 type LookupOptions struct {
@@ -15,6 +17,8 @@ type LookupOptions struct {
 	Reputation    bool
 	EmailSecurity bool
 	Subdomains    bool
+	CTLogs        bool
+	BGP           bool
 }
 
 type DomainResponse struct {
@@ -28,6 +32,8 @@ type DomainResponse struct {
 	Reputation    *ReputationResult  `json:"reputation,omitempty"`
 	EmailSecurity *EmailSecurityInfo `json:"email_security,omitempty"`
 	Subdomains    *SubdomainInfo     `json:"subdomains,omitempty"`
+	CTLogs        *CTLogsInfo        `json:"ct_logs,omitempty"`
+	BGP           *BGPInfo           `json:"bgp,omitempty"`
 	Errors        []LookupError      `json:"errors,omitempty"`
 }
 
@@ -195,4 +201,37 @@ type SubdomainEntry struct {
 
 type SubdomainOptions struct {
 	MaxResults int
+}
+
+// --- Certificate Transparency Logs (optional field on domain lookup) ---
+
+type CTLogsInfo struct {
+	Count   int          `json:"count"`
+	Capped  bool         `json:"capped"`
+	Entries []CTLogEntry `json:"entries"`
+}
+
+type CTLogEntry struct {
+	LoggedAt   string `json:"logged_at"`
+	NotBefore  string `json:"not_before"`
+	NotAfter   string `json:"not_after"`
+	Issuer     string `json:"issuer"`
+	CommonName string `json:"common_name"`
+	NameValue  string `json:"name_value"`
+	Serial     string `json:"serial"`
+}
+
+// --- BGP / ASN Enrichment (optional field on domain lookup) ---
+
+type BGPInfo struct {
+	Records []ASNRecord `json:"records"`
+}
+
+type ASNRecord struct {
+	IP          string `json:"ip"`
+	ASN         int    `json:"asn"`
+	Prefix      string `json:"prefix"`
+	Country     string `json:"country"`
+	Registry    string `json:"registry"`
+	Description string `json:"description"`
 }

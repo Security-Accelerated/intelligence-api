@@ -20,6 +20,8 @@ var ContextKeys = []string{
 	"email_security_requested",
 	"subdomain_requested",
 	"check_live_requested",
+	"ct_logs_requested",
+	"bgp_requested",
 }
 
 // IntContextKeys lists integer gin context keys logged per request.

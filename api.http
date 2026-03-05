@@ -165,6 +165,46 @@ X-API-Key: {{lookupKey}}
   "subdomains": true
 }
 
+### Domain lookup with CT logs (admin key)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "ct_logs": true
+}
+
+### Domain lookup with CT logs (lookup key - all tiers)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{lookupKey}}
+
+{
+  "domains": ["example.com"],
+  "ct_logs": true
+}
+
+### Domain lookup with BGP/ASN (admin key)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "bgp": true
+}
+
+### Domain lookup with BGP/ASN (lookup key - all tiers)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{lookupKey}}
+
+{
+  "domains": ["example.com"],
+  "bgp": true
+}
+
 ### Domain lookup - should return 401 (no key)
 POST {{host}}/api/v1/domain/lookup
 Content-Type: application/json

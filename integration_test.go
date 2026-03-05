@@ -51,7 +51,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	mr := miniredis.RunT(t)
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
 
-	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500)
+	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -100,6 +100,24 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 			Subdomains: []domain.SubdomainEntry{
 				{Domain: "www." + d, Source: "crt.sh"},
 				{Domain: "mail." + d, Source: "crt.sh"},
+			},
+		}, nil
+	})
+
+	svc.SetCTLogsLookup(func(_ context.Context, d string, _ int) (*domain.CTLogsInfo, error) {
+		return &domain.CTLogsInfo{
+			Count: 2,
+			Entries: []domain.CTLogEntry{
+				{LoggedAt: "2024-01-15T00:00:00", Issuer: "Let's Encrypt", CommonName: d, Serial: "abc123"},
+				{LoggedAt: "2023-06-01T00:00:00", Issuer: "DigiCert", CommonName: "*." + d, Serial: "def456"},
+			},
+		}, nil
+	})
+
+	svc.SetBGPLookup(func(_ context.Context, _ string) (*domain.BGPInfo, error) {
+		return &domain.BGPInfo{
+			Records: []domain.ASNRecord{
+				{IP: "93.184.216.34", ASN: 15133, Prefix: "93.184.216.0/24", Country: "US", Registry: "arin", Description: "EDGECAST, US"},
 			},
 		}, nil
 	})
@@ -932,5 +950,172 @@ func TestIntegration_Subdomain_BasicTierCanAccess(t *testing.T) {
 	}
 	if resp[0].Subdomains == nil {
 		t.Fatal("expected subdomains to be populated for basic tier")
+	}
+}
+
+// --- CT Logs ---
+
+func TestIntegration_CTLogs_IncludedWhenRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].CTLogs == nil {
+		t.Fatal("expected ct_logs to be populated")
+	}
+	if resp[0].CTLogs.Count != 2 {
+		t.Errorf("CTLogs.Count = %d, want 2", resp[0].CTLogs.Count)
+	}
+	if len(resp[0].CTLogs.Entries) != 2 {
+		t.Errorf("len(CTLogs.Entries) = %d, want 2", len(resp[0].CTLogs.Entries))
+	}
+}
+
+func TestIntegration_CTLogs_AbsentWhenNotRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].CTLogs != nil {
+		t.Error("expected ct_logs to be nil when not requested")
+	}
+}
+
+func TestIntegration_CTLogs_BasicTierCanAccess(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].CTLogs == nil {
+		t.Fatal("expected ct_logs to be populated for basic tier")
+	}
+}
+
+// --- BGP/ASN ---
+
+func TestIntegration_BGP_IncludedWhenRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].BGP == nil {
+		t.Fatal("expected bgp to be populated")
+	}
+	if len(resp[0].BGP.Records) != 1 {
+		t.Errorf("len(BGP.Records) = %d, want 1", len(resp[0].BGP.Records))
+	}
+	if resp[0].BGP.Records[0].ASN != 15133 {
+		t.Errorf("BGP.Records[0].ASN = %d, want 15133", resp[0].BGP.Records[0].ASN)
+	}
+	if resp[0].BGP.Records[0].Description != "EDGECAST, US" {
+		t.Errorf("BGP.Records[0].Description = %q, want %q", resp[0].BGP.Records[0].Description, "EDGECAST, US")
+	}
+}
+
+func TestIntegration_BGP_AbsentWhenNotRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].BGP != nil {
+		t.Error("expected bgp to be nil when not requested")
+	}
+}
+
+func TestIntegration_BGP_BasicTierCanAccess(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].BGP == nil {
+		t.Fatal("expected bgp to be populated for basic tier")
 	}
 }

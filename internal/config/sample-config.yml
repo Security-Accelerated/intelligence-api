@@ -35,6 +35,9 @@ typosquatting:
 subdomain:
   max_results: 500
 
+ct_logs:
+  max_entries: 100
+
 rate_limit:
   basic: 30
   premium: 120

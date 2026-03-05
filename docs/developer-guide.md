@@ -73,7 +73,9 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
   "screenshot": false,
   "reputation": false,
   "email_security": false,
-  "subdomains": false
+  "subdomains": false,
+  "ct_logs": false,
+  "bgp": false
 }
 ```
 
@@ -84,6 +86,8 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
 | `reputation` | bool | No | `false` | Check domain against threat blocklists (premium only) |
 | `email_security` | bool | No | `false` | Check SPF, DMARC, and DKIM records |
 | `subdomains` | bool | No | `false` | Enumerate subdomains via Certificate Transparency logs |
+| `ct_logs` | bool | No | `false` | Query Certificate Transparency logs for all issued certificates |
+| `bgp` | bool | No | `false` | Look up BGP/ASN information for the domain's IP addresses |
 
 Domain names are normalized automatically: `http://` and `https://` prefixes are stripped, trailing slashes are removed. Raw IP addresses are rejected.
 
@@ -102,12 +106,14 @@ Domain names are normalized automatically: `http://` and `https://` prefixes are
     "reputation": { },
     "email_security": { },
     "subdomains": { },
+    "ct_logs": { },
+    "bgp": { },
     "errors": []
   }
 ]
 ```
 
-Optional fields (`screenshot`, `reputation`, `email_security`, `subdomains`) are only present when requested.
+Optional fields (`screenshot`, `reputation`, `email_security`, `subdomains`, `ct_logs`, `bgp`) are only present when requested.
 
 ### Example
 
@@ -388,6 +394,47 @@ Each subdomain:
 |-------|------|-------------|
 | `domain` | string | The subdomain |
 | `source` | string | Data source (`crt.sh`) |
+
+## `ct_logs` — Certificate Transparency Logs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count` | int | Number of certificate entries returned |
+| `capped` | bool | `true` if results were truncated at the cap (100) |
+| `entries` | array | Certificate log entries, sorted newest-first |
+
+Each entry:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `logged_at` | string | When the certificate was logged to CT |
+| `not_before` | string | Certificate validity start |
+| `not_after` | string | Certificate validity end |
+| `issuer` | string | Certificate Authority |
+| `common_name` | string | Certificate CN field |
+| `name_value` | string | All names covered by the certificate |
+| `serial` | string | Certificate serial number |
+
+Reveals infrastructure, related domains, and issuance patterns. Useful for detecting phishing campaigns and tracking certificate history.
+
+## `bgp` — BGP / ASN Enrichment
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `records` | array | ASN records, deduplicated by ASN |
+
+Each record:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ip` | string | Resolved IP address |
+| `asn` | int | Autonomous System Number |
+| `prefix` | string | IP prefix (CIDR notation) |
+| `country` | string | Country code |
+| `registry` | string | Regional Internet Registry (arin, ripe, apnic, etc.) |
+| `description` | string | Organization name |
+
+Identifies who owns the IP behind the domain. Useful for pivot analysis and detecting bulletproof hosting.
 
 ## `errors` — Partial Failures
 

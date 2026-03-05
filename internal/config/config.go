@@ -61,6 +61,7 @@ func init() {
 	config.SetDefault("typosquatting.max_domains.premium", 5)
 	config.SetDefault("subdomain.timeout", "30s")
 	config.SetDefault("subdomain.max_results", 500)
+	config.SetDefault("ct_logs.max_entries", 100)
 	config.SetDefault("subdomain.concurrency", 20)
 	config.SetDefault("subdomain.max_domains.basic", 3)
 	config.SetDefault("subdomain.max_domains.premium", 5)

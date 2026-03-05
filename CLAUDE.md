@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, and subdomain lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
+Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, and BGP/ASN lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
 
 **Module:** `github.com/securityaccelerateddevelopment/intelligence-api`
 
@@ -32,13 +32,13 @@ docs/                         → Sales slick, developer guide
 Services use function fields (`lookupWhois`, `lookupDNS`, etc.) instead of interfaces for each lookup. The constructor wires in real implementations from the `domain` package. Tests swap them via `SetLookups()` and per-feature setters (`SetEmailSecurityLookup`, `SetSubdomainLookup`). This avoids interface pollution while keeping tests fully deterministic.
 
 ### Concurrent fan-out with shared response
-`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains) only spawn when requested. A 30-second context timeout covers the entire operation.
+`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains, ct_logs, bgp) only spawn when requested. A 30-second context timeout covers the entire operation.
 
 ### Partial failure tolerance
 Each lookup goroutine catches its own errors. Failures are appended to `resp.Errors` with sanitized messages — the rest of the response still returns. Full errors are logged server-side; users see only safe summaries via `sanitizeErr()`.
 
 ### Composite cache keys
-Cache keys are built from the domain name plus sorted feature suffixes: `example.com:email_security+reputation`. This ensures each feature combination caches independently. Typosquatting uses its own key format: `typosquatting:example.com:shallow`.
+Cache keys are built from the domain name plus sorted feature suffixes: `example.com:bgp+email_security+reputation`. This ensures each feature combination caches independently. Typosquatting uses its own key format: `typosquatting:example.com:shallow`.
 
 ### SSRF prevention at the dialer level
 The `safenet` package provides a `DialControl` function that rejects connections to private, loopback, link-local, multicast, unspecified, and CGNAT IPs. It fires after DNS resolution (no TOCTOU race). All HTTP clients in the `domain` package use `safenet.SafeDialer()` via shared transports in `domain/transport.go`.

@@ -413,13 +413,17 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 		wantReputation    bool
 		wantEmailSecurity bool
 		wantSubdomains    bool
+		wantCTLogs        bool
+		wantBGP           bool
 	}{
-		{"no opts", `{"domains":["example.com"]}`, false, false, false, false},
-		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false, false},
-		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false, false},
-		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true, false},
-		{"subdomains only", `{"domains":["example.com"],"subdomains":true}`, false, false, false, true},
-		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true}`, true, true, true, true},
+		{"no opts", `{"domains":["example.com"]}`, false, false, false, false, false, false},
+		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false, false, false, false},
+		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false, false, false, false},
+		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true, false, false, false},
+		{"subdomains only", `{"domains":["example.com"],"subdomains":true}`, false, false, false, true, false, false},
+		{"ct_logs only", `{"domains":["example.com"],"ct_logs":true}`, false, false, false, false, true, false},
+		{"bgp only", `{"domains":["example.com"],"bgp":true}`, false, false, false, false, false, true},
+		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true}`, true, true, true, true, true, true},
 	}
 
 	for _, tt := range tests {
@@ -446,12 +450,18 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 			if svc.lastOpts.Subdomains != tt.wantSubdomains {
 				t.Errorf("opts.Subdomains = %v, want %v", svc.lastOpts.Subdomains, tt.wantSubdomains)
 			}
+			if svc.lastOpts.CTLogs != tt.wantCTLogs {
+				t.Errorf("opts.CTLogs = %v, want %v", svc.lastOpts.CTLogs, tt.wantCTLogs)
+			}
+			if svc.lastOpts.BGP != tt.wantBGP {
+				t.Errorf("opts.BGP = %v, want %v", svc.lastOpts.BGP, tt.wantBGP)
+			}
 		})
 	}
 }
 
 // domainLoggerKeys derived from middleware.ContextKeys.
-var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "subdomain", "cache_hit")
+var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "subdomain", "cache_hit", "ct_logs", "bgp")
 
 func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 	tests := []struct {
@@ -462,12 +472,12 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 		{
 			"no optional features",
 			`{"domains":["example.com"]}`,
-			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "subdomain_requested": false, "cache_hit": false},
+			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "subdomain_requested": false, "ct_logs_requested": false, "bgp_requested": false, "cache_hit": false},
 		},
 		{
 			"all optional features",
-			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true}`,
-			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "subdomain_requested": true, "cache_hit": false},
+			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true}`,
+			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "subdomain_requested": true, "ct_logs_requested": true, "bgp_requested": true, "cache_hit": false},
 		},
 	}
 
@@ -646,5 +656,31 @@ func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
 	}
 	if resp[0].Reputation != nil {
 		t.Error("expected reputation to be nil when not requested")
+	}
+}
+
+func TestDomainLookup_CTLogs_AllTiersAllowed(t *testing.T) {
+	r := newTestRouterWithTier(&mockService{}, "basic")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_BGP_AllTiersAllowed(t *testing.T) {
+	r := newTestRouterWithTier(&mockService{}, "basic")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 }

@@ -122,12 +122,37 @@ func failSubdomains(_ context.Context, _ string, _ domain.SubdomainOptions) (*do
 	return nil, errors.New("subdomains failed")
 }
 
+func okCTLogs(_ context.Context, _ string, _ int) (*domain.CTLogsInfo, error) {
+	return &domain.CTLogsInfo{
+		Count: 2,
+		Entries: []domain.CTLogEntry{
+			{LoggedAt: "2024-01-15T00:00:00", Issuer: "Let's Encrypt", CommonName: "example.com", Serial: "abc123"},
+			{LoggedAt: "2023-06-01T00:00:00", Issuer: "DigiCert", CommonName: "*.example.com", Serial: "def456"},
+		},
+	}, nil
+}
+func failCTLogs(_ context.Context, _ string, _ int) (*domain.CTLogsInfo, error) {
+	return nil, errors.New("ct_logs failed")
+}
+
+func okBGP(_ context.Context, _ string) (*domain.BGPInfo, error) {
+	return &domain.BGPInfo{
+		Records: []domain.ASNRecord{
+			{IP: "93.184.216.34", ASN: 15133, Prefix: "93.184.216.0/24", Country: "US", Registry: "arin", Description: "EDGECAST, US"},
+		},
+	}, nil
+}
+func failBGP(_ context.Context, _ string) (*domain.BGPInfo, error) {
+	return nil, errors.New("bgp failed")
+}
+
 func newTestService(mc *mockCache) *DomainService {
 	return &DomainService{
 		cache:               mc,
 		cacheTTL:            5 * time.Minute,
 		screenshotTimeout:   15 * time.Second,
 		subdomainMaxResults: 500,
+		ctLogsMaxEntries:    100,
 		lookupWhois:         okWhois,
 		lookupDNS:           okDNS,
 		lookupSSL:           okSSL,
@@ -136,6 +161,8 @@ func newTestService(mc *mockCache) *DomainService {
 		lookupReputation:    okReputation,
 		lookupEmailSecurity: okEmailSecurity,
 		lookupSubdomains:    okSubdomains,
+		lookupCTLogs:        okCTLogs,
+		lookupBGP:           okBGP,
 	}
 }
 
@@ -210,6 +237,7 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 		cache:               mc,
 		cacheTTL:            5 * time.Minute,
 		screenshotTimeout:   15 * time.Second,
+		ctLogsMaxEntries:    100,
 		lookupWhois:         failWhois,
 		lookupDNS:           failDNS,
 		lookupSSL:           failSSL,
@@ -217,6 +245,9 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 		lookupScreenshot:    failScreenshot,
 		lookupReputation:    failReputation,
 		lookupEmailSecurity: failEmailSecurity,
+		lookupSubdomains:    failSubdomains,
+		lookupCTLogs:        failCTLogs,
+		lookupBGP:           failBGP,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "fail.com", noOpts())
@@ -239,6 +270,7 @@ func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
 		cache:               mc,
 		cacheTTL:            5 * time.Minute,
 		screenshotTimeout:   15 * time.Second,
+		ctLogsMaxEntries:    100,
 		lookupWhois:         okWhois,
 		lookupDNS:           failDNS,
 		lookupSSL:           okSSL,
@@ -246,6 +278,9 @@ func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
 		lookupScreenshot:    okScreenshot,
 		lookupReputation:    okReputation,
 		lookupEmailSecurity: okEmailSecurity,
+		lookupSubdomains:    okSubdomains,
+		lookupCTLogs:        okCTLogs,
+		lookupBGP:           okBGP,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "partial.com", noOpts())
@@ -737,5 +772,187 @@ func TestLookup_SetSubdomainLookup(t *testing.T) {
 	svc.Lookup(context.Background(), "example.com", subdomainsOpts())
 	if !called {
 		t.Error("expected custom subdomain lookup to be called")
+	}
+}
+
+// --- CT Logs tests ---
+
+func ctLogsOpts() domain.LookupOptions { return domain.LookupOptions{CTLogs: true} }
+
+func TestLookup_CTLogs_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", ctLogsOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.CTLogs == nil {
+		t.Fatal("expected CTLogs to be populated")
+	}
+	if resp.CTLogs.Count != 2 {
+		t.Errorf("CTLogs.Count = %d, want 2", resp.CTLogs.Count)
+	}
+	if len(resp.CTLogs.Entries) != 2 {
+		t.Errorf("len(CTLogs.Entries) = %d, want 2", len(resp.CTLogs.Entries))
+	}
+}
+
+func TestLookup_CTLogs_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.CTLogs != nil {
+		t.Error("expected CTLogs to be nil when not requested")
+	}
+}
+
+func TestLookup_CTLogs_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupCTLogs = failCTLogs
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", ctLogsOpts())
+	if resp.CTLogs != nil {
+		t.Error("expected CTLogs to be nil on failure")
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if e.Lookup == "ct_logs" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected a ct_logs error in resp.Errors")
+	}
+}
+
+func TestLookup_CTLogs_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	svc.Lookup(context.Background(), "example.com", ctLogsOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:ct_logs"]; !ok {
+		t.Error("expected cache entry for ct_logs key 'example.com:ct_logs'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_SetCTLogsLookup(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	called := false
+	svc.SetCTLogsLookup(func(_ context.Context, _ string, _ int) (*domain.CTLogsInfo, error) {
+		called = true
+		return &domain.CTLogsInfo{}, nil
+	})
+
+	svc.Lookup(context.Background(), "example.com", ctLogsOpts())
+	if !called {
+		t.Error("expected custom CT logs lookup to be called")
+	}
+}
+
+// --- BGP/ASN tests ---
+
+func bgpOpts() domain.LookupOptions { return domain.LookupOptions{BGP: true} }
+
+func TestLookup_BGP_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", bgpOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.BGP == nil {
+		t.Fatal("expected BGP to be populated")
+	}
+	if len(resp.BGP.Records) != 1 {
+		t.Errorf("len(BGP.Records) = %d, want 1", len(resp.BGP.Records))
+	}
+	if resp.BGP.Records[0].ASN != 15133 {
+		t.Errorf("BGP.Records[0].ASN = %d, want 15133", resp.BGP.Records[0].ASN)
+	}
+}
+
+func TestLookup_BGP_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.BGP != nil {
+		t.Error("expected BGP to be nil when not requested")
+	}
+}
+
+func TestLookup_BGP_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupBGP = failBGP
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", bgpOpts())
+	if resp.BGP != nil {
+		t.Error("expected BGP to be nil on failure")
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if e.Lookup == "bgp" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected a bgp error in resp.Errors")
+	}
+}
+
+func TestLookup_BGP_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	svc.Lookup(context.Background(), "example.com", bgpOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:bgp"]; !ok {
+		t.Error("expected cache entry for bgp key 'example.com:bgp'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_SetBGPLookup(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	called := false
+	svc.SetBGPLookup(func(_ context.Context, _ string) (*domain.BGPInfo, error) {
+		called = true
+		return &domain.BGPInfo{}, nil
+	})
+
+	svc.Lookup(context.Background(), "example.com", bgpOpts())
+	if !called {
+		t.Error("expected custom BGP lookup to be called")
 	}
 }
