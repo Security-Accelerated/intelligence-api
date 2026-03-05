@@ -1,5 +1,7 @@
 services:
   api:
+    image: intelligence-api
+    container_name: intelligence-api
     build:
       context: .
       args:
