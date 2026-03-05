@@ -10,6 +10,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/httpapi"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
@@ -92,7 +93,18 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Services
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")
-	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"))
+
+	fpService := service.NewFingerprintService(db)
+	if err := fpService.LoadFromDB(ctx); err != nil {
+		logger.Warn("failed to load fingerprint rules from DB, using embedded defaults", zap.Error(err))
+		defaults, defErr := domain.DefaultRules()
+		if defErr == nil {
+			fpService.Engine().LoadRules(defaults)
+		}
+	}
+	logger.Info("fingerprint engine loaded", zap.Int("rule_count", fpService.Engine().RuleCount()))
+
+	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine())
 	typosquattingService := service.NewTyposquattingService(
 		redisCache, cacheTTL, cfg.GetDuration("typosquatting.timeout"),
 		cfg.GetInt("typosquatting.max_permutations"),
@@ -100,7 +112,7 @@ func Run(logger *zap.Logger, version string) error {
 	)
 
 	// HTTP
-	h := handler.New(domainService, typosquattingService, version, cfg, redisCache, cachedRepo)
+	h := handler.New(domainService, typosquattingService, fpService, version, cfg, redisCache, cachedRepo)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, and BGP/ASN lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
+Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, and technology fingerprinting lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
 
 **Module:** `github.com/securityaccelerateddevelopment/intelligence-api`
 
@@ -32,7 +32,7 @@ docs/                         → Sales slick, developer guide
 Services use function fields (`lookupWhois`, `lookupDNS`, etc.) instead of interfaces for each lookup. The constructor wires in real implementations from the `domain` package. Tests swap them via `SetLookups()` and per-feature setters (`SetEmailSecurityLookup`, `SetSubdomainLookup`). This avoids interface pollution while keeping tests fully deterministic.
 
 ### Concurrent fan-out with shared response
-`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains, ct_logs, bgp) only spawn when requested. A 30-second context timeout covers the entire operation.
+`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains, ct_logs, bgp) only spawn when requested. Fingerprint runs as post-processing after `wg.Wait()` using already-fetched headers data (zero extra network calls). A 30-second context timeout covers the entire operation.
 
 ### Partial failure tolerance
 Each lookup goroutine catches its own errors. Failures are appended to `resp.Errors` with sanitized messages — the rest of the response still returns. Full errors are logged server-side; users see only safe summaries via `sanitizeErr()`.
@@ -48,6 +48,9 @@ Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware h
 
 ### Tier-based access control
 Two dimensions: **features** control which endpoints a key can access (`admin`, `lookup`, `typosquatting`); **tier** controls access to premium options within endpoints (`basic` vs `premium`). Rate limits are also tier-aware. Admins bypass rate limiting entirely.
+
+### Technology fingerprinting
+`FingerprintEngine` in `internal/domain/fingerprint.go` holds rules behind `sync.RWMutex`. Default rules are embedded via `go:embed` (~90 curated technologies). `FingerprintService` in `internal/service/fingerprint.go` persists rules in PostgreSQL (append-only `fingerprint_rules` table) and loads the latest on startup. Admin endpoints (`GET/POST /api/v1/admin/fingerprints`) allow hot-reloading rules without redeploying.
 
 ### Error sanitization
 `sanitizeErr()` strips internal error details before including them in API responses. `safenet.BlockedError` gets a specific user-friendly message. Other errors are truncated to the final segment after `: `. Full context is always logged server-side.
@@ -100,7 +103,7 @@ Sample config: `internal/config/sample-config.yml`
 
 PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration.
 
-Tables: `customers`, `api_keys` (key_hash), `customer_features` (customer_id, feature).
+Tables: `customers`, `api_keys` (key_hash), `customer_features` (customer_id, feature), `fingerprint_rules` (append-only JSONB rules).
 
 ## Infrastructure
 

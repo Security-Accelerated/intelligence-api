@@ -10,6 +10,7 @@ type DomainRequest struct {
 	Subdomains    bool     `json:"subdomains,omitempty"`
 	CTLogs        bool     `json:"ct_logs,omitempty"`
 	BGP           bool     `json:"bgp,omitempty"`
+	Fingerprint   bool     `json:"fingerprint,omitempty"`
 }
 
 type LookupOptions struct {
@@ -19,6 +20,7 @@ type LookupOptions struct {
 	Subdomains    bool
 	CTLogs        bool
 	BGP           bool
+	Fingerprint   bool
 }
 
 type DomainResponse struct {
@@ -34,6 +36,7 @@ type DomainResponse struct {
 	Subdomains    *SubdomainInfo     `json:"subdomains,omitempty"`
 	CTLogs        *CTLogsInfo        `json:"ct_logs,omitempty"`
 	BGP           *BGPInfo           `json:"bgp,omitempty"`
+	Fingerprint   *FingerprintInfo   `json:"fingerprint,omitempty"`
 	Errors        []LookupError      `json:"errors,omitempty"`
 }
 

@@ -1,7 +1,7 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, subdomain enumeration, certificate transparency, and BGP/ASN lookups for one or more domains, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, subdomain enumeration, certificate transparency, BGP/ASN, and technology fingerprinting lookups for one or more domains, with Redis caching.
 
 ## Authentication
 
@@ -13,7 +13,7 @@ Each customer has a `tier` that controls rate limits and access to premium optio
 
 | Tier | Capabilities |
 |------|-------------|
-| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) + subdomain enumeration + CT logs + BGP/ASN |
+| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) + subdomain enumeration + CT logs + BGP/ASN + technology fingerprinting |
 | `premium` | All basic capabilities + page screenshots + reputation checks |
 
 The tier is stored in the `customers` table. New customers default to `basic`.
@@ -54,6 +54,8 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | POST | `/api/v1/domain/lookup` | `admin`, `lookup` | Domain intelligence lookup |
 | POST | `/api/v1/domain/typosquatting` | `admin`, `typosquatting` | Typosquatting detection |
 | POST | `/api/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
+| GET | `/api/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
+| POST | `/api/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
 
 ### POST /api/v1/domain/lookup
 
@@ -66,7 +68,8 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
   "email_security": true,
   "subdomains": true,
   "ct_logs": true,
-  "bgp": true
+  "bgp": true,
+  "fingerprint": true
 }
 ```
 
@@ -83,6 +86,8 @@ The optional `subdomains` field (default `false`) enumerates subdomains via Cert
 The optional `ct_logs` field (default `false`) queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Returns full certificate metadata (issuer, dates, serial number, SANs). Available to **all tiers**. Results are deduplicated by serial number, sorted newest-first, and capped (default 100, configurable via `ct_logs.max_entries`).
 
 The optional `bgp` field (default `false`) resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service for BGP/ASN information. Returns ASN number, IP prefix, country, registry, and organization name. Available to **all tiers**. Useful for identifying hosting providers and detecting bulletproof hosting.
+
+The optional `fingerprint` field (default `false`) detects web technologies (servers, frameworks, CDNs, CMS platforms, languages) from HTTP response headers. No extra HTTP requests are made — detection piggybacks on the headers already fetched. Returns technology name, category, version (when detectable), and which signal matched. Available to **all tiers**. Rules are stored in PostgreSQL and can be updated via the admin API without redeploying.
 
 **Example:**
 ```sh
@@ -165,6 +170,13 @@ curl -X POST http://localhost:8080/api/v1/domain/lookup \
           "registry": "arin",
           "description": "EDGECAST, US"
         }
+      ]
+    },
+    "fingerprint": {
+      "count": 2,
+      "technologies": [
+        { "name": "Nginx", "category": "web-server", "version": "1.24.0", "confidence": "header" },
+        { "name": "PHP", "category": "language", "version": "8.2", "confidence": "header" }
       ]
     },
     "errors": []
@@ -470,6 +482,26 @@ Each record contains:
 
 Useful for identifying hosting providers, detecting bulletproof hosting, and pivot analysis. Multiple IPs sharing the same ASN are merged (only the first IP is shown).
 
+### `fingerprint` — Technology Fingerprinting (All Tiers)
+
+Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. Only present when `"fingerprint": true` is included in the request. No extra HTTP requests are made — detection uses the headers already fetched.
+
+| Field | What it means |
+|-------|---------------|
+| `count` | Number of detected technologies |
+| `technologies` | Array of detected technologies |
+
+Each technology entry contains:
+
+| Field | What it means |
+|-------|---------------|
+| `name` | Technology name (e.g. `Nginx`, `PHP`, `Cloudflare`) |
+| `category` | Category: `web-server`, `language`, `framework`, `cdn`, `cms`, `analytics`, `security`, `hosting`, `cache`, `javascript`, `other` |
+| `version` | Version extracted from header value (e.g. `nginx/1.24.0` → `1.24.0`), empty if not detectable |
+| `confidence` | Which signal matched: `header` or `cookie` |
+
+Rules are stored in PostgreSQL and loaded into memory at startup. The default ruleset covers ~90 technologies. Admin users can update rules via `POST /api/v1/admin/fingerprints` without redeploying.
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
@@ -482,7 +514,8 @@ Optional features use composite cache keys built from sorted feature suffixes. E
 - `domain:subdomains` — base + subdomain enumeration
 - `domain:bgp` — base + BGP/ASN
 - `domain:ct_logs` — base + CT logs
-- `domain:bgp+ct_logs+email_security+reputation+screenshot+subdomains` — base + all optional features
+- `domain:fingerprint` — base + technology fingerprinting
+- `domain:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains` — base + all optional features
 
 Typosquatting results are cached under their own keys based on depth and check_live flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+check_live:example.com:deep`).
 
@@ -542,6 +575,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `002_add_customer_tier.sql` — adds the `tier` column to `customers` (defaults to `basic`)
 - `003_hash_api_keys.sql` — replaces the plaintext `key` column with `key_hash` (SHA-256, hex-encoded)
 - `004_rename_roles_to_features.sql` — renames `customer_roles` table to `customer_features` and `role` column to `feature`
+- `005_fingerprint_rules.sql` — creates the `fingerprint_rules` table (append-only, JSONB rules column)
 - `seed.sql` — inserts test customers with hashed keys and features, sets Test Admin to `premium` tier
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:

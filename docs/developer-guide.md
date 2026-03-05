@@ -75,7 +75,8 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
   "email_security": false,
   "subdomains": false,
   "ct_logs": false,
-  "bgp": false
+  "bgp": false,
+  "fingerprint": false
 }
 ```
 
@@ -88,6 +89,7 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
 | `subdomains` | bool | No | `false` | Enumerate subdomains via Certificate Transparency logs |
 | `ct_logs` | bool | No | `false` | Query Certificate Transparency logs for all issued certificates |
 | `bgp` | bool | No | `false` | Look up BGP/ASN information for the domain's IP addresses |
+| `fingerprint` | bool | No | `false` | Detect web technologies from HTTP response headers |
 
 Domain names are normalized automatically: `http://` and `https://` prefixes are stripped, trailing slashes are removed. Raw IP addresses are rejected.
 
@@ -108,12 +110,13 @@ Domain names are normalized automatically: `http://` and `https://` prefixes are
     "subdomains": { },
     "ct_logs": { },
     "bgp": { },
+    "fingerprint": { },
     "errors": []
   }
 ]
 ```
 
-Optional fields (`screenshot`, `reputation`, `email_security`, `subdomains`, `ct_logs`, `bgp`) are only present when requested.
+Optional fields (`screenshot`, `reputation`, `email_security`, `subdomains`, `ct_logs`, `bgp`, `fingerprint`) are only present when requested.
 
 ### Example
 
@@ -435,6 +438,24 @@ Each record:
 | `description` | string | Organization name |
 
 Identifies who owns the IP behind the domain. Useful for pivot analysis and detecting bulletproof hosting.
+
+## `fingerprint` — Technology Fingerprinting
+
+Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. Only present when `"fingerprint": true` is included in the request. No extra HTTP requests are made — detection piggybacks on the headers already fetched.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `count` | int | Number of detected technologies |
+| `technologies` | array | Detected technologies |
+
+Each technology:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Technology name (e.g. `Nginx`, `PHP`, `Cloudflare`) |
+| `category` | string | Category: `web-server`, `language`, `framework`, `cdn`, `cms`, `analytics`, `security`, `hosting`, `cache`, `javascript`, `other` |
+| `version` | string | Version extracted from header value (empty if not detectable) |
+| `confidence` | string | Which signal matched: `header` or `cookie` |
 
 ## `errors` — Partial Failures
 

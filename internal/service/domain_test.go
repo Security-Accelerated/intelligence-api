@@ -956,3 +956,131 @@ func TestLookup_SetBGPLookup(t *testing.T) {
 		t.Error("expected custom BGP lookup to be called")
 	}
 }
+
+// --- Fingerprint tests ---
+
+func fingerprintOpts() domain.LookupOptions { return domain.LookupOptions{Fingerprint: true} }
+
+func TestLookup_Fingerprint_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	engine := domain.NewFingerprintEngine()
+	engine.LoadRules([]domain.TechRule{
+		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
+	})
+	svc.SetFingerprintEngine(engine)
+
+	// Override headers to return a matching Server header
+	svc.lookupHeaders = func(_ context.Context, _ string) (*domain.HeadersInfo, error) {
+		return &domain.HeadersInfo{StatusCode: 200, Headers: map[string]string{"Server": "test/1.0"}}, nil
+	}
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", fingerprintOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.Fingerprint == nil {
+		t.Fatal("expected Fingerprint to be populated")
+	}
+	if resp.Fingerprint.Count != 1 {
+		t.Errorf("Fingerprint.Count = %d, want 1", resp.Fingerprint.Count)
+	}
+	if resp.Fingerprint.Technologies[0].Name != "TestServer" {
+		t.Errorf("Technologies[0].Name = %q, want %q", resp.Fingerprint.Technologies[0].Name, "TestServer")
+	}
+	if resp.Fingerprint.Technologies[0].Version != "1.0" {
+		t.Errorf("Technologies[0].Version = %q, want %q", resp.Fingerprint.Technologies[0].Version, "1.0")
+	}
+}
+
+func TestLookup_Fingerprint_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	engine := domain.NewFingerprintEngine()
+	engine.LoadRules([]domain.TechRule{
+		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
+	})
+	svc.SetFingerprintEngine(engine)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.Fingerprint != nil {
+		t.Error("expected Fingerprint to be nil when not requested")
+	}
+}
+
+func TestLookup_Fingerprint_NilWhenHeadersFail(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	engine := domain.NewFingerprintEngine()
+	engine.LoadRules([]domain.TechRule{
+		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
+	})
+	svc.SetFingerprintEngine(engine)
+	svc.lookupHeaders = failHeaders
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", fingerprintOpts())
+	if resp.Fingerprint != nil {
+		t.Error("expected Fingerprint to be nil when headers lookup fails")
+	}
+}
+
+func TestLookup_Fingerprint_NilEngineIsSafe(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	// No engine set (nil by default)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", fingerprintOpts())
+	if resp.Fingerprint != nil {
+		t.Error("expected Fingerprint to be nil when engine is nil")
+	}
+}
+
+func TestLookup_Fingerprint_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	svc.Lookup(context.Background(), "example.com", fingerprintOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:fingerprint"]; !ok {
+		t.Error("expected cache entry for fingerprint key 'example.com:fingerprint'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_SetFingerprintEngine(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	engine := domain.NewFingerprintEngine()
+	engine.LoadRules([]domain.TechRule{
+		{Name: "Custom", Category: "other", Headers: map[string]string{"X-Custom": ""}},
+	})
+	svc.SetFingerprintEngine(engine)
+
+	svc.lookupHeaders = func(_ context.Context, _ string) (*domain.HeadersInfo, error) {
+		return &domain.HeadersInfo{StatusCode: 200, Headers: map[string]string{"X-Custom": "yes"}}, nil
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", fingerprintOpts())
+	if resp.Fingerprint == nil {
+		t.Fatal("expected Fingerprint to be populated")
+	}
+	if resp.Fingerprint.Count != 1 {
+		t.Errorf("Count = %d, want 1", resp.Fingerprint.Count)
+	}
+	if resp.Fingerprint.Technologies[0].Name != "Custom" {
+		t.Errorf("Name = %q, want %q", resp.Fingerprint.Technologies[0].Name, "Custom")
+	}
+}

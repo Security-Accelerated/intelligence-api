@@ -40,7 +40,7 @@ func (m *mockTyposquattingService) Lookup(_ context.Context, domainName string, 
 func newTyposquattingRouter(tier string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, &mockTyposquattingService{}, "test", nil, nil, nil)
+	h := New(nil, &mockTyposquattingService{}, nil, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_features", []string{"admin"})
 		if tier != "" {
@@ -54,7 +54,7 @@ func newTyposquattingRouter(tier string) *gin.Engine {
 func newTyposquattingRouterWithService(svc TyposquattingLookupService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, svc, "test", nil, nil, nil)
+	h := New(nil, svc, nil, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", "premium")
@@ -125,7 +125,7 @@ func TestTyposquattingLookup_FeatureAllowed(t *testing.T) {
 func TestTyposquattingLookup_WrongFeatureForbidden(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, &mockTyposquattingService{}, "test", nil, nil, nil)
+	h := New(nil, &mockTyposquattingService{}, nil, "test", nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_features", []string{"lookup"})
 		c.Set("api_key_tier", "premium")
@@ -412,7 +412,7 @@ func TestTyposquattingLookup_CacheHitPopulated(t *testing.T) {
 func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, &mockTyposquattingService{}, "test", nil, nil, nil)
+	h := New(nil, &mockTyposquattingService{}, nil, "test", nil, nil, nil)
 
 	captured := make(map[string]any)
 	auth := func(c *gin.Context) {
@@ -450,7 +450,7 @@ func TestTyposquattingLookup_SetsLoggerContextKeys(t *testing.T) {
 func newTyposquattingRouterWithCfg(svc TyposquattingLookupService, tier string, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, svc, "test", cfg, nil, nil)
+	h := New(nil, svc, nil, "test", cfg, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", tier)

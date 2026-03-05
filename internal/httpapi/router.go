@@ -46,5 +46,8 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
 	})
 
+	admin.GET("/fingerprints", h.GetFingerprints)
+	admin.POST("/fingerprints", h.UpdateFingerprints)
+
 	return router
 }

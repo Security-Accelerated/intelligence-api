@@ -37,6 +37,7 @@ type DomainService struct {
 	screenshotTimeout time.Duration
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
+	fingerprintEngine   *domain.FingerprintEngine
 
 	lookupWhois      func(ctx context.Context, d string) (*domain.WhoisInfo, error)
 	lookupDNS        func(ctx context.Context, d string) (*domain.DNSInfo, error)
@@ -50,7 +51,7 @@ type DomainService struct {
 	lookupBGP            func(ctx context.Context, d string) (*domain.BGPInfo, error)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -63,6 +64,7 @@ func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, 
 		screenshotTimeout:   screenshotTimeout,
 		subdomainMaxResults: subdomainMaxResults,
 		ctLogsMaxEntries:    ctLogsMaxEntries,
+		fingerprintEngine:   fpEngine,
 		lookupWhois:         domain.LookupWhois,
 		lookupDNS:           domain.LookupDNS,
 		lookupSSL:           domain.LookupSSL,
@@ -120,6 +122,11 @@ func (s *DomainService) SetBGPLookup(
 	s.lookupBGP = fn
 }
 
+// SetFingerprintEngine replaces the fingerprint engine (for testing).
+func (s *DomainService) SetFingerprintEngine(engine *domain.FingerprintEngine) {
+	s.fingerprintEngine = engine
+}
+
 func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	var suffixes []string
 	if opts.BGP {
@@ -130,6 +137,9 @@ func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	}
 	if opts.EmailSecurity {
 		suffixes = append(suffixes, "email_security")
+	}
+	if opts.Fingerprint {
+		suffixes = append(suffixes, "fingerprint")
 	}
 	if opts.Reputation {
 		suffixes = append(suffixes, "reputation")
@@ -350,7 +360,12 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 
 	wg.Wait()
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil
+	// Fingerprint runs after all lookups complete — it uses already-fetched headers data.
+	if opts.Fingerprint && resp.Headers != nil && s.fingerprintEngine != nil {
+		resp.Fingerprint = s.fingerprintEngine.Match(resp.Headers)
+	}
+
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil
 	if hasData {
 		if data, err := json.Marshal(resp); err != nil {
 			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))

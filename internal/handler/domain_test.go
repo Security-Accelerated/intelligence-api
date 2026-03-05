@@ -38,7 +38,7 @@ func newTestRouter(svc DomainLookupService) *gin.Engine {
 func newTestRouterWithTier(svc DomainLookupService, tier string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, "test", nil, nil, nil)
+	h := New(svc, nil, nil, "test", nil, nil, nil)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_features", []string{"admin"})
@@ -415,15 +415,17 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 		wantSubdomains    bool
 		wantCTLogs        bool
 		wantBGP           bool
+		wantFingerprint   bool
 	}{
-		{"no opts", `{"domains":["example.com"]}`, false, false, false, false, false, false},
-		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false, false, false, false},
-		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false, false, false, false},
-		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true, false, false, false},
-		{"subdomains only", `{"domains":["example.com"],"subdomains":true}`, false, false, false, true, false, false},
-		{"ct_logs only", `{"domains":["example.com"],"ct_logs":true}`, false, false, false, false, true, false},
-		{"bgp only", `{"domains":["example.com"],"bgp":true}`, false, false, false, false, false, true},
-		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true}`, true, true, true, true, true, true},
+		{"no opts", `{"domains":["example.com"]}`, false, false, false, false, false, false, false},
+		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false, false, false, false, false},
+		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false, false, false, false, false},
+		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true, false, false, false, false},
+		{"subdomains only", `{"domains":["example.com"],"subdomains":true}`, false, false, false, true, false, false, false},
+		{"ct_logs only", `{"domains":["example.com"],"ct_logs":true}`, false, false, false, false, true, false, false},
+		{"bgp only", `{"domains":["example.com"],"bgp":true}`, false, false, false, false, false, true, false},
+		{"fingerprint only", `{"domains":["example.com"],"fingerprint":true}`, false, false, false, false, false, false, true},
+		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true}`, true, true, true, true, true, true, true},
 	}
 
 	for _, tt := range tests {
@@ -456,12 +458,15 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 			if svc.lastOpts.BGP != tt.wantBGP {
 				t.Errorf("opts.BGP = %v, want %v", svc.lastOpts.BGP, tt.wantBGP)
 			}
+			if svc.lastOpts.Fingerprint != tt.wantFingerprint {
+				t.Errorf("opts.Fingerprint = %v, want %v", svc.lastOpts.Fingerprint, tt.wantFingerprint)
+			}
 		})
 	}
 }
 
 // domainLoggerKeys derived from middleware.ContextKeys.
-var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "subdomain", "cache_hit", "ct_logs", "bgp")
+var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "subdomain", "cache_hit", "ct_logs", "bgp", "fingerprint")
 
 func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 	tests := []struct {
@@ -472,12 +477,12 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 		{
 			"no optional features",
 			`{"domains":["example.com"]}`,
-			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "subdomain_requested": false, "ct_logs_requested": false, "bgp_requested": false, "cache_hit": false},
+			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "subdomain_requested": false, "ct_logs_requested": false, "bgp_requested": false, "fingerprint_requested": false, "cache_hit": false},
 		},
 		{
 			"all optional features",
-			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true}`,
-			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "subdomain_requested": true, "ct_logs_requested": true, "bgp_requested": true, "cache_hit": false},
+			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true}`,
+			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "subdomain_requested": true, "ct_logs_requested": true, "bgp_requested": true, "fingerprint_requested": true, "cache_hit": false},
 		},
 	}
 
@@ -486,7 +491,7 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 			svc := &mockService{}
 			gin.SetMode(gin.TestMode)
 			r := gin.New()
-			h := New(svc, nil, "test", nil, nil, nil)
+			h := New(svc, nil, nil, "test", nil, nil, nil)
 
 			captured := make(map[string]any)
 			auth := func(c *gin.Context) {
@@ -541,7 +546,7 @@ func testCfg(overrides map[string]any) *viper.Viper {
 func newTestRouterWithCfg(svc DomainLookupService, tier string, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, "test", cfg, nil, nil)
+	h := New(svc, nil, nil, "test", cfg, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_features", []string{"admin"})
 		c.Set("api_key_tier", tier)
@@ -677,6 +682,19 @@ func TestDomainLookup_BGP_AllTiersAllowed(t *testing.T) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_Fingerprint_AllTiersAllowed(t *testing.T) {
+	r := newTestRouterWithTier(&mockService{}, "basic")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"fingerprint":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 

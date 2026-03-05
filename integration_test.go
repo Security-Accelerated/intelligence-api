@@ -51,7 +51,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	mr := miniredis.RunT(t)
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
 
-	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100)
+	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100, nil)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -142,7 +142,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 
 	r := gin.New()
 	r.Use(middleware.RequestLoggerWithLogger(nop))
-	h := handler.New(svc, typosquattingSvc, "test", nil, rc, cachedRepo)
+	h := handler.New(svc, typosquattingSvc, nil, "test", nil, rc, cachedRepo)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, middleware.APIKeyAuthWithLogger(cachedRepo, nop))
 

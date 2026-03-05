@@ -12,6 +12,12 @@ import (
 	"github.com/spf13/viper"
 )
 
+// FingerprintAdminService provides admin access to fingerprint rules.
+type FingerprintAdminService interface {
+	GetRules() []domain.TechRule
+	UpdateRules(ctx context.Context, rules []domain.TechRule, apiKeyID int) error
+}
+
 type DomainLookupService interface {
 	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool)
 }
@@ -23,16 +29,18 @@ type TyposquattingLookupService interface {
 type Handler struct {
 	domainService        DomainLookupService
 	typosquattingService TyposquattingLookupService
+	fingerprintService   FingerprintAdminService
 	version              string
 	cfg                  *viper.Viper
 	redisCache           *cache.RedisCache
 	cachedRepo           *auth.CachedRepository
 }
 
-func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
+func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, fingerprintService FingerprintAdminService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
 	return &Handler{
 		domainService:        domainService,
 		typosquattingService: typosquattingService,
+		fingerprintService:   fingerprintService,
 		version:              version,
 		cfg:                  cfg,
 		redisCache:           redisCache,

@@ -217,6 +217,41 @@ Content-Type: application/json
 GET {{host}}/api/v1/info
 X-API-Key: {{lookupKey}}
 
+### Domain lookup with fingerprint (admin key - all tiers)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "fingerprint": true
+}
+
+### Domain lookup with fingerprint (lookup key - all tiers)
+POST {{host}}/api/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{lookupKey}}
+
+{
+  "domains": ["example.com"],
+  "fingerprint": true
+}
+
 ### Invalidate auth cache (admin only)
 POST {{host}}/api/v1/admin/auth/cache/invalidate
 X-API-Key: {{adminKey}}
+
+### Get fingerprint rules (admin only)
+GET {{host}}/api/v1/admin/fingerprints
+X-API-Key: {{adminKey}}
+
+### Update fingerprint rules (admin only)
+POST {{host}}/api/v1/admin/fingerprints
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+[
+  {"name":"Nginx","category":"web-server","headers":{"Server":"nginx"}},
+  {"name":"PHP","category":"language","headers":{"X-Powered-By":"PHP"},"cookies":["PHPSESSID"]},
+  {"name":"Cloudflare","category":"cdn","headers":{"Server":"cloudflare","CF-RAY":""},"cookies":["__cflb"]}
+]
