@@ -4,7 +4,7 @@
 
 Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, and technology fingerprinting lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
 
-**Module:** `github.com/securityaccelerateddevelopment/intelligence-api`
+**Module:** `github.com/security-accelerated/intelligence-api`
 
 ## Architecture
 
@@ -23,7 +23,7 @@ internal/logging/             → Zap logger init (ECS format in production, pre
 internal/config/              → Viper config with YAML files + env var overrides
 migrations/                   → PostgreSQL schema (applied via Docker initdb on first start only)
 scripts/                      → docker-reset.sh (dev), smoke-test.sh (dev)
-docs/                         → Sales slick, developer guide
+docs/                         → Sales slick, developer guide, domain lookup overview
 ```
 
 ## Key Design Decisions
