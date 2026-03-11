@@ -10,14 +10,14 @@
 @enterpriseKey = test-enterprise-key
 
 ### Health check (no auth required)
-GET {{host}}/api/v1/hello
+GET {{host}}/v1/hello
 
 ### App info (admin only)
-GET {{host}}/api/v1/info
+GET {{host}}/v1/info
 X-API-Key: {{adminKey}}
 
 ### Domain lookup (admin key)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 X-Client-Request-ID: test-admin-001
@@ -27,7 +27,7 @@ X-Client-Request-ID: test-admin-001
 }
 
 ### Domain lookup (lookup key - basic tier)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 X-Client-Request-ID: test-lookup-001
@@ -37,7 +37,7 @@ X-Client-Request-ID: test-lookup-001
 }
 
 ### Domain lookup (enterprise key - premium tier)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{enterpriseKey}}
 X-Client-Request-ID: test-enterprise-001
@@ -47,7 +47,7 @@ X-Client-Request-ID: test-enterprise-001
 }
 
 ### Domain lookup with screenshot (admin key, premium tier)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -57,7 +57,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with screenshot - should return 403 (basic tier)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -67,7 +67,7 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Domain lookup with reputation (admin key, premium tier)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -77,7 +77,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with reputation - should return 403 (basic tier)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -87,7 +87,7 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Domain lookup with screenshot + reputation (admin key, premium tier)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -98,7 +98,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with email security (lookup key - all tiers)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -108,7 +108,7 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Typosquatting - shallow (admin key)
-POST {{host}}/api/v1/domain/typosquatting
+POST {{host}}/v1/domain/typosquatting
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -117,7 +117,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Typosquatting (typosquatting key)
-POST {{host}}/api/v1/domain/typosquatting
+POST {{host}}/v1/domain/typosquatting
 Content-Type: application/json
 X-API-Key: {{typosquattingKey}}
 
@@ -126,7 +126,7 @@ X-API-Key: {{typosquattingKey}}
 }
 
 ### Typosquatting - deep with live checks (enterprise key)
-POST {{host}}/api/v1/domain/typosquatting
+POST {{host}}/v1/domain/typosquatting
 Content-Type: application/json
 X-API-Key: {{enterpriseKey}}
 
@@ -137,7 +137,7 @@ X-API-Key: {{enterpriseKey}}
 }
 
 ### Typosquatting - should return 403 (lookup key lacks typosquatting feature)
-POST {{host}}/api/v1/domain/typosquatting
+POST {{host}}/v1/domain/typosquatting
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -146,7 +146,7 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Domain lookup with subdomains (admin key)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -156,7 +156,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with subdomains (lookup key - all tiers)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -166,7 +166,7 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Domain lookup with CT logs (admin key)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -176,7 +176,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with CT logs (lookup key - all tiers)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -186,7 +186,7 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Domain lookup with BGP/ASN (admin key)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -196,7 +196,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with BGP/ASN (lookup key - all tiers)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -206,7 +206,7 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Domain lookup - should return 401 (no key)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 
 {
@@ -214,11 +214,11 @@ Content-Type: application/json
 }
 
 ### Info - should return 403 (lookup key lacks admin feature)
-GET {{host}}/api/v1/info
+GET {{host}}/v1/info
 X-API-Key: {{lookupKey}}
 
 ### Domain lookup with fingerprint (admin key - all tiers)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 
@@ -228,7 +228,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with fingerprint (lookup key - all tiers)
-POST {{host}}/api/v1/domain/lookup
+POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
 
@@ -238,15 +238,15 @@ X-API-Key: {{lookupKey}}
 }
 
 ### Invalidate auth cache (admin only)
-POST {{host}}/api/v1/admin/auth/cache/invalidate
+POST {{host}}/v1/admin/auth/cache/invalidate
 X-API-Key: {{adminKey}}
 
 ### Get fingerprint rules (admin only)
-GET {{host}}/api/v1/admin/fingerprints
+GET {{host}}/v1/admin/fingerprints
 X-API-Key: {{adminKey}}
 
 ### Update fingerprint rules (admin only)
-POST {{host}}/api/v1/admin/fingerprints
+POST {{host}}/v1/admin/fingerprints
 Content-Type: application/json
 X-API-Key: {{adminKey}}
 

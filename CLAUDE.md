@@ -50,7 +50,7 @@ Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware h
 Single `plan` column on `customers` table: `basic`, `pro`, `admin`. Controls rate limits, premium feature access (screenshot, reputation), and admin endpoint access. `RequireAdmin()` middleware gates admin-only routes. Rate limits: basic=30/min, pro=120/min, admin=unlimited.
 
 ### Technology fingerprinting
-`FingerprintEngine` in `internal/domain/fingerprint.go` holds rules behind `sync.RWMutex`. Default rules are embedded via `go:embed` (~90 curated technologies). `FingerprintService` in `internal/service/fingerprint.go` persists rules in PostgreSQL (append-only `fingerprint_rules` table) and loads the latest on startup. Admin endpoints (`GET/POST /api/v1/admin/fingerprints`) allow hot-reloading rules without redeploying.
+`FingerprintEngine` in `internal/domain/fingerprint.go` holds rules behind `sync.RWMutex`. Default rules are embedded via `go:embed` (~90 curated technologies). `FingerprintService` in `internal/service/fingerprint.go` persists rules in PostgreSQL (append-only `fingerprint_rules` table) and loads the latest on startup. Admin endpoints (`GET/POST /v1/admin/fingerprints`) allow hot-reloading rules without redeploying.
 
 ### Error sanitization
 `sanitizeErr()` strips internal error details before including them in API responses. `safenet.BlockedError` gets a specific user-friendly message. Other errors are truncated to the final segment after `: `. Full context is always logged server-side.
@@ -94,7 +94,7 @@ Each package has `*_test.go` files. Handler tests use `httptest` with a gin test
 `scripts/smoke-test.sh` hits a running instance with curl. Checks every endpoint with every API key and verifies expected HTTP status codes. Catches issues that unit/integration tests miss (like database migration problems). Accepts an optional host argument (defaults to `http://localhost:8080`). API keys can be overridden via `.env` file or `SMOKE_*` env vars for production testing.
 
 ### Status check
-`scripts/status.sh` checks Fly.io deployment health — machine state, endpoint reachability, and (with `SMOKE_ADMIN_KEY`) detailed status from the `/api/v1/info` endpoint.
+`scripts/status.sh` checks Fly.io deployment health — machine state, endpoint reachability, and (with `SMOKE_ADMIN_KEY`) detailed status from the `/v1/info` endpoint.
 
 ## Config
 

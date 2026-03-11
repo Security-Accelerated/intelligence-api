@@ -200,7 +200,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, authMW, rateLimitMW)
 
-	admin := r.Group("/api/v1/admin")
+	admin := r.Group("/v1/admin")
 	admin.Use(authMW, rateLimitMW, middleware.RequireAdmin())
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
@@ -216,7 +216,7 @@ func TestIntegration_DomainLookup_FullFlow(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -261,7 +261,7 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 
 	// First request — cache miss, populates cache.
 	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req1.Header.Set("Content-Type", "application/json")
 	req1.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w1, req1)
@@ -272,7 +272,7 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 
 	// Second request — should be served from cache with identical data.
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w2, req2)
@@ -315,7 +315,7 @@ func TestIntegration_DomainLookup_InvalidDomain(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["notadomain"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["notadomain"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -329,7 +329,7 @@ func TestIntegration_Hello(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hello", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/hello", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -349,7 +349,7 @@ func TestIntegration_Auth_MissingKey(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -362,7 +362,7 @@ func TestIntegration_Auth_InvalidKey(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "bad-key")
 	r.ServeHTTP(w, req)
@@ -376,7 +376,7 @@ func TestIntegration_Auth_LookupKeyCanAccessLookup(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -390,7 +390,7 @@ func TestIntegration_Auth_LookupKeyCannotAccessInfo(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", nil)
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
 
@@ -403,7 +403,7 @@ func TestIntegration_Auth_ProKeyCanAccessLookup(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
@@ -417,7 +417,7 @@ func TestIntegration_Auth_ProKeyCannotAccessInfo(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", nil)
 	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
 
@@ -430,7 +430,7 @@ func TestIntegration_Screenshot_ProCanScreenshot(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key")
@@ -462,7 +462,7 @@ func TestIntegration_Screenshot_BasicGets403(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
@@ -477,7 +477,7 @@ func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -501,7 +501,7 @@ func TestIntegration_Reputation_ProCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key")
@@ -540,7 +540,7 @@ func TestIntegration_Reputation_BasicGets403(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
@@ -555,7 +555,7 @@ func TestIntegration_Reputation_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -579,7 +579,7 @@ func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true,"screenshot":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -622,7 +622,7 @@ func TestIntegration_AdminCacheInvalidate_AdminAllowed(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/cache/invalidate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/auth/cache/invalidate", nil)
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
 
@@ -643,7 +643,7 @@ func TestIntegration_AdminCacheInvalidate_NonAdminForbidden(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/cache/invalidate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/auth/cache/invalidate", nil)
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
 
@@ -656,7 +656,7 @@ func TestIntegration_AdminCacheInvalidate_NoKeyUnauthorized(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/cache/invalidate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/auth/cache/invalidate", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
@@ -671,7 +671,7 @@ func TestIntegration_EmailSecurity_AllPlansCanAccess(t *testing.T) {
 
 	// Basic plan can request email_security (no premium gate)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"email_security":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
@@ -709,7 +709,7 @@ func TestIntegration_EmailSecurity_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -735,7 +735,7 @@ func TestIntegration_Subdomain_IncludedWhenRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"subdomains":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -767,7 +767,7 @@ func TestIntegration_Subdomain_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -791,7 +791,7 @@ func TestIntegration_Subdomain_BasicPlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"subdomains":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
@@ -817,7 +817,7 @@ func TestIntegration_CTLogs_IncludedWhenRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -849,7 +849,7 @@ func TestIntegration_CTLogs_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -873,7 +873,7 @@ func TestIntegration_CTLogs_BasicPlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
@@ -899,7 +899,7 @@ func TestIntegration_BGP_IncludedWhenRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -934,7 +934,7 @@ func TestIntegration_BGP_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
@@ -958,7 +958,7 @@ func TestIntegration_BGP_BasicPlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
@@ -984,7 +984,7 @@ func TestIntegration_SecurityHeaders_Present(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hello", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/hello", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -1010,7 +1010,7 @@ func TestIntegration_BodyLimit_Exceeded(t *testing.T) {
 	// surfaces as 400 from Gin's JSON binding layer.
 	bigBody := strings.Repeat("x", 1<<20+1)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(bigBody))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(bigBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1026,7 +1026,7 @@ func TestIntegration_ClientRequestID_EchoedBack(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/hello", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/hello", nil)
 	req.Header.Set("X-Client-Request-ID", "integration-test-id-123")
 	r.ServeHTTP(w, req)
 
@@ -1048,7 +1048,7 @@ func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
 	// Send 31 requests — basic limit is 30
 	for i := 0; i < 30; i++ {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-API-Key", "test-lookup-key")
 		r.ServeHTTP(w, req)
@@ -1059,7 +1059,7 @@ func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
 
 	// Request 31 should be rate limited
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -1080,7 +1080,7 @@ func TestIntegration_RateLimit_AdminBypasses(t *testing.T) {
 	// Admin should bypass rate limiting entirely — send 35 requests
 	for i := 0; i < 35; i++ {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-API-Key", "test-admin-key")
 		r.ServeHTTP(w, req)
@@ -1096,7 +1096,7 @@ func TestIntegration_AdminFingerprints_GetRules(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", nil)
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
 
@@ -1120,7 +1120,7 @@ func TestIntegration_AdminFingerprints_GetForbiddenForNonAdmin(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", nil)
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
 
@@ -1133,7 +1133,7 @@ func TestIntegration_AdminFingerprints_GetUnauthorizedNoKey(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
@@ -1146,7 +1146,7 @@ func TestIntegration_AdminFingerprints_UpdateRules(t *testing.T) {
 
 	rules := `[{"name":"NewTech","category":"cdn","headers":{"X-CDN":"test"}}]`
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints", strings.NewReader(rules))
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/fingerprints", strings.NewReader(rules))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1166,7 +1166,7 @@ func TestIntegration_AdminFingerprints_UpdateForbiddenForNonAdmin(t *testing.T) 
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints",
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/fingerprints",
 		strings.NewReader(`[{"name":"X","category":"other","headers":{"X":"y"}}]`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
@@ -1186,7 +1186,7 @@ func TestIntegration_CacheExpiry(t *testing.T) {
 
 	// 1. First request — cache miss, populates cache.
 	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req1.Header.Set("Content-Type", "application/json")
 	req1.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w1, req1)
@@ -1206,7 +1206,7 @@ func TestIntegration_CacheExpiry(t *testing.T) {
 
 	// 2. Second request — cache hit.
 	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w2, req2)
@@ -1229,7 +1229,7 @@ func TestIntegration_CacheExpiry(t *testing.T) {
 
 	// 4. Third request — cache expired, should be a miss again.
 	w3 := httptest.NewRecorder()
-	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req3 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req3.Header.Set("Content-Type", "application/json")
 	req3.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w3, req3)
@@ -1254,7 +1254,7 @@ func TestIntegration_DomainLookup_EmptyDomainsArray(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":[]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")

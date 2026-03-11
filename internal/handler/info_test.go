@@ -29,7 +29,7 @@ func newInfoRouter(version string, cfg *viper.Viper, rc *cache.RedisCache, cr *a
 	r := gin.New()
 	h := New(nil, nil, version, cfg, rc, cr)
 	// Simulate admin auth so RequireAdmin passes
-	r.GET("/api/v1/info", func(c *gin.Context) {
+	r.GET("/v1/info", func(c *gin.Context) {
 		c.Set("api_key_plan", "admin")
 		c.Next()
 	}, h.Info)
@@ -38,7 +38,7 @@ func newInfoRouter(version string, cfg *viper.Viper, rc *cache.RedisCache, cr *a
 
 func doInfoRequest(r *gin.Engine) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", nil)
 	r.ServeHTTP(w, req)
 	return w
 }

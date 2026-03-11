@@ -43,7 +43,7 @@ Status code, raw response headers, and a security header audit (HSTS, CSP, X-Fra
 ### Basic lookup
 
 ```sh
-curl -X POST https://api.securityaccelerated.com/api/v1/domain/lookup \
+curl -X POST https://api.securityaccelerated.com/v1/domain/lookup \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: your-api-key' \
   -d '{"domains": ["suspicious-domain.com"]}'
@@ -54,7 +54,7 @@ Returns WHOIS, DNS, SSL, and HTTP headers for the domain.
 ### Full investigation
 
 ```sh
-curl -X POST https://api.securityaccelerated.com/api/v1/domain/lookup \
+curl -X POST https://api.securityaccelerated.com/v1/domain/lookup \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: your-api-key' \
   -d '{
@@ -74,7 +74,7 @@ Returns everything the API can gather on the domain in a single call.
 ### Multiple domains at once
 
 ```sh
-curl -X POST https://api.securityaccelerated.com/api/v1/domain/lookup \
+curl -X POST https://api.securityaccelerated.com/v1/domain/lookup \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: your-api-key' \
   -d '{

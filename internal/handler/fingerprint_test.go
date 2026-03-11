@@ -35,7 +35,7 @@ func newFingerprintRouter(fpSvc FingerprintAdminService) *gin.Engine {
 	r := gin.New()
 	h := New(nil, fpSvc, "test", nil, nil, nil)
 
-	admin := r.Group("/api/v1/admin")
+	admin := r.Group("/v1/admin")
 	admin.Use(func(c *gin.Context) {
 		c.Set("api_key_plan", "admin")
 		c.Set("api_key_id", 100)
@@ -57,7 +57,7 @@ func TestGetFingerprints_ReturnsRules(t *testing.T) {
 	r := newFingerprintRouter(fpSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -84,7 +84,7 @@ func TestGetFingerprints_EmptyRules(t *testing.T) {
 	r := newFingerprintRouter(fpSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -106,7 +106,7 @@ func TestUpdateFingerprints_Success(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	body := `[{"name":"Nginx","category":"web-server","headers":{"Server":"nginx"}}]`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/fingerprints", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -132,7 +132,7 @@ func TestUpdateFingerprints_InvalidBody(t *testing.T) {
 	r := newFingerprintRouter(fpSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints", strings.NewReader(`not json`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/fingerprints", strings.NewReader(`not json`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -146,7 +146,7 @@ func TestUpdateFingerprints_EmptyArray(t *testing.T) {
 	r := newFingerprintRouter(fpSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints", strings.NewReader(`[]`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/fingerprints", strings.NewReader(`[]`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -162,7 +162,7 @@ func TestUpdateFingerprints_ServiceError(t *testing.T) {
 	r := newFingerprintRouter(fpSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints",
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/fingerprints",
 		strings.NewReader(`[{"name":"","category":"web-server"}]`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)

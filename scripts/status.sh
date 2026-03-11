@@ -30,16 +30,16 @@ fly status -a "$APP" 2>/dev/null | grep -E "^(app|PROCESS|App)" || echo "  Could
 
 echo ""
 echo "=== Endpoint Health ==="
-check "GET /api/v1/hello (app responding)" \
-    curl -sf --max-time 10 "$HOST/api/v1/hello"
+check "GET /v1/hello (app responding)" \
+    curl -sf --max-time 10 "$HOST/v1/hello"
 
-check "POST /api/v1/domain/lookup returns 401 without key (auth middleware running)" \
-    test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST "$HOST/api/v1/domain/lookup")" = "401"
+check "POST /v1/domain/lookup returns 401 without key (auth middleware running)" \
+    test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST "$HOST/v1/domain/lookup")" = "401"
 
 if [ -n "$ADMIN_KEY" ]; then
     echo ""
     echo "=== Admin Info ==="
-    info=$(curl -sf --max-time 10 -H "X-API-Key: $ADMIN_KEY" "$HOST/api/v1/info" 2>/dev/null || true)
+    info=$(curl -sf --max-time 10 -H "X-API-Key: $ADMIN_KEY" "$HOST/v1/info" 2>/dev/null || true)
     if [ -n "$info" ]; then
         version=$(echo "$info" | jq -r '.application.version // "unknown"')
         pg_host=$(echo "$info" | jq -r '.config.postgres_host // "unknown"')
@@ -59,13 +59,13 @@ if [ -n "$ADMIN_KEY" ]; then
     fi
 else
     echo ""
-    echo "  (Set SMOKE_ADMIN_KEY for detailed status from /api/v1/info)"
+    echo "  (Set SMOKE_ADMIN_KEY for detailed status from /v1/info)"
 fi
 
 echo ""
 echo "=== Neon Postgres ==="
 check "Postgres reachable (via app startup)" \
-    curl -sf --max-time 10 "$HOST/api/v1/hello"
+    curl -sf --max-time 10 "$HOST/v1/hello"
 
 echo ""
 printf "Results: \033[32m%d passed\033[0m" "$pass"

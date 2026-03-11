@@ -1,6 +1,6 @@
 # Intelligence API — Developer Guide
 
-Base URL: `https://api.securityaccelerated.com/api/v1`
+Base URL: `https://api.securityaccelerated.com/v1`
 
 ## Authentication
 
@@ -59,7 +59,7 @@ X-Client-Request-ID: my-trace-id-12345
 ## Domain Lookup
 
 ```
-POST /api/v1/domain/lookup
+POST /v1/domain/lookup
 ```
 
 Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP header data for each domain. Optional flags enable additional lookups.
@@ -122,7 +122,7 @@ Optional fields (`screenshot`, `reputation`, `email_security`, `subdomains`, `ct
 ### Example
 
 ```sh
-curl -X POST https://api.securityaccelerated.com/api/v1/domain/lookup \
+curl -X POST https://api.securityaccelerated.com/v1/domain/lookup \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: your-api-key' \
   -H 'X-Client-Request-ID: req-001' \

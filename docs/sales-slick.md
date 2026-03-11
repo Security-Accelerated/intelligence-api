@@ -54,7 +54,7 @@ Detect web servers, frameworks, CDNs, CMS platforms, and programming languages f
 ## How It Works
 
 ```
-POST /api/v1/domain/lookup
+POST /v1/domain/lookup
 {
   "domains": ["example.com"],
   "reputation": true,

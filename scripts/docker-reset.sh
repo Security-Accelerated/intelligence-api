@@ -23,6 +23,6 @@ until docker compose exec -T postgres pg_isready -U intelligence -d intelligence
 done
 
 echo "==> Waiting for API to be ready..."
-until curl -sf http://localhost:8080/api/v1/hello >/dev/null 2>&1; do
+until curl -sf http://localhost:8080/v1/hello >/dev/null 2>&1; do
     sleep 1
 done

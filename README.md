@@ -5,7 +5,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header,
 
 ## Authentication
 
-All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan.
+All endpoints except `/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan.
 
 ### Customer Plans
 
@@ -19,7 +19,7 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 
 The plan is stored in the `customers` table. New customers default to `basic`.
 
-Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Basic plan requests for pro-only options (screenshot, reputation) receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
+Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Basic plan requests for pro-only options (screenshot, reputation) receive `403 Forbidden`. The `/v1/hello` health check requires no authentication.
 
 ### Rate Limiting
 
@@ -41,14 +41,14 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 
 | Method | Path | Plan | Description |
 |--------|------|------|-------------|
-| GET | `/api/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
-| GET | `/api/v1/info` | `admin` | Application and environment info |
-| POST | `/api/v1/domain/lookup` | All plans | Domain intelligence lookup |
-| POST | `/api/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
-| GET | `/api/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
-| POST | `/api/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
+| GET | `/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
+| GET | `/v1/info` | `admin` | Application and environment info |
+| POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |
+| POST | `/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
+| GET | `/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
+| POST | `/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
 
-### POST /api/v1/domain/lookup
+### POST /v1/domain/lookup
 
 **Request:**
 ```json
@@ -82,7 +82,7 @@ The optional `fingerprint` field (default `false`) detects web technologies (ser
 
 **Example:**
 ```sh
-curl -X POST http://localhost:8080/api/v1/domain/lookup \
+curl -X POST http://localhost:8080/v1/domain/lookup \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: test-admin-key' \
   -d '{"domains":["example.com"]}'
@@ -185,7 +185,7 @@ Invalid domains in a multi-domain request are included in the response with a va
 
 ## Response Fields
 
-### Domain Lookup (`/api/v1/domain/lookup`)
+### Domain Lookup (`/v1/domain/lookup`)
 
 ### `domain` / `cache_hit` / `errors`
 
@@ -411,7 +411,7 @@ Each technology entry contains:
 | `version` | Version extracted from header value (e.g. `nginx/1.24.0` → `1.24.0`), empty if not detectable |
 | `confidence` | Which signal matched: `header` or `cookie` |
 
-Rules are stored in PostgreSQL and loaded into memory at startup. The default ruleset covers ~90 technologies. Admin users can update rules via `POST /api/v1/admin/fingerprints` without redeploying.
+Rules are stored in PostgreSQL and loaded into memory at startup. The default ruleset covers ~90 technologies. Admin users can update rules via `POST /v1/admin/fingerprints` without redeploying.
 
 ## Caching
 

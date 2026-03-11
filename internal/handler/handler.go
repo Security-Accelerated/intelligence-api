@@ -53,14 +53,14 @@ func (h *Handler) maxDomains(prefix, plan string) int {
 
 // RegisterRoutes registers unauthenticated routes only (health check).
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
-	v1 := router.Group("/api/v1")
+	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
 }
 
 // RegisterProtectedRoutes registers routes that require API key authentication.
 // Middleware are applied in order: typically auth first, then rate limiting.
 func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin.HandlerFunc) {
-	v1 := router.Group("/api/v1")
+	v1 := router.Group("/v1")
 	v1.Use(middlewares...)
 	v1.GET("/info", middleware.RequireAdmin(), h.Info)
 	v1.POST("/domain/lookup", h.DomainLookup)

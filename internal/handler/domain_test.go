@@ -80,7 +80,7 @@ func newTestRouterWithPlan(svc DomainLookupService, plan string) *gin.Engine {
 func TestDomainLookup_ValidDomain(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -103,7 +103,7 @@ func TestDomainLookup_ValidDomain(t *testing.T) {
 func TestDomainLookup_MultipleDomains(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","example.org"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","example.org"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -129,7 +129,7 @@ func TestDomainLookup_MultipleDomains(t *testing.T) {
 func TestDomainLookup_MixedValidInvalid(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","notadomain","example.org"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","notadomain","example.org"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -172,7 +172,7 @@ func TestDomainLookup_CachedResponse(t *testing.T) {
 	r := newTestRouter(svc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["cached.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["cached.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -195,7 +195,7 @@ func TestDomainLookup_CachedResponse(t *testing.T) {
 func TestDomainLookup_MissingBody(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", nil)
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -208,7 +208,7 @@ func TestDomainLookup_MissingBody(t *testing.T) {
 func TestDomainLookup_EmptyArray(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":[]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":[]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -221,7 +221,7 @@ func TestDomainLookup_EmptyArray(t *testing.T) {
 func TestDomainLookup_SingleInvalidDomain(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["localhost"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["localhost"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -236,7 +236,7 @@ func TestDomainLookup_RawIPRejectedWithMessage(t *testing.T) {
 
 	t.Run("single IP returns 400 with specific message", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["169.254.169.254"]}`))
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["169.254.169.254"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 
@@ -253,7 +253,7 @@ func TestDomainLookup_RawIPRejectedWithMessage(t *testing.T) {
 
 	t.Run("IP in multi-domain returns validation error with specific message", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","10.0.0.1"]}`))
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","10.0.0.1"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 
@@ -291,7 +291,7 @@ func TestDomainLookup_StripsProtocolAndSlash(t *testing.T) {
 			svc := &mockService{}
 			r := newTestRouter(svc)
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(tt.input))
+			req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(tt.input))
 			req.Header.Set("Content-Type", "application/json")
 			r.ServeHTTP(w, req)
 
@@ -317,7 +317,7 @@ func TestDomainLookup_WhitespaceTrimming(t *testing.T) {
 	svc := &mockService{}
 	r := newTestRouter(svc)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["  example.com  "]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["  example.com  "]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -380,7 +380,7 @@ func TestNormalizeDomain(t *testing.T) {
 func TestDomainLookup_Reputation_ProAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "pro")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -393,7 +393,7 @@ func TestDomainLookup_Reputation_ProAllowed(t *testing.T) {
 func TestDomainLookup_Reputation_AdminAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "admin")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -406,7 +406,7 @@ func TestDomainLookup_Reputation_AdminAllowed(t *testing.T) {
 func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -424,7 +424,7 @@ func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
 func TestDomainLookup_Screenshot_AdminAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "admin")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -437,7 +437,7 @@ func TestDomainLookup_Screenshot_AdminAllowed(t *testing.T) {
 func TestDomainLookup_Screenshot_ProAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "pro")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -450,7 +450,7 @@ func TestDomainLookup_Screenshot_ProAllowed(t *testing.T) {
 func TestDomainLookup_Screenshot_BasicForbidden(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -493,7 +493,7 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 			svc := &mockService{}
 			r := newTestRouter(svc)
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(tt.body))
+			req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			r.ServeHTTP(w, req)
 
@@ -568,7 +568,7 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 			h.RegisterProtectedRoutes(r, auth)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(tt.body))
+			req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			r.ServeHTTP(w, req)
 
@@ -622,7 +622,7 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	t.Run("basic plan over limit", func(t *testing.T) {
 		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
@@ -640,7 +640,7 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	t.Run("pro plan over limit", func(t *testing.T) {
 		r := newTestRouterWithCfg(&mockService{}, "pro", cfg)
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
@@ -658,7 +658,7 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	t.Run("pro plan at limit succeeds", func(t *testing.T) {
 		r := newTestRouterWithCfg(&mockService{}, "pro", cfg)
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
@@ -671,7 +671,7 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	t.Run("admin plan has no limit", func(t *testing.T) {
 		r := newTestRouterWithCfg(&mockService{}, "admin", cfg)
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
@@ -684,7 +684,7 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	t.Run("nil config means no limit", func(t *testing.T) {
 		r := newTestRouterWithPlan(&mockService{}, "basic")
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com","f.com","g.com","h.com","i.com","j.com"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
@@ -698,7 +698,7 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 func TestDomainLookup_EmailSecurity_AllPlansAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"email_security":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -714,7 +714,7 @@ func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
 	}
 	r := newTestRouter(svc)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -736,7 +736,7 @@ func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
 func TestDomainLookup_CTLogs_AllPlansAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -749,7 +749,7 @@ func TestDomainLookup_CTLogs_AllPlansAllowed(t *testing.T) {
 func TestDomainLookup_BGP_AllPlansAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
@@ -762,7 +762,7 @@ func TestDomainLookup_BGP_AllPlansAllowed(t *testing.T) {
 func TestDomainLookup_Fingerprint_AllPlansAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"fingerprint":true}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
