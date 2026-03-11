@@ -680,7 +680,61 @@ make run    # builds and starts the server
 | `make release V=v0.1.0` | Tag and push a release |
 | `make deploy` | Deploy to Fly.io with git version baked in |
 | `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
-| `./scripts/smoke-test.sh` | **Dev only.** Hit every endpoint with every key/tier combo and check expected status codes against a running instance |
+| `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/tier combo and check expected status codes. Defaults to `http://localhost:8080` |
+| `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
+
+## Production Deployment
+
+The API is deployed on **Fly.io** with **Neon** (PostgreSQL) and **Upstash** (Redis).
+
+### CI/CD
+
+- **Push to `main`** — GitHub Actions builds and pushes a Docker image to GHCR
+- **Push to `release`** — GitHub Actions deploys to Fly.io with the git version baked in
+- **Version tags** (`make release V=v0.X.Y`) — tags and pushes to trigger GHCR image builds
+
+### Deployment workflow
+
+```sh
+git push origin main              # push changes
+make release V=v0.X.Y             # tag the version
+git push origin main:release      # trigger Fly deploy
+```
+
+### Environment variables (Fly secrets)
+
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_HOST` | Neon PostgreSQL host |
+| `POSTGRES_PORT` | PostgreSQL port (5432) |
+| `POSTGRES_USER` | PostgreSQL user |
+| `POSTGRES_PASSWORD` | PostgreSQL password |
+| `POSTGRES_DBNAME` | PostgreSQL database name |
+| `POSTGRES_SSLMODE` | PostgreSQL SSL mode (`require` for production) |
+| `REDIS_ADDR` | Upstash Redis host:port |
+| `REDIS_PASSWORD` | Upstash Redis password |
+| `GIN_MODE` | Gin framework mode (`release` for production) |
+| `APPLICATION_MODE` | Application mode (`production`) |
+
+### Scripts
+
+Both `smoke-test.sh` and `status.sh` load API keys from a `.env` file in the project root (gitignored). Copy `.env.example` to `.env` and fill in your keys:
+
+```sh
+cp .env.example .env
+```
+
+Run the smoke test against production:
+
+```sh
+./scripts/smoke-test.sh https://security-accelerated-intelligence-api.fly.dev
+```
+
+Check deployment health:
+
+```sh
+./scripts/status.sh
+```
 
 ## Testing
 

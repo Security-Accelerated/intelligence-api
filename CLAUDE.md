@@ -91,7 +91,10 @@ Each package has `*_test.go` files. Handler tests use `httptest` with a gin test
 `integration_test.go` at project root, gated behind `//go:build integration`. Uses `miniredis` for an in-memory Redis and `stubRepo` for auth. Tests the full middleware → handler → service → (stubbed) domain flow. Covers auth, feature gates, tier access, caching, validation, and rate limiting.
 
 ### Smoke tests
-`scripts/smoke-test.sh` hits a running Docker instance with curl. Checks every endpoint with every API key and verifies expected HTTP status codes. Catches issues that unit/integration tests miss (like database migration problems).
+`scripts/smoke-test.sh` hits a running instance with curl. Checks every endpoint with every API key and verifies expected HTTP status codes. Catches issues that unit/integration tests miss (like database migration problems). Accepts an optional host argument (defaults to `http://localhost:8080`). API keys can be overridden via `.env` file or `SMOKE_*` env vars for production testing.
+
+### Status check
+`scripts/status.sh` checks Fly.io deployment health — machine state, endpoint reachability, and (with `SMOKE_ADMIN_KEY`) detailed status from the `/api/v1/info` endpoint.
 
 ## Config
 
@@ -108,9 +111,15 @@ Tables: `customers`, `api_keys` (key_hash), `customer_features` (customer_id, fe
 ## Infrastructure
 
 - **Docker Compose** for local dev (API + Redis + PostgreSQL with healthchecks)
-- **Fly.io** for production deployment
-- **GitHub Actions** builds Docker images on push to main or version tags, pushes to GHCR
+- **Fly.io** for production deployment (iad region, auto-stop/start machines)
+- **Neon** for production PostgreSQL
+- **Upstash** for production Redis (via Fly)
+- **GitHub Actions** — two workflows:
+  - `docker.yml`: builds Docker images on push to `main` or version tags, pushes to GHCR
+  - `fly-deploy.yml`: deploys to Fly.io on push to `release` branch, with git version baked in via `--build-arg`
 - Version is baked in at build time via `-ldflags "-X main.version=..."` — passed as Docker build arg
+- Deploy workflow: push to main → `make release V=v0.X.Y` → `git push origin main:release`
+- `.env` file (gitignored) holds API keys for `smoke-test.sh` and `status.sh` against production
 
 ## Adding a New Lookup Type
 
