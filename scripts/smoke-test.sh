@@ -4,11 +4,13 @@
 # to be up (make docker-reset or docker compose up).
 set -euo pipefail
 
-# Load .env if present (keys for production testing)
-ENV_FILE="$(dirname "$0")/../.env"
-[ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
-
 HOST="${1:-http://localhost:8080}"
+
+# Only load .env for non-localhost targets (production keys)
+if [[ "$HOST" != *"localhost"* && "$HOST" != *"127.0.0.1"* ]]; then
+    ENV_FILE="$(dirname "$0")/../.env"
+    [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
+fi
 
 pass=0
 fail=0
