@@ -7,7 +7,7 @@ ENV_FILE="$(dirname "$0")/../.env"
 [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
 
 APP="security-accelerated-intelligence-api"
-HOST="https://${APP}.fly.dev"
+HOST="https://api.securityaccelerated.com"
 ADMIN_KEY="${SMOKE_ADMIN_KEY:-}"
 
 pass=0

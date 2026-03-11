@@ -631,7 +631,7 @@ cp .env.example .env
 Run the smoke test against production:
 
 ```sh
-./scripts/smoke-test.sh https://security-accelerated-intelligence-api.fly.dev
+./scripts/smoke-test.sh https://api.securityaccelerated.com
 ```
 
 Check deployment health:
