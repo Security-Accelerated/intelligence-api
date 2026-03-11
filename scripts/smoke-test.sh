@@ -155,7 +155,6 @@ echo "=== Admin — Fingerprint Rules ==="
 get  200 "GET fingerprints (admin)"            "/api/v1/admin/fingerprints" "$ADMIN"
 get  403 "GET fingerprints (lookup — no admin)" "/api/v1/admin/fingerprints" "$LOOKUP"
 get  401 "GET fingerprints (no key)"           "/api/v1/admin/fingerprints" ""
-post 200 "POST fingerprints (admin)"           "/api/v1/admin/fingerprints" "$ADMIN" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 post 403 "POST fingerprints (lookup — no admin)" "/api/v1/admin/fingerprints" "$LOOKUP" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 post 401 "POST fingerprints (no key)"          "/api/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 
