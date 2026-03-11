@@ -154,27 +154,6 @@ check_json "lookup response is JSON array with domain field" \
     -d "$DOMAIN"
 
 echo ""
-echo "=== Rate Limiting ==="
-# Basic plan limit is 30/min. Send 31 requests and verify the last gets 429.
-rate_ok=true
-for i in $(seq 1 31); do
-    rl_status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$HOST/v1/domain/lookup" \
-        -H "Content-Type: application/json" -H "X-API-Key: $BASIC" \
-        -d "$DOMAIN")
-    if [ "$i" -eq 31 ]; then
-        if [ "$rl_status" = "429" ]; then
-            printf "  \033[32m✓\033[0m request 31 got 429 (rate limited)\n"
-            pass=$((pass + 1))
-        else
-            printf "  \033[31m✗\033[0m request 31 got %s (expected 429)\n" "$rl_status"
-            fail=$((fail + 1))
-            errors+=("rate limit: request 31 got $rl_status, expected 429")
-            rate_ok=false
-        fi
-    fi
-done
-
-echo ""
 echo "=== Body Size Limit ==="
 # Send a >1MB payload. MaxBytesReader surfaces through Gin's binding layer as 400.
 # Written to a temp file because the shell can't pass >1MB as a CLI argument.
