@@ -197,11 +197,14 @@ done
 echo ""
 echo "=== Body Size Limit ==="
 # Send a >1MB payload. MaxBytesReader surfaces through Gin's binding layer as 400.
-big_body=$(python3 -c "print('{\"domains\":[\"' + 'x'*1048577 + '\"]}')")
+# Written to a temp file because the shell can't pass >1MB as a CLI argument.
+big_body_file=$(mktemp)
+python3 -c "print('{\"domains\":[\"' + 'x'*1048577 + '\"]}')" > "$big_body_file"
 check 400 "oversized body (>1MB) rejected" \
     -X POST "$HOST/api/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d "$big_body"
+    -d @"$big_body_file"
+rm -f "$big_body_file"
 
 echo ""
 echo "=== Client Request ID ==="
