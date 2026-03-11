@@ -194,7 +194,7 @@ Invalid domains in a multi-domain request are included in the response with a va
 
 ### POST /api/v1/domain/typosquatting
 
-Generates typosquatting permutations for one or more domains to detect potential brand impersonation. Requires a **premium** tier customer.
+Generates typosquatting permutations for one or more domains to detect potential brand impersonation. Requires the `typosquatting` feature (available to any tier).
 
 **Request:**
 ```json
