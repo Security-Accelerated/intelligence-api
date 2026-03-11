@@ -13,7 +13,7 @@ jobs:
       - name: Ping API
         id: ping
         run: |
-          status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://api.securityaccelerated.com/v2/hello)
+          status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://api.securityaccelerated.com/v1/hello)
           echo "status=$status" >> "$GITHUB_OUTPUT"
           if [ "$status" != "200" ]; then
             echo "Health check failed with status $status"
