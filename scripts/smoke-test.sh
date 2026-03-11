@@ -4,6 +4,10 @@
 # to be up (make docker-reset or docker compose up).
 set -euo pipefail
 
+# Load .env if present (keys for production testing)
+ENV_FILE="$(dirname "$0")/../.env"
+[ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
+
 HOST="${1:-http://localhost:8080}"
 
 pass=0
@@ -64,11 +68,11 @@ get() {
     fi
 }
 
-# Keys
-ADMIN="test-admin-key"
-LOOKUP="test-lookup-key"
-TYPO="test-typosquatting-key"
-ENTERPRISE="test-enterprise-key"
+# Keys (override via .env or env vars for production)
+ADMIN="${SMOKE_ADMIN_KEY:-test-admin-key}"
+LOOKUP="${SMOKE_LOOKUP_KEY:-test-lookup-key}"
+TYPO="${SMOKE_TYPO_KEY:-test-typosquatting-key}"
+ENTERPRISE="${SMOKE_ENTERPRISE_KEY:-test-enterprise-key}"
 
 DOMAIN='{"domains":["example.com"]}'
 
