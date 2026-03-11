@@ -18,6 +18,7 @@ internal/middleware/           → Auth, rate limiting, logging, security header
 internal/httpapi/             → Gin router assembly, middleware chain, server lifecycle
 internal/cache/               → Cache interface + Redis implementation
 internal/auth/                → Customer model, PostgreSQL repository, in-memory cached repository, key hashing
+internal/notifications/        → Pushover alerting (upstream throttle + error spike detection)
 internal/safenet/             → SSRF prevention (blocks private/reserved IPs at dial time)
 internal/logging/             → Zap logger init (ECS format in production, pretty in dev)
 internal/config/              → Viper config with YAML files + env var overrides
@@ -54,6 +55,9 @@ Single `plan` column on `customers` table: `basic`, `pro`, `admin`. Controls rat
 
 ### Error sanitization
 `sanitizeErr()` strips internal error details before including them in API responses. `safenet.BlockedError` gets a specific user-friendly message. Other errors are truncated to the final segment after `: `. Full context is always logged server-side.
+
+### Notifications
+`internal/notifications/` provides interface-driven alerting. `Notifier` interface abstracts the delivery channel (currently Pushover); `ErrorRecorder` interface abstracts error tracking (currently `Alerter`). The `Alerter` uses sliding-window counters behind a mutex to detect per-lookup throttling (default: 5 failures in 5m) and global error spikes (default: 15 errors in 5m). Alerts fire asynchronously with a 15-minute cooldown to prevent alert fatigue. `DomainService` depends on `ErrorRecorder`; when Pushover credentials are absent, a `NoopRecorder` is wired in. Config: `PUSHOVER_API_TOKEN`, `PUSHOVER_USER_KEY`, `ALERTS_THROTTLE_THRESHOLD`, `ALERTS_THROTTLE_WINDOW`, `ALERTS_SPIKE_THRESHOLD`, `ALERTS_SPIKE_WINDOW`, `ALERTS_COOLDOWN`.
 
 ## Middleware Chain (order matters)
 
