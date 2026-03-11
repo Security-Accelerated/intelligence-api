@@ -523,7 +523,7 @@ Typosquatting results are cached under their own keys based on depth and check_l
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Redis (or use the included Docker Compose)
 - PostgreSQL (or use the included Docker Compose)
 - Chromium or Google Chrome (for page screenshot feature; Docker image includes it)
@@ -532,8 +532,10 @@ Typosquatting results are cached under their own keys based on depth and check_l
 
 The application looks for `intelligence-api.yaml` in the following locations (first match wins):
 
-1. `/etc/security-accelerated/` (recommended for production)
-2. `config/` (relative to working directory)
+1. `../../config/` (relative to working directory)
+2. `../config/` (relative to working directory)
+3. `config/` (relative to working directory)
+4. `/etc/security-accelerated/` (recommended for production)
 
 Copy the sample config to your preferred location:
 
@@ -545,12 +547,13 @@ Config values:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `application.mode` | `local` | `local` or `production` |
+| `application.mode` | `""` | `local` or `production` |
 | `application.port` | `8080` | HTTP server port |
 | `redis.addr` | `localhost:6379` | Redis address |
 | `redis.password` | `""` | Redis password |
 | `redis.db` | `0` | Redis database number |
 | `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
+| `gin.mode` | `""` | Gin framework mode (`debug`, `release`, `test`) |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `typosquatting.timeout` | `30s` | Timeout for typosquatting detection (generation + active checks) |
@@ -558,6 +561,14 @@ Config values:
 | `typosquatting.concurrency` | `20` | Max concurrent DNS/HTTP checks during active scanning |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
+| `domain.max_domains.basic` | `5` | Maximum domains per request for basic tier |
+| `domain.max_domains.premium` | `20` | Maximum domains per request for premium tier |
+| `typosquatting.max_domains.basic` | `3` | Maximum domains per request for basic tier (typosquatting) |
+| `typosquatting.max_domains.premium` | `5` | Maximum domains per request for premium tier (typosquatting) |
+| `subdomain.timeout` | `30s` | Timeout for subdomain enumeration |
+| `subdomain.concurrency` | `20` | Max concurrent subdomain lookups |
+| `subdomain.max_domains.basic` | `3` | Maximum domains per request for basic tier (subdomains) |
+| `subdomain.max_domains.premium` | `5` | Maximum domains per request for premium tier (subdomains) |
 | `rate_limit.basic` | `30` | Requests per minute for basic tier customers |
 | `rate_limit.premium` | `120` | Requests per minute for premium tier customers |
 | `postgres.host` | `localhost` | PostgreSQL host |

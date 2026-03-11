@@ -15,12 +15,13 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
-	"go.uber.org/zap"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/service"
+	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 // stubRepo is an in-memory auth.Repository for integration tests.
@@ -44,6 +45,60 @@ func (r *stubRepo) GetByKey(_ context.Context, key string) (*auth.Customer, erro
 	return nil, sql.ErrNoRows
 }
 
+// stubFingerprintService is an in-memory FingerprintAdminService for integration tests.
+type stubFingerprintService struct {
+	rules []domain.TechRule
+}
+
+func newStubFingerprintService() *stubFingerprintService {
+	return &stubFingerprintService{
+		rules: []domain.TechRule{
+			{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
+		},
+	}
+}
+
+func (s *stubFingerprintService) GetRules() []domain.TechRule {
+	return s.rules
+}
+
+func (s *stubFingerprintService) UpdateRules(_ context.Context, rules []domain.TechRule, _ int) error {
+	s.rules = rules
+	return nil
+}
+
+func testConfig() *viper.Viper {
+	cfg := viper.New()
+	cfg.Set("application.name", "intelligence-api")
+	cfg.Set("application.mode", "test")
+	cfg.Set("application.start.time", "2026-01-01T00:00:00Z")
+	cfg.Set("application.session.id", "test-session")
+	cfg.Set("environment.host", "test-host")
+	cfg.Set("environment.os", "linux")
+	cfg.Set("environment.kernel", "6.0.0")
+	cfg.Set("environment.architecture", "amd64")
+	cfg.Set("environment.golang.version", "go1.26")
+	cfg.Set("redis.addr", "localhost:6379")
+	cfg.Set("redis.db", 0)
+	cfg.Set("redis.cache_ttl", "5m")
+	cfg.Set("auth.cache_ttl", "5m")
+	cfg.Set("screenshot.timeout", "15s")
+	cfg.Set("typosquatting.timeout", "30s")
+	cfg.Set("typosquatting.max_permutations", 500)
+	cfg.Set("typosquatting.concurrency", 20)
+	cfg.Set("rate_limit.basic", 30)
+	cfg.Set("rate_limit.premium", 120)
+	cfg.Set("postgres.host", "localhost")
+	cfg.Set("postgres.port", 5432)
+	cfg.Set("postgres.dbname", "test_db")
+	cfg.Set("postgres.sslmode", "disable")
+	cfg.Set("domain.max_domains.basic", 5)
+	cfg.Set("domain.max_domains.premium", 20)
+	cfg.Set("typosquatting.max_domains.basic", 3)
+	cfg.Set("typosquatting.max_domains.premium", 5)
+	return cfg
+}
+
 func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -51,7 +106,12 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	mr := miniredis.RunT(t)
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
 
-	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100, nil)
+	fpEngine := domain.NewFingerprintEngine()
+	fpEngine.LoadRules([]domain.TechRule{
+		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
+	})
+
+	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100, fpEngine)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -64,7 +124,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 			return &domain.SSLInfo{Subject: "example.com", Issuer: "Test CA"}, nil
 		},
 		func(_ context.Context, _ string) (*domain.HeadersInfo, error) {
-			return &domain.HeadersInfo{StatusCode: 200, Headers: map[string]string{"Server": "test"}}, nil
+			return &domain.HeadersInfo{StatusCode: 200, Headers: map[string]string{"Server": "test/1.0"}}, nil
 		},
 		func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
 			return &domain.ScreenshotInfo{StatusCode: 200, PNG: "c3R1Yg=="}, nil
@@ -135,23 +195,38 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		}, nil
 	})
 
+	fpSvc := newStubFingerprintService()
+
 	repo := newStubRepo()
 	cachedRepo := auth.NewCachedRepository(repo, 5*time.Minute)
 
+	cfg := testConfig()
 	nop := zap.NewNop()
 
+	rlCfg := middleware.RateLimitConfig{Basic: 30, Premium: 120}
+
 	r := gin.New()
+	r.Use(gin.Recovery())
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.BodyLimit(1 << 20))
+	r.Use(middleware.ClientRequestID())
 	r.Use(middleware.RequestLoggerWithLogger(nop))
-	h := handler.New(svc, typosquattingSvc, nil, "test", nil, rc, cachedRepo)
+
+	authMW := middleware.APIKeyAuthWithLogger(cachedRepo, nop)
+	rateLimitMW := middleware.RateLimitWithLogger(rc.Client(), rlCfg, nop)
+
+	h := handler.New(svc, typosquattingSvc, fpSvc, "test", cfg, rc, cachedRepo)
 	h.RegisterRoutes(r)
-	h.RegisterProtectedRoutes(r, middleware.APIKeyAuthWithLogger(cachedRepo, nop))
+	h.RegisterProtectedRoutes(r, authMW, rateLimitMW)
 
 	admin := r.Group("/api/v1/admin")
-	admin.Use(middleware.APIKeyAuthWithLogger(cachedRepo, nop), middleware.RequireFeatures("admin"))
+	admin.Use(authMW, rateLimitMW, middleware.RequireFeatures("admin"))
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
 		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
 	})
+	admin.GET("/fingerprints", h.GetFingerprints)
+	admin.POST("/fingerprints", h.UpdateFingerprints)
 
 	return r, mr
 }
@@ -1117,5 +1192,360 @@ func TestIntegration_BGP_BasicTierCanAccess(t *testing.T) {
 	}
 	if resp[0].BGP == nil {
 		t.Fatal("expected bgp to be populated for basic tier")
+	}
+}
+
+// --- Middleware: Security Headers ---
+
+func TestIntegration_SecurityHeaders_Present(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hello", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want %q", w.Header().Get("X-Content-Type-Options"), "nosniff")
+	}
+	if w.Header().Get("X-Frame-Options") != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want %q", w.Header().Get("X-Frame-Options"), "DENY")
+	}
+	if w.Header().Get("Cache-Control") != "no-store" {
+		t.Errorf("Cache-Control = %q, want %q", w.Header().Get("Cache-Control"), "no-store")
+	}
+}
+
+// --- Middleware: Body Limit ---
+
+func TestIntegration_BodyLimit_Exceeded(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// Create a body larger than 1MB. MaxBytesReader causes a read error that
+	// surfaces as 400 from Gin's JSON binding layer.
+	bigBody := strings.Repeat("x", 1<<20+1)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(bigBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (oversized body rejected via MaxBytesReader)", w.Code, http.StatusBadRequest)
+	}
+}
+
+// --- Middleware: Client Request ID ---
+
+func TestIntegration_ClientRequestID_EchoedBack(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/hello", nil)
+	req.Header.Set("X-Client-Request-ID", "integration-test-id-123")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if w.Header().Get("X-Client-Request-ID") != "integration-test-id-123" {
+		t.Errorf("X-Client-Request-ID = %q, want %q", w.Header().Get("X-Client-Request-ID"), "integration-test-id-123")
+	}
+}
+
+// --- Middleware: Rate Limiting ---
+
+func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	body := `{"domains":["example.com"]}`
+
+	// Send 31 requests — basic limit is 30
+	for i := 0; i < 30; i++ {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-lookup-key")
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
+		}
+	}
+
+	// Request 31 should be rate limited
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("request 31: status = %d, want %d", w.Code, http.StatusTooManyRequests)
+	}
+	if w.Header().Get("Retry-After") == "" {
+		t.Error("expected Retry-After header on 429 response")
+	}
+}
+
+func TestIntegration_RateLimit_AdminBypasses(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	body := `{"domains":["example.com"]}`
+
+	// Admin should bypass rate limiting entirely — send 35 requests
+	for i := 0; i < 35; i++ {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-admin-key")
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("admin request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
+		}
+	}
+}
+
+// --- Admin Fingerprints ---
+
+func TestIntegration_AdminFingerprints_GetRules(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := body["count"]; !ok {
+		t.Error("expected 'count' field in response")
+	}
+	if _, ok := body["rules"]; !ok {
+		t.Error("expected 'rules' field in response")
+	}
+}
+
+func TestIntegration_AdminFingerprints_GetForbiddenForNonAdmin(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestIntegration_AdminFingerprints_GetUnauthorizedNoKey(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/fingerprints", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestIntegration_AdminFingerprints_UpdateRules(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	rules := `[{"name":"NewTech","category":"cdn","headers":{"X-CDN":"test"}}]`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints", strings.NewReader(rules))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var body map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["message"] != "fingerprint rules updated" {
+		t.Errorf("message = %q, want %q", body["message"], "fingerprint rules updated")
+	}
+}
+
+func TestIntegration_AdminFingerprints_UpdateForbiddenForNonAdmin(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/fingerprints",
+		strings.NewReader(`[{"name":"X","category":"other","headers":{"X":"y"}}]`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+// --- Info endpoint success path ---
+
+func TestIntegration_Info_AdminCanAccess(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := body["application"]; !ok {
+		t.Error("expected 'application' field in response")
+	}
+	if _, ok := body["environment"]; !ok {
+		t.Error("expected 'environment' field in response")
+	}
+	if _, ok := body["config"]; !ok {
+		t.Error("expected 'config' field in response")
+	}
+}
+
+// --- Multi-domain domain lookup ---
+
+func TestIntegration_DomainLookup_MultipleDomains(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com","example.org"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 2 {
+		t.Fatalf("len(resp) = %d, want 2", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+	if resp[1].Domain != "example.org" {
+		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "example.org")
+	}
+}
+
+// --- Cache key isolation by feature combo ---
+
+func TestIntegration_CacheKeyIsolation_FeatureCombo(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// First: base lookup (no options)
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("base lookup: status = %d, want %d", w1.Code, http.StatusOK)
+	}
+
+	var base []*domain.DomainResponse
+	json.Unmarshal(w1.Body.Bytes(), &base)
+	if base[0].CacheHit {
+		t.Error("base lookup should be a cache miss")
+	}
+	if base[0].Reputation != nil {
+		t.Error("base lookup should not include reputation")
+	}
+
+	// Second: reputation lookup — should NOT be a cache hit from the base lookup
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("reputation lookup: status = %d, want %d", w2.Code, http.StatusOK)
+	}
+
+	var rep []*domain.DomainResponse
+	json.Unmarshal(w2.Body.Bytes(), &rep)
+	if rep[0].CacheHit {
+		t.Error("reputation lookup should be a cache miss (different cache key than base)")
+	}
+	if rep[0].Reputation == nil {
+		t.Fatal("reputation lookup should include reputation data")
+	}
+
+	// Third: repeat reputation lookup — should be a cache hit now
+	w3 := httptest.NewRecorder()
+	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req3.Header.Set("Content-Type", "application/json")
+	req3.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w3, req3)
+
+	var rep2 []*domain.DomainResponse
+	json.Unmarshal(w3.Body.Bytes(), &rep2)
+	if !rep2[0].CacheHit {
+		t.Error("repeated reputation lookup should be a cache hit")
+	}
+	if rep2[0].Reputation == nil {
+		t.Error("cached reputation lookup should include reputation data")
+	}
+}
+
+// --- Fingerprint via domain lookup ---
+
+func TestIntegration_Fingerprint_IncludedWhenRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"fingerprint":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Fingerprint == nil {
+		t.Fatal("expected fingerprint to be populated")
+	}
+	if resp[0].Fingerprint.Count < 1 {
+		t.Errorf("Fingerprint.Count = %d, want >= 1", resp[0].Fingerprint.Count)
 	}
 }

@@ -44,7 +44,7 @@ Cache keys are built from the domain name plus sorted feature suffixes: `example
 The `safenet` package provides a `DialControl` function that rejects connections to private, loopback, link-local, multicast, unspecified, and CGNAT IPs. It fires after DNS resolution (no TOCTOU race). All HTTP clients in the `domain` package use `safenet.SafeDialer()` via shared transports in `domain/transport.go`.
 
 ### Hashed API keys
-Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after role changes.
+Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after feature changes.
 
 ### Tier-based access control
 Two dimensions: **features** control which endpoints a key can access (`admin`, `lookup`, `typosquatting`); **tier** controls access to premium options within endpoints (`basic` vs `premium`). Rate limits are also tier-aware. Admins bypass rate limiting entirely.
@@ -95,7 +95,7 @@ Each package has `*_test.go` files. Handler tests use `httptest` with a gin test
 
 ## Config
 
-Viper-based. Reads YAML from `/etc/security-accelerated/intelligence-api.yaml` (production) or `config/` (relative). Environment variables override config: `POSTGRES_HOST` → `postgres.host`. Defaults are set in `config/config.go` for all values.
+Viper-based. Reads YAML from `../../config/`, `../config/`, `config/` (relative, first match wins), or `/etc/security-accelerated/` (production). Environment variables override config: `POSTGRES_HOST` → `postgres.host`. Defaults are set in `config/config.go` for all values.
 
 Sample config: `internal/config/sample-config.yml`
 

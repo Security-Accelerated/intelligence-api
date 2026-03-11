@@ -90,6 +90,12 @@ post 200 "email_security (enterprise)" "/api/v1/domain/lookup" "$ENTERPRISE" '{"
 post 200 "subdomains (admin)"          "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"subdomains":true}'
 post 200 "subdomains (lookup)"         "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"subdomains":true}'
 post 200 "subdomains (enterprise)"     "/api/v1/domain/lookup" "$ENTERPRISE" '{"domains":["example.com"],"subdomains":true}'
+post 200 "ct_logs (admin)"             "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"ct_logs":true}'
+post 200 "ct_logs (lookup)"            "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"ct_logs":true}'
+post 200 "bgp (admin)"                 "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"bgp":true}'
+post 200 "bgp (lookup)"               "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"bgp":true}'
+post 200 "fingerprint (admin)"         "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"fingerprint":true}'
+post 200 "fingerprint (lookup)"        "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"fingerprint":true}'
 
 echo ""
 echo "=== Domain Lookup — Validation ==="
@@ -107,10 +113,26 @@ post 403 "typosquatting (lookup — no feature)"  "/api/v1/domain/typosquatting"
 post 401 "typosquatting (no key)"               "/api/v1/domain/typosquatting" ""            "$DOMAIN"
 
 echo ""
+echo "=== Typosquatting — Options ==="
+post 200 "typosquatting depth=shallow"  "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"depth":"shallow"}'
+post 200 "typosquatting depth=deep"     "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"depth":"deep"}'
+post 200 "typosquatting check_live"     "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"check_live":true}'
+post 400 "typosquatting invalid depth"  "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"depth":"invalid"}'
+
+echo ""
 echo "=== Admin ==="
 post 200 "cache invalidate (admin)"            "/api/v1/admin/auth/cache/invalidate" "$ADMIN"  ""
 post 403 "cache invalidate (lookup — no admin)" "/api/v1/admin/auth/cache/invalidate" "$LOOKUP" ""
 post 401 "cache invalidate (no key)"           "/api/v1/admin/auth/cache/invalidate" ""        ""
+
+echo ""
+echo "=== Admin — Fingerprint Rules ==="
+get  200 "GET fingerprints (admin)"            "/api/v1/admin/fingerprints" "$ADMIN"
+get  403 "GET fingerprints (lookup — no admin)" "/api/v1/admin/fingerprints" "$LOOKUP"
+get  401 "GET fingerprints (no key)"           "/api/v1/admin/fingerprints" ""
+post 200 "POST fingerprints (admin)"           "/api/v1/admin/fingerprints" "$ADMIN" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
+post 403 "POST fingerprints (lookup — no admin)" "/api/v1/admin/fingerprints" "$LOOKUP" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
+post 401 "POST fingerprints (no key)"          "/api/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 
 echo ""
 echo "=== Client Request ID ==="

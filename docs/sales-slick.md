@@ -14,7 +14,7 @@ Security teams waste hours manually checking domains across dozens of disconnect
 
 One API. One call. Every signal that matters.
 
-Submit a domain and get back a complete intelligence profile in seconds: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, and even a visual screenshot of the page. Batch multiple domains in a single request. Results are cached for fast repeat lookups.
+Submit a domain and get back a complete intelligence profile in seconds: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, what technologies it runs, and even a visual screenshot of the page. Batch multiple domains in a single request. Results are cached for fast repeat lookups.
 
 ---
 
@@ -40,6 +40,15 @@ Capture a visual screenshot of any domain's web page with headless Chrome. See w
 ### Subdomain Enumeration
 Discover subdomains via Certificate Transparency logs. Find forgotten infrastructure, staging environments, and shadow IT — the entry points attackers look for first.
 
+### Certificate Transparency Logs
+Query CT logs for every certificate ever issued for a domain. Track certificate issuance patterns, detect unauthorized certificates, and identify related infrastructure through shared certificates.
+
+### BGP/ASN Enrichment
+Map domains to their hosting infrastructure via IP-to-ASN lookups. Identify hosting providers, detect bulletproof hosting, and perform pivot analysis across shared autonomous systems.
+
+### Technology Fingerprinting
+Detect web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers — with zero extra network requests. Identify technology stacks for vulnerability assessment and attack surface mapping.
+
 ### Typosquatting Detection
 Generate hundreds of lookalike domain permutations using 10 different algorithms (homoglyphs, character swaps, bitsquatting, and more). Optionally check which permutations are actually registered and live. Protect your brand before impersonators strike.
 
@@ -54,7 +63,10 @@ POST /api/v1/domain/lookup
   "reputation": true,
   "email_security": true,
   "screenshot": true,
-  "subdomains": true
+  "subdomains": true,
+  "ct_logs": true,
+  "bgp": true,
+  "fingerprint": true
 }
 ```
 
@@ -80,6 +92,9 @@ That's it. One request, one comprehensive response.
 | Domain lookup (WHOIS, DNS, SSL, headers) | Included | Included |
 | Email security (SPF, DMARC, DKIM) | Included | Included |
 | Subdomain enumeration | Included | Included |
+| Certificate transparency logs | Included | Included |
+| BGP/ASN enrichment | Included | Included |
+| Technology fingerprinting | Included | Included |
 | Page screenshots | — | Included |
 | Domain reputation scoring | — | Included |
 | Typosquatting detection | Add-on | Add-on |
