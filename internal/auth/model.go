@@ -7,7 +7,6 @@ type Customer struct {
 	APIKeyID  int
 	Name      string
 	Active    bool
-	Tier      string
-	Features  []string
+	Plan      string
 	CreatedAt time.Time
 }

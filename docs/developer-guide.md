@@ -27,7 +27,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests`. Back off un
 | Plan | Limit |
 |------|-------|
 | Basic | 30 requests/minute |
-| Premium | 120 requests/minute |
+| Pro | 120 requests/minute |
 
 ## Request Correlation
 
@@ -64,7 +64,7 @@ POST /api/v1/domain/lookup
 
 Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP header data for each domain. Optional flags enable additional lookups.
 
-**Plans:** Basic, Premium
+**Plans:** Basic, Pro, Admin
 
 ### Request
 
@@ -83,9 +83,9 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `domains` | string[] | Yes | — | Domain names to look up (max 5 basic, 20 premium) |
-| `screenshot` | bool | No | `false` | Capture a page screenshot (premium only) |
-| `reputation` | bool | No | `false` | Check domain against threat blocklists (premium only) |
+| `domains` | string[] | Yes | — | Domain names to look up (max 5 basic, 20 pro) |
+| `screenshot` | bool | No | `false` | Capture a page screenshot (pro plan and above) |
+| `reputation` | bool | No | `false` | Check domain against threat blocklists (pro plan and above) |
 | `email_security` | bool | No | `false` | Check SPF, DMARC, and DKIM records |
 | `subdomains` | bool | No | `false` | Enumerate subdomains via Certificate Transparency logs |
 | `ct_logs` | bool | No | `false` | Query Certificate Transparency logs for all issued certificates |
@@ -156,109 +156,6 @@ Invalid domains in a multi-domain request don't fail the entire request. They're
 
 ---
 
-## Typosquatting Detection
-
-```
-POST /api/v1/domain/typosquatting
-```
-
-Generate typosquatting permutations for one or more domains. Optionally check which permutations are actually registered and serving live content.
-
-**Plans:** Available as an add-on to any plan
-
-### Request
-
-```json
-{
-  "domains": ["example.com"],
-  "depth": "shallow",
-  "check_live": false
-}
-```
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `domains` | string[] | Yes | — | Domain names to check (max 3 basic, 5 premium) |
-| `depth` | string | No | `"shallow"` | `"shallow"` or `"deep"` |
-| `check_live` | bool | No | `false` | Check DNS registration and HTTP liveness for each permutation |
-
-### Depth Levels
-
-**Shallow** (4 algorithms, ~30-80 results per domain):
-- Character omission (`exmple.com`)
-- Character swap (`exmaple.com`)
-- Homoglyphs (`examp1e.com`)
-- Wrong TLD (`example.net`)
-
-**Deep** (10 algorithms, hundreds of results per domain):
-All shallow algorithms plus:
-- Adjacent key substitution (`rxample.com`)
-- Character repeat (`exaample.com`)
-- Vowel swap (`exomple.com`)
-- Missing dot (`examplecom.com`)
-- Character addition (`examplee.com`)
-- Bitsquatting (`dxample.com`)
-
-### Response
-
-```json
-[
-  {
-    "domain": "example.com",
-    "cache_hit": false,
-    "depth": "shallow",
-    "count": 42,
-    "capped": false,
-    "permutations": [
-      {
-        "domain": "examp1e.com",
-        "technique": "homoglyph",
-        "registered": true,
-        "live": true
-      },
-      {
-        "domain": "examlpe.com",
-        "technique": "character_swap",
-        "registered": false
-      }
-    ]
-  }
-]
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `domain` | string | The domain that was checked |
-| `cache_hit` | bool | Whether the result was served from cache |
-| `depth` | string | Depth level used |
-| `count` | int | Number of permutations returned |
-| `capped` | bool | `true` if results were truncated at the cap |
-| `permutations` | array | Typosquatting candidates |
-
-Each permutation:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `domain` | string | The lookalike domain |
-| `technique` | string | Algorithm that generated it |
-| `registered` | bool | Has DNS A records (only when `check_live: true`) |
-| `live` | bool | Responds to HTTP (only when registered) |
-
-### Example
-
-```sh
-curl -X POST https://api.securityaccelerated.com/api/v1/domain/typosquatting \
-  -H 'Content-Type: application/json' \
-  -H 'X-API-Key: your-api-key' \
-  -d '{
-    "domains": ["yourcompany.com"],
-    "depth": "deep",
-    "check_live": true
-  }'
-```
-
----
-
 # Response Field Reference
 
 ## `whois` — Domain Registration
@@ -323,7 +220,7 @@ Security headers checked:
 | `referrer_policy` | Referrer-Policy |
 | `permissions_policy` | Permissions-Policy |
 
-## `screenshot` — Page Screenshot (Premium)
+## `screenshot` — Page Screenshot (Pro)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -332,7 +229,7 @@ Security headers checked:
 
 The screenshot tries HTTPS first, then falls back to HTTP. Captured at 1280x720 with headless Chrome.
 
-## `reputation` — Domain Reputation (Premium)
+## `reputation` — Domain Reputation (Pro)
 
 | Field | Type | Description |
 |-------|------|-------------|

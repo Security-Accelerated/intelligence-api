@@ -125,8 +125,7 @@ func TestAPIKeyAuth_Success_SetsContextValues(t *testing.T) {
 	repo := &mockAuthRepo{
 		customer: &auth.Customer{
 			APIKeyID: 42,
-			Features: []string{"admin", "domain"},
-			Tier:     "premium",
+			Plan:     "pro",
 		},
 	}
 
@@ -134,8 +133,7 @@ func TestAPIKeyAuth_Success_SetsContextValues(t *testing.T) {
 	logger := zap.New(core)
 
 	var gotKeyID int
-	var gotFeatures []string
-	var gotTier string
+	var gotPlan string
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -144,11 +142,8 @@ func TestAPIKeyAuth_Success_SetsContextValues(t *testing.T) {
 		if v, ok := c.Get("api_key_id"); ok {
 			gotKeyID = v.(int)
 		}
-		if v, ok := c.Get("api_key_features"); ok {
-			gotFeatures = v.([]string)
-		}
-		if v, ok := c.Get("api_key_tier"); ok {
-			gotTier = v.(string)
+		if v, ok := c.Get("api_key_plan"); ok {
+			gotPlan = v.(string)
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
@@ -160,34 +155,31 @@ func TestAPIKeyAuth_Success_SetsContextValues(t *testing.T) {
 	if gotKeyID != 42 {
 		t.Errorf("api_key_id = %d, want 42", gotKeyID)
 	}
-	if len(gotFeatures) != 2 || gotFeatures[0] != "admin" || gotFeatures[1] != "domain" {
-		t.Errorf("api_key_features = %v, want [admin domain]", gotFeatures)
-	}
-	if gotTier != "premium" {
-		t.Errorf("api_key_tier = %q, want %q", gotTier, "premium")
+	if gotPlan != "pro" {
+		t.Errorf("api_key_plan = %q, want %q", gotPlan, "pro")
 	}
 }
 
-// --- RequireFeatures tests ---
+// --- RequireAdmin tests ---
 
-func setupFeaturesRouter(roles []string, allowed ...string) *gin.Engine {
+func setupAdminRouter(plan string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	if roles != nil {
+	if plan != "" {
 		r.Use(func(c *gin.Context) {
-			c.Set("api_key_features", roles)
+			c.Set("api_key_plan", plan)
 			c.Next()
 		})
 	}
-	r.Use(RequireFeatures(allowed...))
+	r.Use(RequireAdmin())
 	r.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 	return r
 }
 
-func TestRequireFeatures_MatchingRole(t *testing.T) {
-	r := setupFeaturesRouter([]string{"admin", "domain"}, "domain", "billing")
+func TestRequireAdmin_AdminAllowed(t *testing.T) {
+	r := setupAdminRouter("admin")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
@@ -197,8 +189,8 @@ func TestRequireFeatures_MatchingRole(t *testing.T) {
 	}
 }
 
-func TestRequireFeatures_NoMatchingRole(t *testing.T) {
-	r := setupFeaturesRouter([]string{"viewer"}, "admin", "domain")
+func TestRequireAdmin_ProForbidden(t *testing.T) {
+	r := setupAdminRouter("pro")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
@@ -214,8 +206,8 @@ func TestRequireFeatures_NoMatchingRole(t *testing.T) {
 	}
 }
 
-func TestRequireFeatures_EmptyRoles(t *testing.T) {
-	r := setupFeaturesRouter([]string{}, "admin")
+func TestRequireAdmin_BasicForbidden(t *testing.T) {
+	r := setupAdminRouter("basic")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
@@ -225,9 +217,8 @@ func TestRequireFeatures_EmptyRoles(t *testing.T) {
 	}
 }
 
-func TestRequireFeatures_MissingRolesContext(t *testing.T) {
-	// Pass nil to skip setting roles on context at all
-	r := setupFeaturesRouter(nil, "admin")
+func TestRequireAdmin_MissingPlanForbidden(t *testing.T) {
+	r := setupAdminRouter("")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)

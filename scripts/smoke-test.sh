@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test — hits every endpoint with every key/tier combination and checks
+# Smoke test — hits every endpoint with every key/plan combination and checks
 # expected HTTP status codes against the running API. Requires Docker containers
 # to be up (make docker-reset or docker compose up).
 set -euo pipefail
@@ -70,9 +70,8 @@ get() {
 
 # Keys (override via .env or env vars for production)
 ADMIN="${SMOKE_ADMIN_KEY:-test-admin-key}"
-LOOKUP="${SMOKE_LOOKUP_KEY:-test-lookup-key}"
-TYPO="${SMOKE_TYPO_KEY:-test-typosquatting-key}"
-ENTERPRISE="${SMOKE_ENTERPRISE_KEY:-test-enterprise-key}"
+BASIC="${SMOKE_BASIC_KEY:-test-basic-key}"
+PRO="${SMOKE_PRO_KEY:-test-pro-key}"
 
 DOMAIN='{"domains":["example.com"]}'
 
@@ -82,45 +81,42 @@ get 200 "GET /hello (no auth)" "/api/v1/hello" ""
 
 echo ""
 echo "=== App Info ==="
-get 200 "GET /info (admin)"               "/api/v1/info" "$ADMIN"
-get 403 "GET /info (lookup — no admin)"    "/api/v1/info" "$LOOKUP"
-get 403 "GET /info (typosquatting — no admin)" "/api/v1/info" "$TYPO"
-get 403 "GET /info (enterprise — no admin)" "/api/v1/info" "$ENTERPRISE"
-get 401 "GET /info (no key)"               "/api/v1/info" ""
+get 200 "GET /info (admin)"             "/api/v1/info" "$ADMIN"
+get 403 "GET /info (pro — not admin)"   "/api/v1/info" "$PRO"
+get 403 "GET /info (basic — not admin)" "/api/v1/info" "$BASIC"
+get 401 "GET /info (no key)"            "/api/v1/info" ""
 
 echo ""
-echo "=== Domain Lookup — Auth & Features ==="
-post 200 "lookup (admin)"       "/api/v1/domain/lookup" "$ADMIN"      "$DOMAIN"
-post 200 "lookup (lookup)"      "/api/v1/domain/lookup" "$LOOKUP"     "$DOMAIN"
-post 200 "lookup (enterprise)"  "/api/v1/domain/lookup" "$ENTERPRISE" "$DOMAIN"
-post 403 "lookup (typosquatting — no lookup feature)" "/api/v1/domain/lookup" "$TYPO" "$DOMAIN"
-post 401 "lookup (no key)"      "/api/v1/domain/lookup" ""            "$DOMAIN"
+echo "=== Domain Lookup — Auth ==="
+post 200 "lookup (admin)"      "/api/v1/domain/lookup" "$ADMIN" "$DOMAIN"
+post 200 "lookup (pro)"        "/api/v1/domain/lookup" "$PRO"   "$DOMAIN"
+post 200 "lookup (basic)"      "/api/v1/domain/lookup" "$BASIC" "$DOMAIN"
+post 401 "lookup (no key)"     "/api/v1/domain/lookup" ""       "$DOMAIN"
 post 401 "lookup (wrong key)"  "/api/v1/domain/lookup" "totally-wrong-key" "$DOMAIN"
 
 echo ""
-echo "=== Domain Lookup — Premium Options ==="
-post 200 "screenshot (admin — premium)"         "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"screenshot":true}'
-post 200 "screenshot (enterprise — premium)"    "/api/v1/domain/lookup" "$ENTERPRISE" '{"domains":["example.com"],"screenshot":true}'
-post 403 "screenshot (lookup — basic tier)"     "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"screenshot":true}'
-post 200 "reputation (admin — premium)"         "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"reputation":true}'
-post 200 "reputation (enterprise — premium)"    "/api/v1/domain/lookup" "$ENTERPRISE" '{"domains":["example.com"],"reputation":true}'
-post 403 "reputation (lookup — basic tier)"     "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"reputation":true}'
-post 200 "screenshot+reputation (admin)"        "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"screenshot":true,"reputation":true}'
+echo "=== Domain Lookup — Pro Options ==="
+post 200 "screenshot (admin)"            "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"screenshot":true}'
+post 200 "screenshot (pro)"              "/api/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"screenshot":true}'
+post 403 "screenshot (basic — pro only)" "/api/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"screenshot":true}'
+post 200 "reputation (admin)"            "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"reputation":true}'
+post 200 "reputation (pro)"              "/api/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"reputation":true}'
+post 403 "reputation (basic — pro only)" "/api/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"reputation":true}'
+post 200 "screenshot+reputation (admin)" "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"screenshot":true,"reputation":true}'
 
 echo ""
-echo "=== Domain Lookup — All-Tier Options ==="
-post 200 "email_security (admin)"      "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"email_security":true}'
-post 200 "email_security (lookup)"     "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"email_security":true}'
-post 200 "email_security (enterprise)" "/api/v1/domain/lookup" "$ENTERPRISE" '{"domains":["example.com"],"email_security":true}'
-post 200 "subdomains (admin)"          "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"subdomains":true}'
-post 200 "subdomains (lookup)"         "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"subdomains":true}'
-post 200 "subdomains (enterprise)"     "/api/v1/domain/lookup" "$ENTERPRISE" '{"domains":["example.com"],"subdomains":true}'
-post 200 "ct_logs (admin)"             "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"ct_logs":true}'
-post 200 "ct_logs (lookup)"            "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"ct_logs":true}'
-post 200 "bgp (admin)"                 "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"bgp":true}'
-post 200 "bgp (lookup)"               "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"bgp":true}'
-post 200 "fingerprint (admin)"         "/api/v1/domain/lookup" "$ADMIN"      '{"domains":["example.com"],"fingerprint":true}'
-post 200 "fingerprint (lookup)"        "/api/v1/domain/lookup" "$LOOKUP"     '{"domains":["example.com"],"fingerprint":true}'
+echo "=== Domain Lookup — All-Plan Options ==="
+post 200 "email_security (admin)"  "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"email_security":true}'
+post 200 "email_security (pro)"    "/api/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"email_security":true}'
+post 200 "email_security (basic)"  "/api/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"email_security":true}'
+post 200 "subdomains (admin)"      "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"subdomains":true}'
+post 200 "subdomains (basic)"      "/api/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"subdomains":true}'
+post 200 "ct_logs (admin)"         "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"ct_logs":true}'
+post 200 "ct_logs (basic)"         "/api/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"ct_logs":true}'
+post 200 "bgp (admin)"             "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"bgp":true}'
+post 200 "bgp (basic)"             "/api/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"bgp":true}'
+post 200 "fingerprint (admin)"     "/api/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"fingerprint":true}'
+post 200 "fingerprint (basic)"     "/api/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"fingerprint":true}'
 
 echo ""
 echo "=== Domain Lookup — Validation ==="
@@ -130,33 +126,18 @@ post 400 "invalid domain"      "/api/v1/domain/lookup" "$ADMIN" '{"domains":["no
 post 400 "raw IP"              "/api/v1/domain/lookup" "$ADMIN" '{"domains":["1.2.3.4"]}'
 
 echo ""
-echo "=== Typosquatting — Auth & Features ==="
-post 200 "typosquatting (admin)"               "/api/v1/domain/typosquatting" "$ADMIN"      "$DOMAIN"
-post 200 "typosquatting (typosquatting key)"    "/api/v1/domain/typosquatting" "$TYPO"       "$DOMAIN"
-post 200 "typosquatting (enterprise)"           "/api/v1/domain/typosquatting" "$ENTERPRISE" "$DOMAIN"
-post 403 "typosquatting (lookup — no feature)"  "/api/v1/domain/typosquatting" "$LOOKUP"     "$DOMAIN"
-post 401 "typosquatting (no key)"               "/api/v1/domain/typosquatting" ""            "$DOMAIN"
-
-echo ""
-echo "=== Typosquatting — Options ==="
-post 200 "typosquatting depth=shallow"  "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"depth":"shallow"}'
-post 200 "typosquatting depth=deep"     "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"depth":"deep"}'
-post 200 "typosquatting check_live"     "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"check_live":true}'
-post 400 "typosquatting invalid depth"  "/api/v1/domain/typosquatting" "$ADMIN" '{"domains":["example.com"],"depth":"invalid"}'
-
-echo ""
 echo "=== Admin ==="
-post 200 "cache invalidate (admin)"            "/api/v1/admin/auth/cache/invalidate" "$ADMIN"  ""
-post 403 "cache invalidate (lookup — no admin)" "/api/v1/admin/auth/cache/invalidate" "$LOOKUP" ""
-post 401 "cache invalidate (no key)"           "/api/v1/admin/auth/cache/invalidate" ""        ""
+post 200 "cache invalidate (admin)"             "/api/v1/admin/auth/cache/invalidate" "$ADMIN" ""
+post 403 "cache invalidate (basic — not admin)" "/api/v1/admin/auth/cache/invalidate" "$BASIC" ""
+post 401 "cache invalidate (no key)"            "/api/v1/admin/auth/cache/invalidate" ""       ""
 
 echo ""
 echo "=== Admin — Fingerprint Rules ==="
-get  200 "GET fingerprints (admin)"            "/api/v1/admin/fingerprints" "$ADMIN"
-get  403 "GET fingerprints (lookup — no admin)" "/api/v1/admin/fingerprints" "$LOOKUP"
-get  401 "GET fingerprints (no key)"           "/api/v1/admin/fingerprints" ""
-post 403 "POST fingerprints (lookup — no admin)" "/api/v1/admin/fingerprints" "$LOOKUP" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
-post 401 "POST fingerprints (no key)"          "/api/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
+get  200 "GET fingerprints (admin)"             "/api/v1/admin/fingerprints" "$ADMIN"
+get  403 "GET fingerprints (basic — not admin)" "/api/v1/admin/fingerprints" "$BASIC"
+get  401 "GET fingerprints (no key)"            "/api/v1/admin/fingerprints" ""
+post 403 "POST fingerprints (basic — not admin)" "/api/v1/admin/fingerprints" "$BASIC" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
+post 401 "POST fingerprints (no key)"           "/api/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 
 echo ""
 echo "=== Response Body Validation ==="
@@ -170,19 +151,13 @@ check_json "lookup response is JSON array with domain field" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
 
-check_json "typosquatting response has domain and permutations" \
-    '.[0] | (.domain and .permutations)' \
-    -X POST "$HOST/api/v1/domain/typosquatting" \
-    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d "$DOMAIN"
-
 echo ""
 echo "=== Rate Limiting ==="
-# Basic tier limit is 30/min. Send 31 requests and verify the last gets 429.
+# Basic plan limit is 30/min. Send 31 requests and verify the last gets 429.
 rate_ok=true
 for i in $(seq 1 31); do
     rl_status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$HOST/api/v1/domain/lookup" \
-        -H "Content-Type: application/json" -H "X-API-Key: $LOOKUP" \
+        -H "Content-Type: application/json" -H "X-API-Key: $BASIC" \
         -d "$DOMAIN")
     if [ "$i" -eq 31 ]; then
         if [ "$rl_status" = "429" ]; then
@@ -212,10 +187,6 @@ rm -f "$big_body_file"
 echo ""
 echo "=== Client Request ID ==="
 # Verify the header is echoed back
-rid_status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$HOST/api/v1/domain/lookup" \
-    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -H "X-Client-Request-ID: smoke-test-123" \
-    -d "$DOMAIN")
 rid_echo=$(curl -s -D - -o /dev/null -X POST "$HOST/api/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -H "X-Client-Request-ID: smoke-test-456" \

@@ -22,39 +22,33 @@ type DomainLookupService interface {
 	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool)
 }
 
-type TyposquattingLookupService interface {
-	Lookup(ctx context.Context, domainName string, checkLive bool, depth string) (*domain.TyposquattingResponse, bool)
-}
-
 type Handler struct {
-	domainService        DomainLookupService
-	typosquattingService TyposquattingLookupService
-	fingerprintService   FingerprintAdminService
-	version              string
-	cfg                  *viper.Viper
-	redisCache           *cache.RedisCache
-	cachedRepo           *auth.CachedRepository
+	domainService      DomainLookupService
+	fingerprintService FingerprintAdminService
+	version            string
+	cfg                *viper.Viper
+	redisCache         *cache.RedisCache
+	cachedRepo         *auth.CachedRepository
 }
 
-func New(domainService DomainLookupService, typosquattingService TyposquattingLookupService, fingerprintService FingerprintAdminService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
+func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
 	return &Handler{
-		domainService:        domainService,
-		typosquattingService: typosquattingService,
-		fingerprintService:   fingerprintService,
-		version:              version,
-		cfg:                  cfg,
-		redisCache:           redisCache,
-		cachedRepo:           cachedRepo,
+		domainService:      domainService,
+		fingerprintService: fingerprintService,
+		version:            version,
+		cfg:                cfg,
+		redisCache:         redisCache,
+		cachedRepo:         cachedRepo,
 	}
 }
 
 // maxDomains returns the configured maximum number of domains for the given
-// config prefix and tier. Returns 0 (no limit) if config is nil.
-func (h *Handler) maxDomains(prefix, tier string) int {
+// config prefix and plan. Returns 0 (no limit) if config is nil.
+func (h *Handler) maxDomains(prefix, plan string) int {
 	if h.cfg == nil {
 		return 0
 	}
-	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, tier))
+	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, plan))
 }
 
 // RegisterRoutes registers unauthenticated routes only (health check).
@@ -68,7 +62,6 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin.HandlerFunc) {
 	v1 := router.Group("/api/v1")
 	v1.Use(middlewares...)
-	v1.GET("/info", middleware.RequireFeatures("admin"), h.Info)
-	v1.POST("/domain/lookup", middleware.RequireFeatures("admin", "lookup"), h.DomainLookup)
-	v1.POST("/domain/typosquatting", middleware.RequireFeatures("admin", "typosquatting"), h.TyposquattingLookup)
+	v1.GET("/info", middleware.RequireAdmin(), h.Info)
+	v1.POST("/domain/lookup", h.DomainLookup)
 }

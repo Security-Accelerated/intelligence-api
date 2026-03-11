@@ -12,15 +12,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// RateLimitConfig holds per-tier request limits (requests per minute).
+// RateLimitConfig holds per-plan request limits (requests per minute).
 type RateLimitConfig struct {
-	Basic   int
-	Premium int
+	Basic int
+	Pro   int
 }
 
-// RateLimit returns middleware that enforces per-API-key, tier-aware rate
+// RateLimit returns middleware that enforces per-API-key, plan-aware rate
 // limiting using a Redis sliding-window counter. It must run after APIKeyAuth
-// so that api_key_id and api_key_tier are available in the context.
+// so that api_key_id and api_key_plan are available in the context.
 //
 // If Redis is unavailable the request is allowed (fail-open) to avoid blocking
 // the API during a Redis outage.
@@ -37,23 +37,17 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 			return
 		}
 
-		tier, _ := c.Get("api_key_tier")
-		tierStr, _ := tier.(string)
+		plan, _ := c.Get("api_key_plan")
+		planStr, _ := plan.(string)
 
-		if features, ok := c.Get("api_key_features"); ok {
-			if fs, ok := features.([]string); ok {
-				for _, f := range fs {
-					if f == "admin" {
-						c.Next()
-						return
-					}
-				}
-			}
+		if planStr == "admin" {
+			c.Next()
+			return
 		}
 
 		limit := cfg.Basic
-		if tierStr == "premium" {
-			limit = cfg.Premium
+		if planStr == "pro" {
+			limit = cfg.Pro
 		}
 
 		bucket := time.Now().Unix() / 60
@@ -86,7 +80,7 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 			c.Header("Retry-After", strconv.FormatInt(retryAfter, 10))
 			logger.Warn("rate limit exceeded",
 				zap.Int("api_key_id", keyID.(int)),
-				zap.String("tier", tierStr),
+				zap.String("plan", planStr),
 				zap.Int64("count", count),
 				zap.Int("limit", limit),
 			)

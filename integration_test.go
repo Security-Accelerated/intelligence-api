@@ -31,10 +31,9 @@ type stubRepo struct {
 
 func newStubRepo() *stubRepo {
 	return &stubRepo{keys: map[string]*auth.Customer{
-		"test-admin-key":          {ID: 1, APIKeyID: 100, Name: "Test Admin", Active: true, Tier: "premium", Features: []string{"admin"}},
-		"test-lookup-key":         {ID: 2, APIKeyID: 200, Name: "Test Lookup User", Active: true, Tier: "basic", Features: []string{"lookup"}},
-		"test-typosquatting-key":  {ID: 3, APIKeyID: 300, Name: "Test Typosquatting User", Active: true, Tier: "premium", Features: []string{"typosquatting"}},
-		"test-enterprise-key":    {ID: 4, APIKeyID: 400, Name: "Test Enterprise User", Active: true, Tier: "premium", Features: []string{"lookup", "typosquatting"}},
+		"test-admin-key":  {ID: 1, APIKeyID: 100, Name: "Test Admin", Active: true, Plan: "admin"},
+		"test-lookup-key": {ID: 2, APIKeyID: 200, Name: "Test Lookup User", Active: true, Plan: "basic"},
+		"test-pro-key":    {ID: 3, APIKeyID: 300, Name: "Test Pro User", Active: true, Plan: "pro"},
 	}}
 }
 
@@ -83,19 +82,14 @@ func testConfig() *viper.Viper {
 	cfg.Set("redis.cache_ttl", "5m")
 	cfg.Set("auth.cache_ttl", "5m")
 	cfg.Set("screenshot.timeout", "15s")
-	cfg.Set("typosquatting.timeout", "30s")
-	cfg.Set("typosquatting.max_permutations", 500)
-	cfg.Set("typosquatting.concurrency", 20)
 	cfg.Set("rate_limit.basic", 30)
-	cfg.Set("rate_limit.premium", 120)
+	cfg.Set("rate_limit.pro", 120)
 	cfg.Set("postgres.host", "localhost")
 	cfg.Set("postgres.port", 5432)
 	cfg.Set("postgres.dbname", "test_db")
 	cfg.Set("postgres.sslmode", "disable")
 	cfg.Set("domain.max_domains.basic", 5)
-	cfg.Set("domain.max_domains.premium", 20)
-	cfg.Set("typosquatting.max_domains.basic", 3)
-	cfg.Set("typosquatting.max_domains.premium", 5)
+	cfg.Set("domain.max_domains.pro", 20)
 	return cfg
 }
 
@@ -182,19 +176,6 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		}, nil
 	})
 
-	typosquattingSvc := service.NewTyposquattingService(rc, 5*time.Minute, 30*time.Second, 500, 20)
-	typosquattingSvc.SetLookup(func(_ context.Context, d string, opts domain.TyposquattingOptions) (*domain.TyposquattingResponse, error) {
-		return &domain.TyposquattingResponse{
-			Domain: d,
-			Depth:  opts.Depth,
-			Count:  2,
-			Permutations: []domain.Permutation{
-				{Domain: "exarnple.com", Technique: "homoglyph"},
-				{Domain: "examlpe.com", Technique: "character_swap"},
-			},
-		}, nil
-	})
-
 	fpSvc := newStubFingerprintService()
 
 	repo := newStubRepo()
@@ -203,7 +184,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	cfg := testConfig()
 	nop := zap.NewNop()
 
-	rlCfg := middleware.RateLimitConfig{Basic: 30, Premium: 120}
+	rlCfg := middleware.RateLimitConfig{Basic: 30, Pro: 120}
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -215,12 +196,12 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	authMW := middleware.APIKeyAuthWithLogger(cachedRepo, nop)
 	rateLimitMW := middleware.RateLimitWithLogger(rc.Client(), rlCfg, nop)
 
-	h := handler.New(svc, typosquattingSvc, fpSvc, "test", cfg, rc, cachedRepo)
+	h := handler.New(svc, fpSvc, "test", cfg, rc, cachedRepo)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, authMW, rateLimitMW)
 
 	admin := r.Group("/api/v1/admin")
-	admin.Use(authMW, rateLimitMW, middleware.RequireFeatures("admin"))
+	admin.Use(authMW, rateLimitMW, middleware.RequireAdmin())
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
 		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
@@ -418,14 +399,41 @@ func TestIntegration_Auth_LookupKeyCannotAccessInfo(t *testing.T) {
 	}
 }
 
-func TestIntegration_Screenshot_PremiumCanScreenshot(t *testing.T) {
+func TestIntegration_Auth_ProKeyCanAccessLookup(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-pro-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestIntegration_Auth_ProKeyCannotAccessInfo(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	req.Header.Set("X-API-Key", "test-pro-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestIntegration_Screenshot_ProCanScreenshot(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
+	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -440,7 +448,7 @@ func TestIntegration_Screenshot_PremiumCanScreenshot(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].Screenshot == nil {
-		t.Fatal("expected screenshot to be populated for premium customer")
+		t.Fatal("expected screenshot to be populated for pro customer")
 	}
 	if resp[0].Screenshot.StatusCode != 200 {
 		t.Errorf("Screenshot.StatusCode = %d, want 200", resp[0].Screenshot.StatusCode)
@@ -489,239 +497,14 @@ func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_Typosquat_PremiumCanAccess(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.TyposquattingResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-	if resp[0].Count != 2 {
-		t.Errorf("Count = %d, want 2", resp[0].Count)
-	}
-	if len(resp[0].Permutations) != 2 {
-		t.Errorf("len(Permutations) = %d, want 2", len(resp[0].Permutations))
-	}
-}
-
-func TestIntegration_Typosquat_LookupKeyGets403(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-lookup-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-}
-
-func TestIntegration_Typosquat_DeepDepth(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"],"depth":"deep"}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.TyposquattingResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Depth != "deep" {
-		t.Errorf("Depth = %q, want %q", resp[0].Depth, "deep")
-	}
-}
-
-func TestIntegration_Typosquat_InvalidDepth(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"],"depth":"invalid"}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestIntegration_Typosquat_DefaultDepthShallow(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.TyposquattingResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Depth != "shallow" {
-		t.Errorf("Depth = %q, want %q (default)", resp[0].Depth, "shallow")
-	}
-}
-
-func TestIntegration_Typosquat_MultipleDomains(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com","example.org"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.TyposquattingResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 2 {
-		t.Fatalf("len(resp) = %d, want 2", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-	if resp[1].Domain != "example.org" {
-		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "example.org")
-	}
-}
-
-func TestIntegration_Typosquat_SingleInvalidDomain(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["notadomain"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestIntegration_Typosquat_CacheRoundTrip(t *testing.T) {
-	r, _ := setupRouter(t)
-	body := `{"domains":["example.com"]}`
-
-	// First request — cache miss
-	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w1, req1)
-
-	if w1.Code != http.StatusOK {
-		t.Fatalf("first: status = %d, want %d", w1.Code, http.StatusOK)
-	}
-
-	var resp1 []*domain.TyposquattingResponse
-	json.Unmarshal(w1.Body.Bytes(), &resp1)
-	if resp1[0].CacheHit {
-		t.Error("first request should be a cache miss")
-	}
-
-	// Second request — should be served from cache
-	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w2, req2)
-
-	if w2.Code != http.StatusOK {
-		t.Fatalf("second: status = %d, want %d", w2.Code, http.StatusOK)
-	}
-
-	var resp2 []*domain.TyposquattingResponse
-	json.Unmarshal(w2.Body.Bytes(), &resp2)
-	if !resp2[0].CacheHit {
-		t.Error("second request should be a cache hit")
-	}
-	if resp2[0].Domain != resp1[0].Domain {
-		t.Errorf("cached Domain = %q, want %q", resp2[0].Domain, resp1[0].Domain)
-	}
-	if resp2[0].Count != resp1[0].Count {
-		t.Errorf("cached Count = %d, want %d", resp2[0].Count, resp1[0].Count)
-	}
-}
-
-func TestIntegration_Typosquat_CheckLiveParameter(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"],"check_live":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.TyposquattingResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Count != 2 {
-		t.Errorf("Count = %d, want 2", resp[0].Count)
-	}
-}
-
-func TestIntegration_Reputation_PremiumCanAccess(t *testing.T) {
+func TestIntegration_Reputation_ProCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
+	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -736,7 +519,7 @@ func TestIntegration_Reputation_PremiumCanAccess(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].Reputation == nil {
-		t.Fatal("expected reputation to be populated for premium customer")
+		t.Fatal("expected reputation to be populated for pro customer")
 	}
 	if resp[0].Reputation.Score != 35 {
 		t.Errorf("Reputation.Score = %d, want 35", resp[0].Reputation.Score)
@@ -883,10 +666,10 @@ func TestIntegration_AdminCacheInvalidate_NoKeyUnauthorized(t *testing.T) {
 
 // --- Email Security ---
 
-func TestIntegration_EmailSecurity_AllTiersCanAccess(t *testing.T) {
+func TestIntegration_EmailSecurity_AllPlansCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	// Basic tier can request email_security (no premium gate)
+	// Basic plan can request email_security (no premium gate)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"email_security":true}`))
@@ -1004,7 +787,7 @@ func TestIntegration_Subdomain_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_Subdomain_BasicTierCanAccess(t *testing.T) {
+func TestIntegration_Subdomain_BasicPlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
@@ -1024,7 +807,7 @@ func TestIntegration_Subdomain_BasicTierCanAccess(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].Subdomains == nil {
-		t.Fatal("expected subdomains to be populated for basic tier")
+		t.Fatal("expected subdomains to be populated for basic plan")
 	}
 }
 
@@ -1086,7 +869,7 @@ func TestIntegration_CTLogs_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_CTLogs_BasicTierCanAccess(t *testing.T) {
+func TestIntegration_CTLogs_BasicPlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
@@ -1106,7 +889,7 @@ func TestIntegration_CTLogs_BasicTierCanAccess(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].CTLogs == nil {
-		t.Fatal("expected ct_logs to be populated for basic tier")
+		t.Fatal("expected ct_logs to be populated for basic plan")
 	}
 }
 
@@ -1171,7 +954,7 @@ func TestIntegration_BGP_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_BGP_BasicTierCanAccess(t *testing.T) {
+func TestIntegration_BGP_BasicPlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
@@ -1191,7 +974,7 @@ func TestIntegration_BGP_BasicTierCanAccess(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].BGP == nil {
-		t.Fatal("expected bgp to be populated for basic tier")
+		t.Fatal("expected bgp to be populated for basic plan")
 	}
 }
 
@@ -1394,116 +1177,6 @@ func TestIntegration_AdminFingerprints_UpdateForbiddenForNonAdmin(t *testing.T) 
 	}
 }
 
-// --- Typosquatting Key Access ---
-
-func TestIntegration_TyposquattingKey_CanAccessTyposquatting(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-typosquatting-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.TyposquattingResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-}
-
-func TestIntegration_TyposquattingKey_CannotAccessLookup(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-typosquatting-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-}
-
-// --- Enterprise Key Access ---
-
-func TestIntegration_EnterpriseKey_CanAccessLookup(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-enterprise-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-}
-
-func TestIntegration_EnterpriseKey_CanAccessTyposquatting(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-enterprise-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.TyposquattingResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-}
-
-func TestIntegration_EnterpriseKey_CannotAccessAdmin(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
-	req.Header.Set("X-API-Key", "test-enterprise-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-}
-
 // --- Cache Expiry ---
 
 func TestIntegration_CacheExpiry(t *testing.T) {
@@ -1589,217 +1262,5 @@ func TestIntegration_DomainLookup_EmptyDomainsArray(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestIntegration_DomainLookup_MalformedJSON(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader("not json"))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestIntegration_DomainLookup_RawIPRejected(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["1.2.3.4"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-	}
-}
-
-func TestIntegration_DomainLookup_DomainNormalization(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["https://example.com/"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q (should be normalized)", resp[0].Domain, "example.com")
-	}
-}
-
-// --- Info endpoint success path ---
-
-func TestIntegration_Info_AdminCanAccess(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var body map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if _, ok := body["application"]; !ok {
-		t.Error("expected 'application' field in response")
-	}
-	if _, ok := body["environment"]; !ok {
-		t.Error("expected 'environment' field in response")
-	}
-	if _, ok := body["config"]; !ok {
-		t.Error("expected 'config' field in response")
-	}
-}
-
-// --- Multi-domain domain lookup ---
-
-func TestIntegration_DomainLookup_MultipleDomains(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com","example.org"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 2 {
-		t.Fatalf("len(resp) = %d, want 2", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-	if resp[1].Domain != "example.org" {
-		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "example.org")
-	}
-}
-
-// --- Cache key isolation by feature combo ---
-
-func TestIntegration_CacheKeyIsolation_FeatureCombo(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	// First: base lookup (no options)
-	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w1, req1)
-
-	if w1.Code != http.StatusOK {
-		t.Fatalf("base lookup: status = %d, want %d", w1.Code, http.StatusOK)
-	}
-
-	var base []*domain.DomainResponse
-	json.Unmarshal(w1.Body.Bytes(), &base)
-	if base[0].CacheHit {
-		t.Error("base lookup should be a cache miss")
-	}
-	if base[0].Reputation != nil {
-		t.Error("base lookup should not include reputation")
-	}
-
-	// Second: reputation lookup — should NOT be a cache hit from the base lookup
-	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w2, req2)
-
-	if w2.Code != http.StatusOK {
-		t.Fatalf("reputation lookup: status = %d, want %d", w2.Code, http.StatusOK)
-	}
-
-	var rep []*domain.DomainResponse
-	json.Unmarshal(w2.Body.Bytes(), &rep)
-	if rep[0].CacheHit {
-		t.Error("reputation lookup should be a cache miss (different cache key than base)")
-	}
-	if rep[0].Reputation == nil {
-		t.Fatal("reputation lookup should include reputation data")
-	}
-
-	// Third: repeat reputation lookup — should be a cache hit now
-	w3 := httptest.NewRecorder()
-	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
-	req3.Header.Set("Content-Type", "application/json")
-	req3.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w3, req3)
-
-	var rep2 []*domain.DomainResponse
-	json.Unmarshal(w3.Body.Bytes(), &rep2)
-	if !rep2[0].CacheHit {
-		t.Error("repeated reputation lookup should be a cache hit")
-	}
-	if rep2[0].Reputation == nil {
-		t.Error("cached reputation lookup should include reputation data")
-	}
-}
-
-// --- Fingerprint via domain lookup ---
-
-func TestIntegration_Fingerprint_IncludedWhenRequested(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"fingerprint":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Fingerprint == nil {
-		t.Fatal("expected fingerprint to be populated")
-	}
-	if resp[0].Fingerprint.Count < 1 {
-		t.Errorf("Fingerprint.Count = %d, want >= 1", resp[0].Fingerprint.Count)
 	}
 }

@@ -27,10 +27,10 @@ func (s *stubRepo) GetByKey(_ context.Context, _ string) (*auth.Customer, error)
 func newInfoRouter(version string, cfg *viper.Viper, rc *cache.RedisCache, cr *auth.CachedRepository) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, version, cfg, rc, cr)
-	// Simulate admin auth so RequireFeatures passes
+	h := New(nil, nil, version, cfg, rc, cr)
+	// Simulate admin auth so RequireAdmin passes
 	r.GET("/api/v1/info", func(c *gin.Context) {
-		c.Set("api_key_features", []string{"admin"})
+		c.Set("api_key_plan", "admin")
 		c.Next()
 	}, h.Info)
 	return r

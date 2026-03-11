@@ -38,16 +38,16 @@ Services use function fields (`lookupWhois`, `lookupDNS`, etc.) instead of inter
 Each lookup goroutine catches its own errors. Failures are appended to `resp.Errors` with sanitized messages — the rest of the response still returns. Full errors are logged server-side; users see only safe summaries via `sanitizeErr()`.
 
 ### Composite cache keys
-Cache keys are built from the domain name plus sorted feature suffixes: `example.com:bgp+email_security+reputation`. This ensures each feature combination caches independently. Typosquatting uses its own key format: `typosquatting:example.com:shallow`.
+Cache keys are built from the domain name plus sorted feature suffixes: `example.com:bgp+email_security+reputation`. This ensures each feature combination caches independently.
 
 ### SSRF prevention at the dialer level
 The `safenet` package provides a `DialControl` function that rejects connections to private, loopback, link-local, multicast, unspecified, and CGNAT IPs. It fires after DNS resolution (no TOCTOU race). All HTTP clients in the `domain` package use `safenet.SafeDialer()` via shared transports in `domain/transport.go`.
 
 ### Hashed API keys
-Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after feature changes.
+Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after plan changes.
 
-### Tier-based access control
-Two dimensions: **features** control which endpoints a key can access (`admin`, `lookup`, `typosquatting`); **tier** controls access to premium options within endpoints (`basic` vs `premium`). Rate limits are also tier-aware. Admins bypass rate limiting entirely.
+### Plan-based access control
+Single `plan` column on `customers` table: `basic`, `pro`, `admin`. Controls rate limits, premium feature access (screenshot, reputation), and admin endpoint access. `RequireAdmin()` middleware gates admin-only routes. Rate limits: basic=30/min, pro=120/min, admin=unlimited.
 
 ### Technology fingerprinting
 `FingerprintEngine` in `internal/domain/fingerprint.go` holds rules behind `sync.RWMutex`. Default rules are embedded via `go:embed` (~90 curated technologies). `FingerprintService` in `internal/service/fingerprint.go` persists rules in PostgreSQL (append-only `fingerprint_rules` table) and loads the latest on startup. Admin endpoints (`GET/POST /api/v1/admin/fingerprints`) allow hot-reloading rules without redeploying.
@@ -62,16 +62,16 @@ Two dimensions: **features** control which endpoints a key can access (`admin`, 
 3. `BodyLimit(1MB)` — rejects oversized request bodies
 4. `ClientRequestID()` — validates/echoes X-Client-Request-ID header, sets context key
 5. `RequestLogger()` — structured request logging with context keys (runs after `c.Next()` returns)
-6. *(protected routes only)* `APIKeyAuth()` — validates key, sets api_key_id/tier/features in context
-7. *(protected routes only)* `RateLimit()` — per-key sliding window via Redis, fail-open
-8. *(specific routes)* `RequireFeatures()` — checks feature set against route requirements
+6. *(protected routes only)* `APIKeyAuth()` — validates key, sets api_key_id/api_key_plan in context
+7. *(protected routes only)* `RateLimit()` — per-key sliding window via Redis, fail-open, admin bypass
+8. *(admin routes only)* `RequireAdmin()` — checks plan == "admin"
 
 ## Development Workflow
 
 - `make test` — unit tests with race detector (always run before presenting work as done)
 - `make test-integration` — integration tests using miniredis + stub auth
 - `make docker-reset` — **dev only**, wipes volumes and rebuilds everything
-- `./scripts/smoke-test.sh` — **dev only**, hits every endpoint with every key/tier combo
+- `./scripts/smoke-test.sh` — **dev only**, hits every endpoint with every key/plan combo
 - `make deploy` — deploys to Fly.io with git version baked in
 - `make release V=v0.X.Y` — tags and pushes a release
 - `go mod tidy` — always run before committing
@@ -88,7 +88,7 @@ Two dimensions: **features** control which endpoints a key can access (`admin`, 
 Each package has `*_test.go` files. Handler tests use `httptest` with a gin test router. Service tests swap lookup functions via `SetLookups()`. Middleware tests inject `zap.NewNop()` via `*WithLogger()` variants.
 
 ### Integration tests
-`integration_test.go` at project root, gated behind `//go:build integration`. Uses `miniredis` for an in-memory Redis and `stubRepo` for auth. Tests the full middleware → handler → service → (stubbed) domain flow. Covers auth, feature gates, tier access, caching, validation, and rate limiting.
+`integration_test.go` at project root, gated behind `//go:build integration`. Uses `miniredis` for an in-memory Redis and `stubRepo` for auth. Tests the full middleware → handler → service → (stubbed) domain flow. Covers auth, plan-based access, caching, validation, and rate limiting.
 
 ### Smoke tests
 `scripts/smoke-test.sh` hits a running instance with curl. Checks every endpoint with every API key and verifies expected HTTP status codes. Catches issues that unit/integration tests miss (like database migration problems). Accepts an optional host argument (defaults to `http://localhost:8080`). API keys can be overridden via `.env` file or `SMOKE_*` env vars for production testing.
@@ -106,7 +106,7 @@ Sample config: `internal/config/sample-config.yml`
 
 PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration.
 
-Tables: `customers`, `api_keys` (key_hash), `customer_features` (customer_id, feature), `fingerprint_rules` (append-only JSONB rules).
+Tables: `customers` (plan column: basic/pro/admin), `api_keys` (key_hash), `fingerprint_rules` (append-only JSONB rules).
 
 ## Infrastructure
 
@@ -140,7 +140,7 @@ Tables: `customers`, `api_keys` (key_hash), `customer_features` (customer_id, fe
 2. Create a service in `internal/service/`
 3. Add a handler method in `internal/handler/`
 4. Define a service interface in `internal/handler/handler.go`
-5. Register the route in `RegisterProtectedRoutes()` with appropriate `RequireFeatures()`
+5. Register the route in `RegisterProtectedRoutes()` with `RequireAdmin()` if admin-only
 6. Wire the service in `internal/app/app.go`
 7. Update handler `New()` signature and all test call sites
 8. Add context keys to `middleware/request_logger.go` if needed

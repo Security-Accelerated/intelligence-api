@@ -25,8 +25,8 @@ func Run(logger *zap.Logger, version string) error {
 
 	port := cfg.GetInt("application.port")
 	rlCfg := middleware.RateLimitConfig{
-		Basic:   cfg.GetInt("rate_limit.basic"),
-		Premium: cfg.GetInt("rate_limit.premium"),
+		Basic: cfg.GetInt("rate_limit.basic"),
+		Pro:   cfg.GetInt("rate_limit.pro"),
 	}
 
 	logger.Info("initializing application",
@@ -43,17 +43,12 @@ func Run(logger *zap.Logger, version string) error {
 		zap.Duration("cache_ttl", cfg.GetDuration("redis.cache_ttl")),
 		zap.Duration("auth_cache_ttl", cfg.GetDuration("auth.cache_ttl")),
 		zap.Duration("screenshot_timeout", cfg.GetDuration("screenshot.timeout")),
-		zap.Duration("typosquatting_timeout", cfg.GetDuration("typosquatting.timeout")),
-		zap.Int("typosquatting_max_permutations", cfg.GetInt("typosquatting.max_permutations")),
-		zap.Int("typosquatting_concurrency", cfg.GetInt("typosquatting.concurrency")),
 		zap.Int("domain_max_domains_basic", cfg.GetInt("domain.max_domains.basic")),
-		zap.Int("domain_max_domains_premium", cfg.GetInt("domain.max_domains.premium")),
-		zap.Int("typosquatting_max_domains_basic", cfg.GetInt("typosquatting.max_domains.basic")),
-		zap.Int("typosquatting_max_domains_premium", cfg.GetInt("typosquatting.max_domains.premium")),
+		zap.Int("domain_max_domains_pro", cfg.GetInt("domain.max_domains.pro")),
 		zap.Int("subdomain_max_results", cfg.GetInt("subdomain.max_results")),
 		zap.Int("ct_logs_max_entries", cfg.GetInt("ct_logs.max_entries")),
 		zap.Int("rate_limit_basic", rlCfg.Basic),
-		zap.Int("rate_limit_premium", rlCfg.Premium),
+		zap.Int("rate_limit_pro", rlCfg.Pro),
 		zap.String("redis_addr", cfg.GetString("redis.addr")),
 		zap.Int("redis_db", cfg.GetInt("redis.db")),
 		zap.String("postgres_host", cfg.GetString("postgres.host")),
@@ -105,14 +100,9 @@ func Run(logger *zap.Logger, version string) error {
 	logger.Info("fingerprint engine loaded", zap.Int("rule_count", fpService.Engine().RuleCount()))
 
 	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine())
-	typosquattingService := service.NewTyposquattingService(
-		redisCache, cacheTTL, cfg.GetDuration("typosquatting.timeout"),
-		cfg.GetInt("typosquatting.max_permutations"),
-		cfg.GetInt("typosquatting.concurrency"),
-	)
 
 	// HTTP
-	h := handler.New(domainService, typosquattingService, fpService, version, cfg, redisCache, cachedRepo)
+	h := handler.New(domainService, fpService, version, cfg, redisCache, cachedRepo)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 

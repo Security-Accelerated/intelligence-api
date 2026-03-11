@@ -19,18 +19,10 @@ auth:
 domain:
   max_domains:
     basic: 5
-    premium: 20
+    pro: 20
 
 screenshot:
   timeout: 15s
-
-typosquatting:
-  timeout: 30s
-  max_permutations: 500
-  concurrency: 20
-  max_domains:
-    basic: 3
-    premium: 5
 
 subdomain:
   max_results: 500
@@ -40,7 +32,7 @@ ct_logs:
 
 rate_limit:
   basic: 30
-  premium: 120
+  pro: 120
 
 postgres:
   host: postgres

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/spf13/viper"
 )
 
@@ -31,18 +32,46 @@ func (m *mockService) Lookup(_ context.Context, domainName string, opts domain.L
 	return &domain.DomainResponse{Domain: domainName}, m.cached
 }
 
-func newTestRouter(svc DomainLookupService) *gin.Engine {
-	return newTestRouterWithTier(svc, "premium")
+// assertErrorBody checks that the response body contains a JSON "error" key.
+func assertErrorBody(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to unmarshal error body: %v", err)
+	}
+	if body["error"] == "" {
+		t.Error("expected non-empty error field in response body")
+	}
 }
 
-func newTestRouterWithTier(svc DomainLookupService, tier string) *gin.Engine {
+// filterKeys returns the subset of middleware.ContextKeys whose base name
+// (before "_requested") appears in the keep list. cache_hit is always kept.
+func filterKeys(keep ...string) []string {
+	set := make(map[string]struct{}, len(keep))
+	for _, k := range keep {
+		set[k] = struct{}{}
+	}
+	var out []string
+	for _, key := range middleware.ContextKeys {
+		base := strings.TrimSuffix(key, "_requested")
+		if _, ok := set[base]; ok {
+			out = append(out, key)
+		}
+	}
+	return out
+}
+
+func newTestRouter(svc DomainLookupService) *gin.Engine {
+	return newTestRouterWithPlan(svc, "pro")
+}
+
+func newTestRouterWithPlan(svc DomainLookupService, plan string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, nil, "test", nil, nil, nil)
+	h := New(svc, nil, "test", nil, nil, nil)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_features", []string{"admin"})
-		c.Set("api_key_tier", tier)
+		c.Set("api_key_plan", plan)
 		c.Next()
 	})
 	return r
@@ -116,7 +145,6 @@ func TestDomainLookup_MixedValidInvalid(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 3", len(resp))
 	}
 
-	// First domain: valid
 	if resp[0].Domain != "example.com" {
 		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
 	}
@@ -124,7 +152,6 @@ func TestDomainLookup_MixedValidInvalid(t *testing.T) {
 		t.Errorf("resp[0].Errors = %v, want none", resp[0].Errors)
 	}
 
-	// Second domain: invalid, should have validation error
 	if resp[1].Domain != "notadomain" {
 		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "notadomain")
 	}
@@ -132,7 +159,6 @@ func TestDomainLookup_MixedValidInvalid(t *testing.T) {
 		t.Errorf("resp[1].Errors = %v, want validation error", resp[1].Errors)
 	}
 
-	// Third domain: valid
 	if resp[2].Domain != "example.org" {
 		t.Errorf("resp[2].Domain = %q, want %q", resp[2].Domain, "example.org")
 	}
@@ -315,10 +341,10 @@ func TestDomainLookup_WhitespaceTrimming(t *testing.T) {
 
 func TestNormalizeDomain(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    string
-		wantOK  bool
+		name   string
+		input  string
+		want   string
+		wantOK bool
 	}{
 		{"plain domain", "example.com", "example.com", true},
 		{"https prefix", "https://example.com", "example.com", true},
@@ -349,10 +375,23 @@ func TestNormalizeDomain(t *testing.T) {
 	}
 }
 
-// --- Tier gating ---
+// --- Plan gating ---
 
-func TestDomainLookup_Reputation_PremiumAllowed(t *testing.T) {
-	r := newTestRouterWithTier(&mockService{}, "premium")
+func TestDomainLookup_Reputation_ProAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "pro")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_Reputation_AdminAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "admin")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
@@ -365,7 +404,7 @@ func TestDomainLookup_Reputation_PremiumAllowed(t *testing.T) {
 }
 
 func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
-	r := newTestRouterWithTier(&mockService{}, "basic")
+	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
@@ -375,11 +414,28 @@ func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
 	}
-	assertErrorBody(t, w)
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "reputation requires a pro plan" {
+		t.Errorf("error = %q, want %q", body["error"], "reputation requires a pro plan")
+	}
 }
 
-func TestDomainLookup_Screenshot_PremiumAllowed(t *testing.T) {
-	r := newTestRouterWithTier(&mockService{}, "premium")
+func TestDomainLookup_Screenshot_AdminAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "admin")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_Screenshot_ProAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "pro")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
@@ -392,7 +448,7 @@ func TestDomainLookup_Screenshot_PremiumAllowed(t *testing.T) {
 }
 
 func TestDomainLookup_Screenshot_BasicForbidden(t *testing.T) {
-	r := newTestRouterWithTier(&mockService{}, "basic")
+	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
@@ -402,7 +458,11 @@ func TestDomainLookup_Screenshot_BasicForbidden(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
 	}
-	assertErrorBody(t, w)
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "screenshot requires a pro plan" {
+		t.Errorf("error = %q, want %q", body["error"], "screenshot requires a pro plan")
+	}
 }
 
 func TestDomainLookup_OptsPassedToService(t *testing.T) {
@@ -491,12 +551,11 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 			svc := &mockService{}
 			gin.SetMode(gin.TestMode)
 			r := gin.New()
-			h := New(svc, nil, nil, "test", nil, nil, nil)
+			h := New(svc, nil, "test", nil, nil, nil)
 
 			captured := make(map[string]any)
 			auth := func(c *gin.Context) {
-				c.Set("api_key_features", []string{"admin"})
-				c.Set("api_key_tier", "premium")
+				c.Set("api_key_plan", "admin")
 				c.Next()
 				for _, key := range domainLoggerKeys {
 					if v, exists := c.Get(key); exists {
@@ -543,13 +602,12 @@ func testCfg(overrides map[string]any) *viper.Viper {
 	return v
 }
 
-func newTestRouterWithCfg(svc DomainLookupService, tier string, cfg *viper.Viper) *gin.Engine {
+func newTestRouterWithCfg(svc DomainLookupService, plan string, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, nil, "test", cfg, nil, nil)
+	h := New(svc, nil, "test", cfg, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_features", []string{"admin"})
-		c.Set("api_key_tier", tier)
+		c.Set("api_key_plan", plan)
 		c.Next()
 	})
 	return r
@@ -557,11 +615,11 @@ func newTestRouterWithCfg(svc DomainLookupService, tier string, cfg *viper.Viper
 
 func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	cfg := testCfg(map[string]any{
-		"domain.max_domains.basic":   2,
-		"domain.max_domains.premium": 3,
+		"domain.max_domains.basic": 2,
+		"domain.max_domains.pro":   3,
 	})
 
-	t.Run("basic tier over limit", func(t *testing.T) {
+	t.Run("basic plan over limit", func(t *testing.T) {
 		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
@@ -574,13 +632,13 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 		}
 		var body map[string]string
 		json.Unmarshal(w.Body.Bytes(), &body)
-		if body["error"] != "too many domains: maximum 2 allowed for basic tier" {
+		if body["error"] != "too many domains: maximum 2 allowed for basic plan" {
 			t.Errorf("error = %q", body["error"])
 		}
 	})
 
-	t.Run("premium tier over limit", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "premium", cfg)
+	t.Run("pro plan over limit", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "pro", cfg)
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"]}`))
@@ -592,13 +650,13 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 		}
 		var body map[string]string
 		json.Unmarshal(w.Body.Bytes(), &body)
-		if body["error"] != "too many domains: maximum 3 allowed for premium tier" {
+		if body["error"] != "too many domains: maximum 3 allowed for pro plan" {
 			t.Errorf("error = %q", body["error"])
 		}
 	})
 
-	t.Run("premium tier at limit succeeds", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "premium", cfg)
+	t.Run("pro plan at limit succeeds", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "pro", cfg)
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com"]}`))
@@ -610,10 +668,22 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 		}
 	})
 
-	t.Run("nil config means no limit", func(t *testing.T) {
-		r := newTestRouterWithTier(&mockService{}, "basic")
+	t.Run("admin plan has no limit", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "admin", cfg)
 		w := httptest.NewRecorder()
-		// 10 domains, but nil config → no limit enforced
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+
+	t.Run("nil config means no limit", func(t *testing.T) {
+		r := newTestRouterWithPlan(&mockService{}, "basic")
+		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com","f.com","g.com","h.com","i.com","j.com"]}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -625,9 +695,8 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 	})
 }
 
-func TestDomainLookup_EmailSecurity_AllTiersAllowed(t *testing.T) {
-	// email_security should NOT be gated behind premium
-	r := newTestRouterWithTier(&mockService{}, "basic")
+func TestDomainLookup_EmailSecurity_AllPlansAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"email_security":true}`))
@@ -664,8 +733,8 @@ func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestDomainLookup_CTLogs_AllTiersAllowed(t *testing.T) {
-	r := newTestRouterWithTier(&mockService{}, "basic")
+func TestDomainLookup_CTLogs_AllPlansAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
@@ -677,8 +746,8 @@ func TestDomainLookup_CTLogs_AllTiersAllowed(t *testing.T) {
 	}
 }
 
-func TestDomainLookup_BGP_AllTiersAllowed(t *testing.T) {
-	r := newTestRouterWithTier(&mockService{}, "basic")
+func TestDomainLookup_BGP_AllPlansAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
@@ -690,8 +759,8 @@ func TestDomainLookup_BGP_AllTiersAllowed(t *testing.T) {
 	}
 }
 
-func TestDomainLookup_Fingerprint_AllTiersAllowed(t *testing.T) {
-	r := newTestRouterWithTier(&mockService{}, "basic")
+func TestDomainLookup_Fingerprint_AllPlansAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"fingerprint":true}`))

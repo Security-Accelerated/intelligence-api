@@ -5,39 +5,31 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header,
 
 ## Authentication
 
-All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and can be assigned multiple features.
+All endpoints except `/api/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan.
 
-### Customer Tiers
+### Customer Plans
 
-Each customer has a `tier` that controls rate limits and access to premium options within domain lookups:
+Each customer has a `plan` that controls rate limits, access to premium options, and admin access:
 
-| Tier | Capabilities |
+| Plan | Capabilities |
 |------|-------------|
 | `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) + subdomain enumeration + CT logs + BGP/ASN + technology fingerprinting |
-| `premium` | All basic capabilities + page screenshots + reputation checks |
+| `pro` | All basic capabilities + page screenshots + reputation checks |
+| `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
-The tier is stored in the `customers` table. New customers default to `basic`.
+The plan is stored in the `customers` table. New customers default to `basic`.
 
-### Features
-
-Features control which endpoints a customer can access. Each customer can be assigned one or more features:
-
-| Feature | Access |
-|---------|--------|
-| `admin` | All endpoints |
-| `lookup` | `POST /api/v1/domain/lookup` |
-| `typosquatting` | `POST /api/v1/domain/typosquatting` |
-
-Requests without a valid key receive `401 Unauthorized`. Requests with a key whose customer lacks the required feature receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
+Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Basic plan requests for pro-only options (screenshot, reputation) receive `403 Forbidden`. The `/api/v1/hello` health check requires no authentication.
 
 ### Rate Limiting
 
-All authenticated endpoints are rate-limited per API key using a sliding-window counter backed by Redis. Limits are configurable per tier:
+All authenticated endpoints are rate-limited per API key using a sliding-window counter backed by Redis. Admin plan bypasses rate limiting entirely. Limits are configurable per plan:
 
-| Tier | Default Limit |
+| Plan | Default Limit |
 |------|---------------|
 | `basic` | 30 requests/minute |
-| `premium` | 120 requests/minute |
+| `pro` | 120 requests/minute |
+| `admin` | No limit |
 
 Every response includes rate limit headers:
 - `X-RateLimit-Limit` — the maximum requests allowed per minute
@@ -47,12 +39,11 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 
 ## API Endpoints
 
-| Method | Path | Feature | Description |
-|--------|------|---------|-------------|
+| Method | Path | Plan | Description |
+|--------|------|------|-------------|
 | GET | `/api/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
 | GET | `/api/v1/info` | `admin` | Application and environment info |
-| POST | `/api/v1/domain/lookup` | `admin`, `lookup` | Domain intelligence lookup |
-| POST | `/api/v1/domain/typosquatting` | `admin`, `typosquatting` | Typosquatting detection |
+| POST | `/api/v1/domain/lookup` | All plans | Domain intelligence lookup |
 | POST | `/api/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 | GET | `/api/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
 | POST | `/api/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
@@ -75,19 +66,19 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 
 The `domains` field accepts an array of domain names. Each entry accepts raw domains, URLs with `http://`/`https://` prefixes, and trailing slashes — all are normalized automatically. Domains are looked up concurrently.
 
-The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
+The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
 
-The optional `reputation` field (default `false`) checks each domain against multiple DNS-based blocklists concurrently (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) and returns a computed risk score. This requires a **premium** tier customer — basic tier customers receive `403 Forbidden`.
+The optional `reputation` field (default `false`) checks each domain against multiple DNS-based blocklists concurrently (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) and returns a computed risk score. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
 
-The optional `email_security` field (default `false`) checks SPF, DMARC, and DKIM records for each domain via DNS lookups. Available to **all tiers** (basic and premium). DKIM probes 8 common selectors (`google`, `default`, `selector1`, `selector2`, `k1`, `s1`, `mail`, `dkim`).
+The optional `email_security` field (default `false`) checks SPF, DMARC, and DKIM records for each domain via DNS lookups. Available to **all plans**. DKIM probes 8 common selectors (`google`, `default`, `selector1`, `selector2`, `k1`, `s1`, `mail`, `dkim`).
 
-The optional `subdomains` field (default `false`) enumerates subdomains via Certificate Transparency logs (crt.sh). Available to **all tiers**. Results are deduplicated, wildcards are filtered, and a hard cap (default 500, configurable via `subdomain.max_results`) prevents unbounded results.
+The optional `subdomains` field (default `false`) enumerates subdomains via Certificate Transparency logs (crt.sh). Available to **all plans**. Results are deduplicated, wildcards are filtered, and a hard cap (default 500, configurable via `subdomain.max_results`) prevents unbounded results.
 
-The optional `ct_logs` field (default `false`) queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Returns full certificate metadata (issuer, dates, serial number, SANs). Available to **all tiers**. Results are deduplicated by serial number, sorted newest-first, and capped (default 100, configurable via `ct_logs.max_entries`).
+The optional `ct_logs` field (default `false`) queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Returns full certificate metadata (issuer, dates, serial number, SANs). Available to **all plans**. Results are deduplicated by serial number, sorted newest-first, and capped (default 100, configurable via `ct_logs.max_entries`).
 
-The optional `bgp` field (default `false`) resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service for BGP/ASN information. Returns ASN number, IP prefix, country, registry, and organization name. Available to **all tiers**. Useful for identifying hosting providers and detecting bulletproof hosting.
+The optional `bgp` field (default `false`) resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service for BGP/ASN information. Returns ASN number, IP prefix, country, registry, and organization name. Available to **all plans**. Useful for identifying hosting providers and detecting bulletproof hosting.
 
-The optional `fingerprint` field (default `false`) detects web technologies (servers, frameworks, CDNs, CMS platforms, languages) from HTTP response headers. No extra HTTP requests are made — detection piggybacks on the headers already fetched. Returns technology name, category, version (when detectable), and which signal matched. Available to **all tiers**. Rules are stored in PostgreSQL and can be updated via the admin API without redeploying.
+The optional `fingerprint` field (default `false`) detects web technologies (servers, frameworks, CDNs, CMS platforms, languages) from HTTP response headers. No extra HTTP requests are made — detection piggybacks on the headers already fetched. Returns technology name, category, version (when detectable), and which signal matched. Available to **all plans**. Rules are stored in PostgreSQL and can be updated via the admin API without redeploying.
 
 **Example:**
 ```sh
@@ -192,65 +183,6 @@ Invalid domains in a multi-domain request are included in the response with a va
 ]
 ```
 
-### POST /api/v1/domain/typosquatting
-
-Generates typosquatting permutations for one or more domains to detect potential brand impersonation. Requires the `typosquatting` feature (available to any tier).
-
-**Request:**
-```json
-{
-  "domains": ["example.com"],
-  "depth": "shallow",
-  "check_live": true
-}
-```
-
-| Field | Default | Description |
-|-------|---------|-------------|
-| `domains` | *(required)* | Array of domain names to check |
-| `depth` | `"shallow"` | `"shallow"` (4 algorithms, ~30-80 results) or `"deep"` (10 algorithms, hundreds of results) |
-| `check_live` | `false` | When `true`, also checks DNS registration and HTTP liveness for each permutation |
-
-**Depth levels:**
-- **`shallow`** — character omission, character swap, homoglyphs, wrong TLD. Produces a manageable number of results for most domains.
-- **`deep`** — all 10 algorithms including adjacent key substitution, character repeat, vowel swap, missing dot, character addition, and bitsquatting. Useful for thorough brand protection audits.
-
-**Example:**
-```sh
-curl -X POST http://localhost:8080/api/v1/domain/typosquatting \
-  -H 'Content-Type: application/json' \
-  -H 'X-API-Key: test-admin-key' \
-  -d '{"domains":["example.com"],"check_live":true}'
-```
-
-**Response:**
-```json
-[
-  {
-    "domain": "example.com",
-    "cache_hit": false,
-    "depth": "shallow",
-    "count": 42,
-    "capped": false,
-    "permutations": [
-      {
-        "domain": "examp1e.com",
-        "technique": "homoglyph",
-        "registered": true,
-        "live": true
-      },
-      {
-        "domain": "examlpe.com",
-        "technique": "character_swap",
-        "registered": false
-      }
-    ]
-  }
-]
-```
-
-When `check_live` is `false`, `registered` and `live` fields are omitted. When `check_live` is `true` but a domain is not registered, `live` is omitted. A hard cap on permutations (default 500, configurable via `typosquatting.max_permutations`) prevents unbounded results — `capped: true` indicates truncation.
-
 ## Response Fields
 
 ### Domain Lookup (`/api/v1/domain/lookup`)
@@ -325,7 +257,7 @@ The `security_headers` subsection audits defensive headers that protect users:
 | `referrer_policy` | Controls how much URL information leaks when users click links to other sites |
 | `permissions_policy` | Restricts browser features like camera, microphone, and geolocation |
 
-### `screenshot` — Page Screenshot (Premium Only)
+### `screenshot` — Page Screenshot (Pro/Admin Only)
 
 A visual screenshot of the domain's web page, captured with headless Chrome at 1280x720. Only present when `"screenshot": true` is included in the request.
 
@@ -336,7 +268,7 @@ A visual screenshot of the domain's web page, captured with headless Chrome at 1
 
 The screenshot lookup first tries HTTPS, then falls back to HTTP. Non-200 responses still populate the `screenshot` section with the status code but no image data.
 
-### `reputation` — Domain Reputation (Premium Only)
+### `reputation` — Domain Reputation (Pro/Admin Only)
 
 Checks the domain against 4 DNS-based blocklists concurrently and computes a risk score. Only present when `"reputation": true` is included in the request.
 
@@ -366,7 +298,7 @@ Each provider entry contains:
 
 **Scoring:** Each provider listing adds points based on category severity. Multiple listings across providers stack. The score is capped at 100. Higher-trust, domain-specific providers (Spamhaus DBL) carry more weight than IP-based providers (Spamhaus ZEN).
 
-### `email_security` — Email Security (All Tiers)
+### `email_security` — Email Security (All Plans)
 
 Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"email_security": true` is included in the request.
 
@@ -399,28 +331,7 @@ Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"emai
 | `found` | Whether a DKIM record exists at `<selector>._domainkey.<domain>` |
 | `raw` | The full DKIM TXT record (only when found) |
 
-### Typosquatting Detection (`/api/v1/domain/typosquatting`)
-
-| Field | What it means |
-|-------|---------------|
-| `domain` | The domain that was checked |
-| `cache_hit` | Whether the result was served from cache |
-| `depth` | Which depth level was used (`shallow` or `deep`) |
-| `count` | Total number of permutations returned |
-| `capped` | Whether the permutation cap was hit (results truncated) |
-| `permutations` | Array of typosquatting candidates |
-| `errors` | Any errors that occurred during generation or active checks |
-
-Each permutation contains:
-
-| Field | What it means |
-|-------|---------------|
-| `domain` | The typosquatting candidate domain |
-| `technique` | Which algorithm generated it (`character_omission`, `character_swap`, `homoglyph`, `wrong_tld`, `adjacent_char`, `character_repeat`, `vowel_swap`, `missing_dot`, `addition`, `bitsquatting`) |
-| `registered` | Whether the domain has DNS A records (only present when `check_live: true`) |
-| `live` | Whether the domain responds to HTTP requests (only present when registered) |
-
-### `subdomains` — Subdomain Enumeration (All Tiers)
+### `subdomains` — Subdomain Enumeration (All Plans)
 
 Enumerates subdomains via Certificate Transparency logs (crt.sh). Only present when `"subdomains": true` is included in the request.
 
@@ -437,7 +348,7 @@ Each subdomain entry contains:
 | `domain` | The discovered subdomain |
 | `source` | Data source (`crt.sh` — Certificate Transparency logs) |
 
-### `ct_logs` — Certificate Transparency Logs (All Tiers)
+### `ct_logs` — Certificate Transparency Logs (All Plans)
 
 Queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Only present when `"ct_logs": true` is included in the request.
 
@@ -461,7 +372,7 @@ Each entry contains:
 
 Useful for detecting phishing infrastructure (unexpected issuers), identifying related domains, and tracking certificate issuance patterns.
 
-### `bgp` — BGP / ASN Enrichment (All Tiers)
+### `bgp` — BGP / ASN Enrichment (All Plans)
 
 Resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service. Only present when `"bgp": true` is included in the request.
 
@@ -482,7 +393,7 @@ Each record contains:
 
 Useful for identifying hosting providers, detecting bulletproof hosting, and pivot analysis. Multiple IPs sharing the same ASN are merged (only the first IP is shown).
 
-### `fingerprint` — Technology Fingerprinting (All Tiers)
+### `fingerprint` — Technology Fingerprinting (All Plans)
 
 Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. Only present when `"fingerprint": true` is included in the request. No extra HTTP requests are made — detection uses the headers already fetched.
 
@@ -516,8 +427,6 @@ Optional features use composite cache keys built from sorted feature suffixes. E
 - `domain:ct_logs` — base + CT logs
 - `domain:fingerprint` — base + technology fingerprinting
 - `domain:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains` — base + all optional features
-
-Typosquatting results are cached under their own keys based on depth and check_live flag (e.g., `typosquatting:example.com:shallow`, `typosquatting+check_live:example.com:deep`).
 
 ## Getting Started
 
@@ -556,21 +465,16 @@ Config values:
 | `gin.mode` | `""` | Gin framework mode (`debug`, `release`, `test`) |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
-| `typosquatting.timeout` | `30s` | Timeout for typosquatting detection (generation + active checks) |
-| `typosquatting.max_permutations` | `500` | Maximum number of permutations returned per domain |
-| `typosquatting.concurrency` | `20` | Max concurrent DNS/HTTP checks during active scanning |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
-| `domain.max_domains.basic` | `5` | Maximum domains per request for basic tier |
-| `domain.max_domains.premium` | `20` | Maximum domains per request for premium tier |
-| `typosquatting.max_domains.basic` | `3` | Maximum domains per request for basic tier (typosquatting) |
-| `typosquatting.max_domains.premium` | `5` | Maximum domains per request for premium tier (typosquatting) |
+| `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
+| `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
 | `subdomain.timeout` | `30s` | Timeout for subdomain enumeration |
 | `subdomain.concurrency` | `20` | Max concurrent subdomain lookups |
-| `subdomain.max_domains.basic` | `3` | Maximum domains per request for basic tier (subdomains) |
-| `subdomain.max_domains.premium` | `5` | Maximum domains per request for premium tier (subdomains) |
-| `rate_limit.basic` | `30` | Requests per minute for basic tier customers |
-| `rate_limit.premium` | `120` | Requests per minute for premium tier customers |
+| `subdomain.max_domains.basic` | `3` | Maximum domains per request for basic plan (subdomains) |
+| `subdomain.max_domains.pro` | `5` | Maximum domains per request for pro plan (subdomains) |
+| `rate_limit.basic` | `30` | Requests per minute for basic plan customers |
+| `rate_limit.pro` | `120` | Requests per minute for pro plan customers |
 | `postgres.host` | `localhost` | PostgreSQL host |
 | `postgres.port` | `5432` | PostgreSQL port |
 | `postgres.user` | `intelligence` | PostgreSQL user |
@@ -582,20 +486,20 @@ Config values:
 
 The `migrations/` directory contains SQL files that are automatically applied when using Docker Compose (mounted to `/docker-entrypoint-initdb.d/`).
 
-- `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables (renamed to `customer_features` in migration 004)
-- `002_add_customer_tier.sql` — adds the `tier` column to `customers` (defaults to `basic`)
+- `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables
+- `002_add_customer_tier.sql` — adds the `tier` column to `customers`
 - `003_hash_api_keys.sql` — replaces the plaintext `key` column with `key_hash` (SHA-256, hex-encoded)
-- `004_rename_roles_to_features.sql` — renames `customer_roles` table to `customer_features` and `role` column to `feature`
+- `004_rename_roles_to_features.sql` — renames `customer_roles` to `customer_features`
 - `005_fingerprint_rules.sql` — creates the `fingerprint_rules` table (append-only, JSONB rules column)
-- `seed.sql` — inserts test customers with hashed keys and features, sets Test Admin to `premium` tier
+- `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column (`basic`/`pro`/`admin`)
+- `seed.sql` — inserts test customers (admin, basic, pro) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
 
 ```sql
-INSERT INTO customers (name) VALUES ('Acme Corp');
+INSERT INTO customers (name, plan) VALUES ('Acme Corp', 'pro');
 INSERT INTO api_keys (customer_id, key_hash)
     VALUES (1, encode(digest('my-secret-key', 'sha256'), 'hex'));
-INSERT INTO customer_features (customer_id, feature) VALUES (1, 'lookup'), (1, 'typosquatting');
 ```
 
 ### Run with Docker (recommended)
@@ -680,7 +584,7 @@ make run    # builds and starts the server
 | `make release V=v0.1.0` | Tag and push a release |
 | `make deploy` | Deploy to Fly.io with git version baked in |
 | `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
-| `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/tier combo and check expected status codes. Defaults to `http://localhost:8080` |
+| `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080` |
 | `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
 
 ## Production Deployment

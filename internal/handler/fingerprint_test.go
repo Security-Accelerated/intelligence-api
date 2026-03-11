@@ -33,13 +33,12 @@ func (m *mockFingerprintService) UpdateRules(_ context.Context, rules []domain.T
 func newFingerprintRouter(fpSvc FingerprintAdminService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, fpSvc, "test", nil, nil, nil)
+	h := New(nil, fpSvc, "test", nil, nil, nil)
 
 	admin := r.Group("/api/v1/admin")
 	admin.Use(func(c *gin.Context) {
-		c.Set("api_key_features", []string{"admin"})
+		c.Set("api_key_plan", "admin")
 		c.Set("api_key_id", 100)
-		c.Set("api_key_tier", "premium")
 		c.Next()
 	})
 	admin.GET("/fingerprints", h.GetFingerprints)

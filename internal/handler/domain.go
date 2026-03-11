@@ -32,10 +32,10 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		return
 	}
 
-	tier, _ := c.Get("api_key_tier")
-	tierStr, _ := tier.(string)
-	if max := h.maxDomains("domain", tierStr); max > 0 && len(req.Domains) > max {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many domains: maximum %d allowed for %s tier", max, tierStr)})
+	plan, _ := c.Get("api_key_plan")
+	planStr, _ := plan.(string)
+	if max := h.maxDomains("domain", planStr); max > 0 && len(req.Domains) > max {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many domains: maximum %d allowed for %s plan", max, planStr)})
 		return
 	}
 
@@ -48,13 +48,13 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 	c.Set("bgp_requested", req.BGP)
 	c.Set("fingerprint_requested", req.Fingerprint)
 
-	if req.Screenshot && tierStr != "premium" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a premium tier subscription"})
+	if req.Screenshot && planStr != "pro" && planStr != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a pro plan"})
 		return
 	}
 
-	if req.Reputation && tierStr != "premium" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "reputation requires a premium tier subscription"})
+	if req.Reputation && planStr != "pro" && planStr != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "reputation requires a pro plan"})
 		return
 	}
 

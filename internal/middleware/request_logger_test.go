@@ -91,8 +91,7 @@ func TestRequestLogger_AuthFieldsPresent(t *testing.T) {
 	r.Use(RequestLoggerWithLogger(logger))
 	r.GET("/test", func(c *gin.Context) {
 		c.Set("api_key_id", 42)
-		c.Set("api_key_tier", "premium")
-		c.Set("api_key_features", []string{"admin", "domain"})
+		c.Set("api_key_plan", "pro")
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -116,14 +115,10 @@ func TestRequestLogger_AuthFieldsPresent(t *testing.T) {
 		t.Errorf("api_key_id = %d, want 42", f.Integer)
 	}
 
-	if f, ok := fieldMap["api_key_tier"]; !ok {
-		t.Error("api_key_tier not found in log entry")
-	} else if f.String != "premium" {
-		t.Errorf("api_key_tier = %q, want %q", f.String, "premium")
-	}
-
-	if _, ok := fieldMap["api_key_features"]; !ok {
-		t.Error("api_key_features not found in log entry")
+	if f, ok := fieldMap["api_key_plan"]; !ok {
+		t.Error("api_key_plan not found in log entry")
+	} else if f.String != "pro" {
+		t.Errorf("api_key_plan = %q, want %q", f.String, "pro")
 	}
 }
 
@@ -141,7 +136,7 @@ func TestRequestLogger_AuthFieldsAbsent(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	r.ServeHTTP(w, req)
 
-	absent := []string{"api_key_id", "api_key_tier", "api_key_features"}
+	absent := []string{"api_key_id", "api_key_plan"}
 	entry := logs.All()[0]
 	for _, f := range entry.Context {
 		for _, key := range absent {

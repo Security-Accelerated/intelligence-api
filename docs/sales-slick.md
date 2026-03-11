@@ -49,9 +49,6 @@ Map domains to their hosting infrastructure via IP-to-ASN lookups. Identify host
 ### Technology Fingerprinting
 Detect web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers — with zero extra network requests. Identify technology stacks for vulnerability assessment and attack surface mapping.
 
-### Typosquatting Detection
-Generate hundreds of lookalike domain permutations using 10 different algorithms (homoglyphs, character swaps, bitsquatting, and more). Optionally check which permutations are actually registered and live. Protect your brand before impersonators strike.
-
 ---
 
 ## How It Works
@@ -87,8 +84,8 @@ That's it. One request, one comprehensive response.
 
 ## Plans
 
-| Capability | Basic | Premium |
-|-----------|-------|---------|
+| Capability | Basic | Pro |
+|-----------|-------|-----|
 | Domain lookup (WHOIS, DNS, SSL, headers) | Included | Included |
 | Email security (SPF, DMARC, DKIM) | Included | Included |
 | Subdomain enumeration | Included | Included |
@@ -97,7 +94,6 @@ That's it. One request, one comprehensive response.
 | Technology fingerprinting | Included | Included |
 | Page screenshots | — | Included |
 | Domain reputation scoring | — | Included |
-| Typosquatting detection | Add-on | Add-on |
 | Rate limit | 30 req/min | 120 req/min |
 | Batch size (domain lookup) | 5 domains | 20 domains |
 
@@ -107,7 +103,7 @@ That's it. One request, one comprehensive response.
 
 **Security Operations** — Triage suspicious domains from phishing reports, SIEM alerts, and threat feeds. Get the full picture in seconds instead of hours.
 
-**Brand Protection** — Monitor for typosquatting domains impersonating your brand. Detect lookalikes before they're weaponized.
+**Brand Protection** — Investigate domains impersonating your brand. Use subdomain enumeration, CT logs, and reputation scoring to assess threats.
 
 **Vendor Risk Assessment** — Evaluate third-party domains for certificate hygiene, email authentication, and blocklist presence during procurement.
 

@@ -15,11 +15,9 @@ import (
 var ContextKeys = []string{
 	"cache_hit",
 	"screenshot_requested",
-	"typosquatting_requested",
 	"reputation_requested",
 	"email_security_requested",
 	"subdomain_requested",
-	"check_live_requested",
 	"ct_logs_requested",
 	"bgp_requested",
 	"fingerprint_requested",
@@ -69,14 +67,9 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 				fields = append(fields, zap.Int("api_key_id", v))
 			}
 		}
-		if tier, exists := c.Get("api_key_tier"); exists {
-			if v, ok := tier.(string); ok {
-				fields = append(fields, zap.String("api_key_tier", v))
-			}
-		}
-		if features, exists := c.Get("api_key_features"); exists {
-			if v, ok := features.([]string); ok {
-				fields = append(fields, zap.Strings("api_key_features", v))
+		if plan, exists := c.Get("api_key_plan"); exists {
+			if v, ok := plan.(string); ok {
+				fields = append(fields, zap.String("api_key_plan", v))
 			}
 		}
 
