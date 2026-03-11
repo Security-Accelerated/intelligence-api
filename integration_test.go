@@ -1394,6 +1394,260 @@ func TestIntegration_AdminFingerprints_UpdateForbiddenForNonAdmin(t *testing.T) 
 	}
 }
 
+// --- Typosquatting Key Access ---
+
+func TestIntegration_TyposquattingKey_CanAccessTyposquatting(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-typosquatting-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.TyposquattingResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+}
+
+func TestIntegration_TyposquattingKey_CannotAccessLookup(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-typosquatting-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+// --- Enterprise Key Access ---
+
+func TestIntegration_EnterpriseKey_CanAccessLookup(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-enterprise-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+}
+
+func TestIntegration_EnterpriseKey_CanAccessTyposquatting(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/typosquatting",
+		strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-enterprise-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.TyposquattingResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	}
+}
+
+func TestIntegration_EnterpriseKey_CannotAccessAdmin(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/info", nil)
+	req.Header.Set("X-API-Key", "test-enterprise-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+// --- Cache Expiry ---
+
+func TestIntegration_CacheExpiry(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	body := `{"domains":["example.com"]}`
+
+	// 1. First request — cache miss, populates cache.
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w1, req1)
+
+	if w1.Code != http.StatusOK {
+		t.Fatalf("first request: status = %d, want %d", w1.Code, http.StatusOK)
+	}
+
+	var resp1 []*domain.DomainResponse
+	json.Unmarshal(w1.Body.Bytes(), &resp1)
+	if len(resp1) != 1 {
+		t.Fatalf("first request: len(resp) = %d, want 1", len(resp1))
+	}
+	if resp1[0].CacheHit {
+		t.Error("first request should be a cache miss")
+	}
+
+	// 2. Second request — cache hit.
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("second request: status = %d, want %d", w2.Code, http.StatusOK)
+	}
+
+	var resp2 []*domain.DomainResponse
+	json.Unmarshal(w2.Body.Bytes(), &resp2)
+	if len(resp2) != 1 {
+		t.Fatalf("second request: len(resp) = %d, want 1", len(resp2))
+	}
+	if !resp2[0].CacheHit {
+		t.Error("second request should be a cache hit")
+	}
+
+	// 3. Fast-forward past the 5m cache TTL.
+	mr.FastForward(6 * time.Minute)
+
+	// 4. Third request — cache expired, should be a miss again.
+	w3 := httptest.NewRecorder()
+	req3 := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup", strings.NewReader(body))
+	req3.Header.Set("Content-Type", "application/json")
+	req3.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w3, req3)
+
+	if w3.Code != http.StatusOK {
+		t.Fatalf("third request: status = %d, want %d", w3.Code, http.StatusOK)
+	}
+
+	var resp3 []*domain.DomainResponse
+	json.Unmarshal(w3.Body.Bytes(), &resp3)
+	if len(resp3) != 1 {
+		t.Fatalf("third request: len(resp) = %d, want 1", len(resp3))
+	}
+	if resp3[0].CacheHit {
+		t.Error("third request should be a cache miss after TTL expiry")
+	}
+}
+
+// --- Validation Edge Cases ---
+
+func TestIntegration_DomainLookup_EmptyDomainsArray(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestIntegration_DomainLookup_MalformedJSON(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestIntegration_DomainLookup_RawIPRejected(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["1.2.3.4"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestIntegration_DomainLookup_DomainNormalization(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/domain/lookup",
+		strings.NewReader(`{"domains":["https://example.com/"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].Domain != "example.com" {
+		t.Errorf("Domain = %q, want %q (should be normalized)", resp[0].Domain, "example.com")
+	}
+}
+
 // --- Info endpoint success path ---
 
 func TestIntegration_Info_AdminCanAccess(t *testing.T) {

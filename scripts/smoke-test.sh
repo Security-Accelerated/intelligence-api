@@ -35,6 +35,26 @@ post() {
     fi
 }
 
+# check_json — captures response body from a curl command, validates it as JSON,
+# and checks for expected top-level fields. Arguments:
+#   $1  description
+#   $2  jq filter expression that must produce a non-empty/true result
+#   $@  remaining args are passed to curl
+check_json() {
+    local desc="$1" filter="$2"
+    shift 2
+    local body
+    body=$(curl -s "$@")
+    if echo "$body" | jq -e "$filter" > /dev/null 2>&1; then
+        printf "  \033[32m✓\033[0m %s\n" "$desc"
+        pass=$((pass + 1))
+    else
+        printf "  \033[31m✗\033[0m %s (jq filter failed: %s)\n" "$desc" "$filter"
+        fail=$((fail + 1))
+        errors+=("$desc: jq filter '$filter' failed")
+    fi
+}
+
 get() {
     local expect="$1" desc="$2" path="$3" key="$4"
     if [ "$key" = "" ]; then
@@ -71,6 +91,7 @@ post 200 "lookup (lookup)"      "/api/v1/domain/lookup" "$LOOKUP"     "$DOMAIN"
 post 200 "lookup (enterprise)"  "/api/v1/domain/lookup" "$ENTERPRISE" "$DOMAIN"
 post 403 "lookup (typosquatting — no lookup feature)" "/api/v1/domain/lookup" "$TYPO" "$DOMAIN"
 post 401 "lookup (no key)"      "/api/v1/domain/lookup" ""            "$DOMAIN"
+post 401 "lookup (wrong key)"  "/api/v1/domain/lookup" "totally-wrong-key" "$DOMAIN"
 
 echo ""
 echo "=== Domain Lookup — Premium Options ==="
@@ -133,6 +154,54 @@ get  401 "GET fingerprints (no key)"           "/api/v1/admin/fingerprints" ""
 post 200 "POST fingerprints (admin)"           "/api/v1/admin/fingerprints" "$ADMIN" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 post 403 "POST fingerprints (lookup — no admin)" "/api/v1/admin/fingerprints" "$LOOKUP" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 post 401 "POST fingerprints (no key)"          "/api/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
+
+echo ""
+echo "=== Response Body Validation ==="
+check_json "GET /hello returns {message: hello world}" \
+    '.message == "hello world"' \
+    "$HOST/api/v1/hello"
+
+check_json "lookup response is JSON array with domain field" \
+    '.[0].domain' \
+    -X POST "$HOST/api/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+check_json "typosquatting response has domain and permutations" \
+    '.[0] | (.domain and .permutations)' \
+    -X POST "$HOST/api/v1/domain/typosquatting" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+echo ""
+echo "=== Rate Limiting ==="
+# Basic tier limit is 30/min. Send 31 requests and verify the last gets 429.
+rate_ok=true
+for i in $(seq 1 31); do
+    rl_status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$HOST/api/v1/domain/lookup" \
+        -H "Content-Type: application/json" -H "X-API-Key: $LOOKUP" \
+        -d "$DOMAIN")
+    if [ "$i" -eq 31 ]; then
+        if [ "$rl_status" = "429" ]; then
+            printf "  \033[32m✓\033[0m request 31 got 429 (rate limited)\n"
+            pass=$((pass + 1))
+        else
+            printf "  \033[31m✗\033[0m request 31 got %s (expected 429)\n" "$rl_status"
+            fail=$((fail + 1))
+            errors+=("rate limit: request 31 got $rl_status, expected 429")
+            rate_ok=false
+        fi
+    fi
+done
+
+echo ""
+echo "=== Body Size Limit ==="
+# Send a >1MB payload. MaxBytesReader surfaces through Gin's binding layer as 400.
+big_body=$(python3 -c "print('{\"domains\":[\"' + 'x'*1048577 + '\"]}')")
+check 400 "oversized body (>1MB) rejected" \
+    -X POST "$HOST/api/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$big_body"
 
 echo ""
 echo "=== Client Request ID ==="

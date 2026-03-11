@@ -616,7 +616,7 @@ On any machine with Docker — no code checkout needed:
 docker login ghcr.io -u <github-username>
 ```
 
-Create a `docker-compose.yml`:
+Create a `migrations/` directory with the SQL files from the repository (see `migrations/` in the source), then create a `docker-compose.yml`:
 
 ```yaml
 services:
@@ -639,6 +639,7 @@ services:
       POSTGRES_DB: intelligence_api
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
 
 volumes:
   redis-data:

@@ -1059,6 +1059,144 @@ func TestLookup_Fingerprint_SeparateCacheKey(t *testing.T) {
 	}
 }
 
+// --- All-options orchestration tests ---
+
+func allOpts() domain.LookupOptions {
+	return domain.LookupOptions{
+		Screenshot:    true,
+		Reputation:    true,
+		EmailSecurity: true,
+		Subdomains:    true,
+		CTLogs:        true,
+		BGP:           true,
+		Fingerprint:   true,
+	}
+}
+
+func TestLookup_AllOptions_AllSucceed(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	engine := domain.NewFingerprintEngine()
+	engine.LoadRules([]domain.TechRule{
+		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": ""}},
+	})
+	svc.SetFingerprintEngine(engine)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", allOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.Whois == nil {
+		t.Error("expected Whois")
+	}
+	if resp.DNS == nil {
+		t.Error("expected DNS")
+	}
+	if resp.SSL == nil {
+		t.Error("expected SSL")
+	}
+	if resp.Headers == nil {
+		t.Error("expected Headers")
+	}
+	if resp.Screenshot == nil {
+		t.Error("expected Screenshot")
+	}
+	if resp.Reputation == nil {
+		t.Error("expected Reputation")
+	}
+	if resp.EmailSecurity == nil {
+		t.Error("expected EmailSecurity")
+	}
+	if resp.Subdomains == nil {
+		t.Error("expected Subdomains")
+	}
+	if resp.CTLogs == nil {
+		t.Error("expected CTLogs")
+	}
+	if resp.BGP == nil {
+		t.Error("expected BGP")
+	}
+	if resp.Fingerprint == nil {
+		t.Error("expected Fingerprint")
+	}
+	if len(resp.Errors) != 0 {
+		t.Errorf("expected no errors, got %v", resp.Errors)
+	}
+
+	// Should cache under the combined key
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	if _, ok := mc.store["example.com:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains"]; !ok {
+		t.Error("expected combined cache key")
+	}
+}
+
+func TestLookup_AllOptions_AllOptionalFail(t *testing.T) {
+	mc := newMockCache()
+	svc := &DomainService{
+		cache:               mc,
+		cacheTTL:            5 * time.Minute,
+		screenshotTimeout:   15 * time.Second,
+		subdomainMaxResults: 500,
+		ctLogsMaxEntries:    100,
+		lookupWhois:         okWhois,
+		lookupDNS:           okDNS,
+		lookupSSL:           okSSL,
+		lookupHeaders:       okHeaders,
+		lookupScreenshot:    failScreenshot,
+		lookupReputation:    failReputation,
+		lookupEmailSecurity: failEmailSecurity,
+		lookupSubdomains:    failSubdomains,
+		lookupCTLogs:        failCTLogs,
+		lookupBGP:           failBGP,
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", allOpts())
+
+	// Base lookups should succeed
+	if resp.Whois == nil {
+		t.Error("expected Whois to succeed")
+	}
+	if resp.DNS == nil {
+		t.Error("expected DNS to succeed")
+	}
+
+	// Optional lookups should all fail gracefully
+	if resp.Screenshot != nil {
+		t.Error("expected Screenshot to be nil on failure")
+	}
+	if resp.EmailSecurity != nil {
+		t.Error("expected EmailSecurity to be nil on failure")
+	}
+	if resp.Subdomains != nil {
+		t.Error("expected Subdomains to be nil on failure")
+	}
+	if resp.CTLogs != nil {
+		t.Error("expected CTLogs to be nil on failure")
+	}
+	if resp.BGP != nil {
+		t.Error("expected BGP to be nil on failure")
+	}
+
+	// Reputation always returns a result struct (even on failure)
+	if resp.Reputation == nil {
+		t.Error("expected Reputation to be non-nil (always returned)")
+	}
+
+	// Should have errors for screenshot, email_security, subdomains, ct_logs, bgp, plus 4 reputation provider errors
+	if len(resp.Errors) < 5 {
+		t.Errorf("expected at least 5 errors, got %d: %v", len(resp.Errors), resp.Errors)
+	}
+
+	// Should still cache because base lookups succeeded
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	if mc.setCalls != 1 {
+		t.Errorf("expected 1 cache Set call (has base data), got %d", mc.setCalls)
+	}
+}
+
 func TestLookup_SetFingerprintEngine(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)

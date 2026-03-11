@@ -44,6 +44,7 @@ X-Client-Request-ID: my-trace-id-12345
 
 ## Response Conventions
 
+- Every response includes an `X-Request-ID` header containing a server-generated UUID. Reference this ID when contacting support or reporting issues.
 - All responses are JSON
 - Successful responses return `200 OK`
 - Multi-domain endpoints return an array, even for single-domain requests
