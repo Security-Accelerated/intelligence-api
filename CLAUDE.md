@@ -118,9 +118,10 @@ Tables: `customers` (plan column: basic/pro/admin), `api_keys` (key_hash), `fing
 - **Fly.io** for production deployment (iad region, auto-stop/start machines)
 - **Neon** for production PostgreSQL
 - **Upstash** for production Redis (via Fly)
-- **GitHub Actions** — two workflows:
+- **GitHub Actions** — three workflows:
   - `docker.yml`: builds Docker images on push to `main` or version tags, pushes to GHCR
   - `fly-deploy.yml`: deploys to Fly.io on push to `release` branch, with git version baked in via `--build-arg`
+  - `uptime.yml`: pings `/v1/hello` every 5 minutes, sends Pushover alert on failure
 - Version is baked in at build time via `-ldflags "-X main.version=..."` — passed as Docker build arg
 - Deploy workflow: push to main → `make release V=v0.X.Y` → `git push origin main:release`
 - `.env` file (gitignored) holds API keys for `smoke-test.sh` and `status.sh` against production

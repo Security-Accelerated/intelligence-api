@@ -3,6 +3,8 @@
 
 A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, subdomain enumeration, certificate transparency, BGP/ASN, and technology fingerprinting lookups for one or more domains, with Redis caching.
 
+**Production URL:** `https://api.securityaccelerated.com`
+
 ## Authentication
 
 All endpoints except `/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan.
@@ -481,6 +483,13 @@ Config values:
 | `postgres.password` | `intelligence` | PostgreSQL password |
 | `postgres.dbname` | `intelligence_api` | PostgreSQL database name |
 | `postgres.sslmode` | `require` | PostgreSQL SSL mode (`disable` for local dev) |
+| `pushover.api_token` | `""` | Pushover application API token (enables alerting) |
+| `pushover.user_key` | `""` | Pushover user key (enables alerting) |
+| `alerts.throttle_threshold` | `5` | Per-lookup failures to trigger throttle alert |
+| `alerts.throttle_window` | `5m` | Time window for throttle detection |
+| `alerts.spike_threshold` | `15` | Total errors across all lookups to trigger spike alert |
+| `alerts.spike_window` | `5m` | Time window for spike detection |
+| `alerts.cooldown` | `15m` | Minimum time between duplicate alerts |
 
 ### Database Setup
 
@@ -596,6 +605,7 @@ The API is deployed on **Fly.io** with **Neon** (PostgreSQL) and **Upstash** (Re
 - **Push to `main`** — GitHub Actions builds and pushes a Docker image to GHCR
 - **Push to `release`** — GitHub Actions deploys to Fly.io with the git version baked in
 - **Version tags** (`make release V=v0.X.Y`) — tags and pushes to trigger GHCR image builds
+- **Uptime monitor** — GitHub Actions pings `api.securityaccelerated.com/v1/hello` every 5 minutes and sends a Pushover alert on failure
 
 ### Deployment workflow
 
@@ -619,6 +629,11 @@ git push origin main:release      # trigger Fly deploy
 | `REDIS_PASSWORD` | Upstash Redis password |
 | `GIN_MODE` | Gin framework mode (`release` for production) |
 | `APPLICATION_MODE` | Application mode (`production`) |
+| `PUSHOVER_API_TOKEN` | Pushover app API token (enables alerting) |
+| `PUSHOVER_USER_KEY` | Pushover user key (enables alerting) |
+| `ALERTS_THROTTLE_THRESHOLD` | Per-lookup failure threshold (default: 5) |
+| `ALERTS_SPIKE_THRESHOLD` | Global error spike threshold (default: 15) |
+| `ALERTS_COOLDOWN` | Cooldown between duplicate alerts (default: 15m) |
 
 ### Scripts
 
@@ -639,6 +654,19 @@ Check deployment health:
 ```sh
 ./scripts/status.sh
 ```
+
+## Alerting
+
+The API sends Pushover notifications when upstream lookup services start failing. Set `PUSHOVER_API_TOKEN` and `PUSHOVER_USER_KEY` to enable.
+
+Two alert types:
+
+- **Upstream throttle** — a single lookup type (e.g., WHOIS, DNS) fails repeatedly within a time window (default: 5 failures in 5 minutes)
+- **Error spike** — total lookup errors across all types exceed a threshold (default: 15 errors in 5 minutes)
+
+Alerts include a cooldown period (default: 15 minutes) to prevent alert fatigue. When credentials are not configured, alerting is silently disabled.
+
+Additionally, a GitHub Actions workflow monitors uptime by pinging the API every 5 minutes and sending a Pushover alert on failure.
 
 ## Testing
 
