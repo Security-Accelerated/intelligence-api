@@ -12,6 +12,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
 	"go.uber.org/zap"
 )
@@ -38,6 +39,7 @@ type DomainService struct {
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
 	fingerprintEngine   *domain.FingerprintEngine
+	alerter             notifications.ErrorRecorder
 
 	lookupWhois      func(ctx context.Context, d string) (*domain.WhoisInfo, error)
 	lookupDNS        func(ctx context.Context, d string) (*domain.DNSInfo, error)
@@ -51,7 +53,7 @@ type DomainService struct {
 	lookupBGP            func(ctx context.Context, d string) (*domain.BGPInfo, error)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -65,6 +67,7 @@ func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, 
 		subdomainMaxResults: subdomainMaxResults,
 		ctLogsMaxEntries:    ctLogsMaxEntries,
 		fingerprintEngine:   fpEngine,
+		alerter:             alerter,
 		lookupWhois:         domain.LookupWhois,
 		lookupDNS:           domain.LookupDNS,
 		lookupSSL:           domain.LookupSSL,
@@ -196,6 +199,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "whois",
 				Message: sanitizeErr(err),
 			})
+			s.alerter.RecordLookupError("whois")
 			return
 		}
 		resp.Whois = result
@@ -212,6 +216,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "dns",
 				Message: sanitizeErr(err),
 			})
+			s.alerter.RecordLookupError("dns")
 			return
 		}
 		resp.DNS = result
@@ -228,6 +233,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "ssl",
 				Message: sanitizeErr(err),
 			})
+			s.alerter.RecordLookupError("ssl")
 			return
 		}
 		resp.SSL = result
@@ -244,6 +250,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "headers",
 				Message: sanitizeErr(err),
 			})
+			s.alerter.RecordLookupError("headers")
 			return
 		}
 		resp.Headers = result
@@ -262,6 +269,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "screenshot",
 					Message: sanitizeErr(err),
 				})
+				s.alerter.RecordLookupError("screenshot")
 				return
 			}
 			resp.Screenshot = result
@@ -275,6 +283,9 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			result, errs := s.lookupReputation(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
+			if len(errs) > 0 {
+				s.alerter.RecordLookupError("reputation")
+			}
 			resp.Errors = append(resp.Errors, errs...)
 			resp.Reputation = result
 		}()
@@ -293,6 +304,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "email_security",
 					Message: sanitizeErr(err),
 				})
+				s.alerter.RecordLookupError("email_security")
 				return
 			}
 			resp.EmailSecurity = result
@@ -314,6 +326,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "subdomains",
 					Message: sanitizeErr(err),
 				})
+				s.alerter.RecordLookupError("subdomains")
 				return
 			}
 			resp.Subdomains = result
@@ -333,6 +346,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "ct_logs",
 					Message: sanitizeErr(err),
 				})
+				s.alerter.RecordLookupError("ct_logs")
 				return
 			}
 			resp.CTLogs = result
@@ -352,6 +366,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "bgp",
 					Message: sanitizeErr(err),
 				})
+				s.alerter.RecordLookupError("bgp")
 				return
 			}
 			resp.BGP = result

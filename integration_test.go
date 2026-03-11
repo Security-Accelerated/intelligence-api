@@ -19,6 +19,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/service"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -105,7 +106,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
 	})
 
-	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100, fpEngine)
+	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100, fpEngine, &notifications.NoopRecorder{})
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {

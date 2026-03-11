@@ -34,6 +34,17 @@ rate_limit:
   basic: 30
   pro: 120
 
+pushover:
+  api_token: ""
+  user_key: ""
+
+alerts:
+  throttle_threshold: 5
+  throttle_window: 5m
+  spike_threshold: 15
+  spike_window: 5m
+  cooldown: 15m
+
 postgres:
   host: postgres
   port: 5432

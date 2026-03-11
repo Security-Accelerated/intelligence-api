@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/notifications"
 )
 
 // mockCache is a hand-written mock for cache.Cache.
@@ -153,6 +154,7 @@ func newTestService(mc *mockCache) *DomainService {
 		screenshotTimeout:   15 * time.Second,
 		subdomainMaxResults: 500,
 		ctLogsMaxEntries:    100,
+		alerter:             &notifications.NoopRecorder{},
 		lookupWhois:         okWhois,
 		lookupDNS:           okDNS,
 		lookupSSL:           okSSL,
@@ -238,6 +240,7 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 		cacheTTL:            5 * time.Minute,
 		screenshotTimeout:   15 * time.Second,
 		ctLogsMaxEntries:    100,
+		alerter:             &notifications.NoopRecorder{},
 		lookupWhois:         failWhois,
 		lookupDNS:           failDNS,
 		lookupSSL:           failSSL,
@@ -271,6 +274,7 @@ func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
 		cacheTTL:            5 * time.Minute,
 		screenshotTimeout:   15 * time.Second,
 		ctLogsMaxEntries:    100,
+		alerter:             &notifications.NoopRecorder{},
 		lookupWhois:         okWhois,
 		lookupDNS:           failDNS,
 		lookupSSL:           okSSL,
@@ -1140,6 +1144,7 @@ func TestLookup_AllOptions_AllOptionalFail(t *testing.T) {
 		screenshotTimeout:   15 * time.Second,
 		subdomainMaxResults: 500,
 		ctLogsMaxEntries:    100,
+		alerter:             &notifications.NoopRecorder{},
 		lookupWhois:         okWhois,
 		lookupDNS:           okDNS,
 		lookupSSL:           okSSL,

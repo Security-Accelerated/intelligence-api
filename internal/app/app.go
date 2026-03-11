@@ -14,6 +14,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/httpapi"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/service"
 	"go.uber.org/zap"
 )
@@ -86,6 +87,25 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("connected to redis")
 
+	// Notifications
+	var alerter notifications.ErrorRecorder
+	pushoverToken := cfg.GetString("pushover.api_token")
+	pushoverUser := cfg.GetString("pushover.user_key")
+	if pushoverToken != "" && pushoverUser != "" {
+		notifier := notifications.NewPushoverNotifier(pushoverToken, pushoverUser)
+		alerter = notifications.NewAlerter(notifier, notifications.AlerterConfig{
+			ThrottleThreshold: cfg.GetInt("alerts.throttle_threshold"),
+			ThrottleWindow:    cfg.GetDuration("alerts.throttle_window"),
+			SpikeThreshold:    cfg.GetInt("alerts.spike_threshold"),
+			SpikeWindow:       cfg.GetDuration("alerts.spike_window"),
+			Cooldown:          cfg.GetDuration("alerts.cooldown"),
+		})
+		logger.Info("pushover notifications enabled")
+	} else {
+		alerter = &notifications.NoopRecorder{}
+		logger.Info("pushover notifications disabled (no credentials configured)")
+	}
+
 	// Services
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")
 
@@ -99,7 +119,7 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("fingerprint engine loaded", zap.Int("rule_count", fpService.Engine().RuleCount()))
 
-	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine())
+	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter)
 
 	// HTTP
 	h := handler.New(domainService, fpService, version, cfg, redisCache, cachedRepo)

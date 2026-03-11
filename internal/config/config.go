@@ -63,6 +63,13 @@ func init() {
 	config.SetDefault("rate_limit.basic", 30)
 	config.SetDefault("rate_limit.pro", 120)
 	config.SetDefault("postgres.sslmode", "require")
+	config.SetDefault("pushover.api_token", "")
+	config.SetDefault("pushover.user_key", "")
+	config.SetDefault("alerts.throttle_threshold", 5)
+	config.SetDefault("alerts.throttle_window", "5m")
+	config.SetDefault("alerts.spike_threshold", 15)
+	config.SetDefault("alerts.spike_window", "5m")
+	config.SetDefault("alerts.cooldown", "15m")
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
