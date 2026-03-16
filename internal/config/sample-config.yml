@@ -47,6 +47,19 @@ alerts:
   spike_window: 5m
   cooldown: 15m
 
+stripe:
+  secret_key: ""
+  webhook_secret: ""
+  prices:
+    basic_monthly: ""
+    pro_monthly: ""
+  payment_link:
+    basic: ""
+    pro: ""
+
+billing:
+  stale_key_days: 365
+
 postgres:
   host: postgres
   port: 5432

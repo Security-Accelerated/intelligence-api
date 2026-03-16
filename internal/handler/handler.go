@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
+	"github.com/security-accelerated/intelligence-api/internal/billing"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
@@ -25,16 +26,18 @@ type DomainLookupService interface {
 type Handler struct {
 	domainService      DomainLookupService
 	fingerprintService FingerprintAdminService
+	billingService     billing.Service
 	version            string
 	cfg                *viper.Viper
 	redisCache         *cache.RedisCache
 	cachedRepo         *auth.CachedRepository
 }
 
-func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
+func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
 	return &Handler{
 		domainService:      domainService,
 		fingerprintService: fingerprintService,
+		billingService:     billingService,
 		version:            version,
 		cfg:                cfg,
 		redisCache:         redisCache,
@@ -51,11 +54,15 @@ func (h *Handler) maxDomains(prefix, plan string) int {
 	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, plan))
 }
 
-// RegisterRoutes registers unauthenticated routes only (health check, docs).
+// RegisterRoutes registers unauthenticated routes only (health check, docs, billing).
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/", h.Docs)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
+
+	billingGroup := router.Group("/billing")
+	billingGroup.POST("/webhook", h.StripeWebhook)
+	billingGroup.GET("/success", h.CheckoutSuccess)
 }
 
 // RegisterProtectedRoutes registers routes that require API key authentication.

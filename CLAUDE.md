@@ -18,6 +18,7 @@ internal/middleware/           → Auth, rate limiting, logging, security header
 internal/httpapi/             → Gin router assembly, middleware chain, server lifecycle
 internal/cache/               → Cache interface + Redis implementation
 internal/auth/                → Customer model, PostgreSQL repository, in-memory cached repository, key hashing
+internal/billing/              → Stripe billing (webhook handling, key provisioning, noop fallback)
 internal/notifications/        → Pushover alerting (upstream throttle + error spike detection)
 internal/safenet/             → SSRF prevention (blocks private/reserved IPs at dial time)
 internal/logging/             → Zap logger init (ECS format in production, pretty in dev)
@@ -55,6 +56,9 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 
 ### Error sanitization
 `sanitizeErr()` strips internal error details before including them in API responses. `safenet.BlockedError` gets a specific user-friendly message. Other errors are truncated to the final segment after `: `. Full context is always logged server-side.
+
+### Stripe billing
+`internal/billing/` follows the notifications pattern (interface + real impl + noop fallback). `Service` interface defines `HandleWebhook` and `GetProvisionedKey`. `StripeService` verifies webhook signatures, handles checkout/subscription/payment events, and provisions API keys. `NoopService` returns "billing not configured" errors. `Repository` wraps billing-specific DB operations (customer+key creation, provisioned key storage, plan updates, stale key cleanup). Key provisioning: on checkout, generates a random API key, stores hash in `api_keys`, stores raw key in `provisioned_keys` (1hr expiry, one-time retrieval). `keygen.go` generates 64-char hex keys via `crypto/rand`. Auth cache is invalidated after any plan change. `last_used_at` on `api_keys` is updated on auth cache-miss lookups (fire-and-forget goroutine). Config: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICES_BASIC_MONTHLY`, `STRIPE_PRICES_PRO_MONTHLY`, `STRIPE_PAYMENT_LINK_BASIC`, `STRIPE_PAYMENT_LINK_PRO`, `BILLING_STALE_KEY_DAYS`.
 
 ### Notifications
 `internal/notifications/` provides interface-driven alerting. `Notifier` interface abstracts the delivery channel (currently Pushover); `ErrorRecorder` interface abstracts error tracking (currently `Alerter`). The `Alerter` uses sliding-window counters behind a mutex to detect per-lookup throttling (default: 5 failures in 5m) and global error spikes (default: 15 errors in 5m). Alerts fire asynchronously with a 15-minute cooldown to prevent alert fatigue. `DomainService` depends on `ErrorRecorder`; when Pushover credentials are absent, a `NoopRecorder` is wired in. Config: `PUSHOVER_API_TOKEN`, `PUSHOVER_USER_KEY`, `ALERTS_THROTTLE_THRESHOLD`, `ALERTS_THROTTLE_WINDOW`, `ALERTS_SPIKE_THRESHOLD`, `ALERTS_SPIKE_WINDOW`, `ALERTS_COOLDOWN`.
@@ -110,7 +114,7 @@ Sample config: `internal/config/sample-config.yml`
 
 PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration.
 
-Tables: `customers` (plan column: free/basic/pro/admin), `api_keys` (key_hash), `fingerprint_rules` (append-only JSONB rules).
+Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout).
 
 ## Infrastructure
 

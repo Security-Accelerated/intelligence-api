@@ -200,7 +200,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	authMW := middleware.APIKeyAuthWithLogger(cachedRepo, nop)
 	rateLimitMW := middleware.RateLimitWithLogger(rc.Client(), rlCfg, nop)
 
-	h := handler.New(svc, fpSvc, "test", cfg, rc, cachedRepo)
+	h := handler.New(svc, fpSvc, nil, "test", cfg, rc, cachedRepo)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, authMW, rateLimitMW)
 

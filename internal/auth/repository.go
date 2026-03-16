@@ -30,5 +30,11 @@ func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Custome
 	if err != nil {
 		return nil, err
 	}
+
+	// Update last_used_at in background (fire-and-forget)
+	go func() {
+		_, _ = r.db.Exec(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, c.APIKeyID)
+	}()
+
 	return &c, nil
 }

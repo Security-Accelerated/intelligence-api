@@ -47,6 +47,8 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 |--------|------|------|-------------|
 | GET | `/` | None | API reference documentation (HTML) |
 | GET | `/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
+| POST | `/billing/webhook` | None (Stripe signature) | Stripe webhook endpoint |
+| GET | `/billing/success` | None (session_id token) | Post-checkout API key retrieval page |
 | GET | `/v1/info` | `admin` | Application and environment info |
 | POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |
 | POST | `/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
@@ -496,6 +498,13 @@ Config values:
 | `alerts.spike_threshold` | `15` | Total errors across all lookups to trigger spike alert |
 | `alerts.spike_window` | `5m` | Time window for spike detection |
 | `alerts.cooldown` | `15m` | Minimum time between duplicate alerts |
+| `stripe.secret_key` | `""` | Stripe secret key (enables billing) |
+| `stripe.webhook_secret` | `""` | Stripe webhook signing secret |
+| `stripe.prices.basic_monthly` | `""` | Stripe Price ID for basic monthly plan |
+| `stripe.prices.pro_monthly` | `""` | Stripe Price ID for pro monthly plan |
+| `stripe.payment_link.basic` | `""` | Stripe Payment Link URL for basic plan |
+| `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
+| `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
 
 ### Database Setup
 
@@ -507,6 +516,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `004_rename_roles_to_features.sql` — renames `customer_roles` to `customer_features`
 - `005_fingerprint_rules.sql` — creates the `fingerprint_rules` table (append-only, JSONB rules column)
 - `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column (`free`/`basic`/`pro`/`admin`)
+- `007_billing.sql` — adds `email`, `stripe_customer_id` to customers; `last_used_at` to api_keys; creates `provisioned_keys` table
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
@@ -641,6 +651,12 @@ git push origin main:release      # trigger Fly deploy
 | `ALERTS_THROTTLE_THRESHOLD` | Per-lookup failure threshold (default: 5) |
 | `ALERTS_SPIKE_THRESHOLD` | Global error spike threshold (default: 15) |
 | `ALERTS_COOLDOWN` | Cooldown between duplicate alerts (default: 15m) |
+| `STRIPE_SECRET_KEY` | Stripe secret key (enables billing) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `STRIPE_PRICES_BASIC_MONTHLY` | Stripe Price ID for basic monthly plan |
+| `STRIPE_PRICES_PRO_MONTHLY` | Stripe Price ID for pro monthly plan |
+| `STRIPE_PAYMENT_LINK_BASIC` | Stripe Payment Link URL for basic plan |
+| `STRIPE_PAYMENT_LINK_PRO` | Stripe Payment Link URL for pro plan |
 
 ### Scripts
 
@@ -674,6 +690,34 @@ Two alert types:
 Alerts include a cooldown period (default: 15 minutes) to prevent alert fatigue. When credentials are not configured, alerting is silently disabled.
 
 Additionally, a GitHub Actions workflow monitors uptime by pinging the API every 5 minutes and sending a Pushover alert on failure.
+
+## Billing
+
+Self-service billing via Stripe. Customers click a Stripe Payment Link on the docs page, pay through Stripe Checkout, and receive an API key on a one-time success page.
+
+### Flow
+
+1. Customer visits docs at `/`, clicks a Payment Link for basic or pro
+2. Stripe hosts the checkout — no card numbers touch our servers
+3. On payment, Stripe sends a `checkout.session.completed` webhook to `POST /billing/webhook`
+4. Webhook handler creates customer + API key in DB, stores raw key temporarily in `provisioned_keys`
+5. Stripe redirects to `GET /billing/success?session_id={CHECKOUT_SESSION_ID}`
+6. Success page shows the API key once, warns to save it, marks as retrieved (1-hour expiry)
+
+### Subscription lifecycle
+
+- **Plan change** (`customer.subscription.updated`): maps Stripe Price ID to plan name, updates customer
+- **Cancellation** (`customer.subscription.deleted`): downgrades to free
+- **Payment failure** (`invoice.payment_failed`): downgrades to free
+- Auth cache is invalidated after any plan change
+
+### Stale key cleanup
+
+`api_keys.last_used_at` is updated on each auth cache-miss lookup (fire-and-forget goroutine). Keys unused for 12 months (configurable via `billing.stale_key_days`) can be deactivated via the billing repository's `DeactivateStaleKeys` method.
+
+### Configuration
+
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to enable. Without them, the app starts with a noop billing service. Map Stripe Price IDs to plans via `STRIPE_PRICES_BASIC_MONTHLY` and `STRIPE_PRICES_PRO_MONTHLY`. Configure Payment Link URLs via `STRIPE_PAYMENT_LINK_BASIC` and `STRIPE_PAYMENT_LINK_PRO` to show subscribe buttons on the docs page.
 
 ## Testing
 

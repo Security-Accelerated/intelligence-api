@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Key - Intelligence API</title>
+<style>
+  :root {
+    --sidebar-bg: #1a1f36;
+    --content-bg: #ffffff;
+    --content-text: #3c4257;
+    --heading-text: #1a1f36;
+    --accent: #635bff;
+    --border: #e3e8ee;
+    --code-bg: #f7f8fa;
+    --green: #1ea672;
+    --red: #cd3d64;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--content-text);
+    background: var(--content-bg);
+    display: flex;
+    justify-content: center;
+    padding: 60px 20px;
+  }
+
+  .container {
+    max-width: 600px;
+    width: 100%;
+  }
+
+  .brand {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  .brand h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--heading-text);
+  }
+
+  .brand span {
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+  }
+
+  .card {
+    background: var(--content-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+  }
+
+  .card h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--heading-text);
+    margin-bottom: 8px;
+  }
+
+  .card p {
+    margin-bottom: 16px;
+  }
+
+  .success-icon {
+    display: inline-block;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #e8f5e9;
+    color: var(--green);
+    font-size: 24px;
+    line-height: 48px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .error-icon {
+    display: inline-block;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #fce4ec;
+    color: var(--red);
+    font-size: 24px;
+    line-height: 48px;
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .key-block {
+    position: relative;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 48px 16px 16px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    word-break: break-all;
+    margin: 16px 0;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .copy-btn:hover {
+    background: #7a73ff;
+  }
+
+  .warning {
+    background: #fff8f0;
+    border-left: 3px solid #f5a623;
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .docs-link {
+    display: inline-block;
+    margin-top: 16px;
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .docs-link:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="brand">
+    <span>Security Accelerated</span>
+    <h1>Intelligence API</h1>
+  </div>
+
+  <div class="card">
+    {{if .Error}}
+    <div class="error-icon">!</div>
+    <h2>Unable to retrieve your API key</h2>
+    <p>{{.Error}}</p>
+    <a href="/" class="docs-link">Back to documentation</a>
+    {{else}}
+    <div class="success-icon">&#10003;</div>
+    <h2>Your API key is ready</h2>
+    <p>Your <strong>{{.Plan}}</strong> plan is now active. Use the key below to authenticate your API requests.</p>
+
+    <div class="key-block">
+      <span id="api-key">{{.APIKey}}</span>
+      <button class="copy-btn" onclick="copyKey()">Copy</button>
+    </div>
+
+    <div class="warning">
+      Save this key now. It cannot be retrieved again.
+    </div>
+
+    <p>Include this key in your requests via the <code style="font-family:var(--font-mono);font-size:13px;background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--accent);">X-API-Key</code> header.</p>
+
+    <a href="/" class="docs-link">View API documentation</a>
+    {{end}}
+  </div>
+</div>
+
+<script>
+function copyKey() {
+  var key = document.getElementById('api-key').textContent;
+  navigator.clipboard.writeText(key).then(function() {
+    var btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+</script>
+
+</body>
+</html>

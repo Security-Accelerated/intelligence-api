@@ -413,6 +413,7 @@
     <div class="sidebar-section-title">Getting Started</div>
     <a href="#authentication">Authentication</a>
     <a href="#plans">Plans</a>
+    <a href="#pricing">Pricing</a>
     <a href="#rate-limiting">Rate Limiting</a>
   </div>
 
@@ -456,6 +457,7 @@
     <h1>Intelligence API</h1>
     <p>Domain intelligence REST API. Perform concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, and technology fingerprinting lookups for any domain.</p>
     <div class="base-url">https://api.securityaccelerated.com</div>
+    <p style="margin-top:12px;font-size:14px;color:#697386;">Questions? <a href="mailto:support@securityaccelerated.com" style="color:var(--accent);text-decoration:none;">support@securityaccelerated.com</a></p>
   </section>
 
   <!-- Authentication -->
@@ -489,6 +491,31 @@
       <tr><td><strong>Reputation</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
     </tbody>
   </table>
+
+  <!-- Pricing -->
+  <h2 id="pricing">Pricing</h2>
+  <p>Get started with a free plan or upgrade for higher limits and premium features.</p>
+  <table>
+    <thead><tr><th>Plan</th><th>Features</th><th></th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Free</strong></td>
+        <td>5 req/min, 1 domain/request, core lookups</td>
+        <td>Included with any API key</td>
+      </tr>
+      <tr>
+        <td><strong>Basic</strong></td>
+        <td>30 req/min, 5 domains/request, all lookups</td>
+        <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" style="background:var(--accent);color:#fff;padding:6px 16px;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Subscribe</a>{{else}}Contact us{{end}}</td>
+      </tr>
+      <tr>
+        <td><strong>Pro</strong></td>
+        <td>120 req/min, 20 domains/request, all lookups + screenshot + reputation</td>
+        <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" style="background:var(--accent);color:#fff;padding:6px 16px;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Subscribe</a>{{else}}Contact us{{end}}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note">After subscribing, your API key will be shown on a one-time confirmation page. Save it immediately -- it cannot be retrieved again.</div>
 
   <!-- Rate Limiting -->
   <h2 id="rate-limiting">Rate Limiting</h2>
@@ -970,7 +997,7 @@ results = resp.json()
       <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
       <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint or feature</td></tr>
       <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
-      <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact support</td></tr>
+      <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
     </tbody>
   </table>
 

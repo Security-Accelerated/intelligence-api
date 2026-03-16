@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/security-accelerated/intelligence-api/internal/auth"
+	"github.com/security-accelerated/intelligence-api/internal/billing"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
@@ -124,8 +125,28 @@ func Run(logger *zap.Logger, version string) error {
 
 	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter)
 
+	// Billing
+	var billingSvc billing.Service
+	stripeKey := cfg.GetString("stripe.secret_key")
+	webhookSecret := cfg.GetString("stripe.webhook_secret")
+	if stripeKey != "" && webhookSecret != "" {
+		priceMap := make(map[string]string)
+		if p := cfg.GetString("stripe.prices.basic_monthly"); p != "" {
+			priceMap[p] = "basic"
+		}
+		if p := cfg.GetString("stripe.prices.pro_monthly"); p != "" {
+			priceMap[p] = "pro"
+		}
+		billingRepo := billing.NewRepository(db)
+		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo)
+		logger.Info("stripe billing enabled")
+	} else {
+		billingSvc = &billing.NoopService{}
+		logger.Info("stripe billing disabled (no credentials configured)")
+	}
+
 	// HTTP
-	h := handler.New(domainService, fpService, version, cfg, redisCache, cachedRepo)
+	h := handler.New(domainService, fpService, billingSvc, version, cfg, redisCache, cachedRepo)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 

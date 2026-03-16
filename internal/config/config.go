@@ -73,6 +73,13 @@ func init() {
 	config.SetDefault("alerts.spike_threshold", 15)
 	config.SetDefault("alerts.spike_window", "5m")
 	config.SetDefault("alerts.cooldown", "15m")
+	config.SetDefault("stripe.secret_key", "")
+	config.SetDefault("stripe.webhook_secret", "")
+	config.SetDefault("stripe.prices.basic_monthly", "")
+	config.SetDefault("stripe.prices.pro_monthly", "")
+	config.SetDefault("stripe.payment_link.basic", "")
+	config.SetDefault("stripe.payment_link.pro", "")
+	config.SetDefault("billing.stale_key_days", 365)
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
