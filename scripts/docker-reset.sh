@@ -14,6 +14,9 @@ docker compose down
 echo "==> Removing postgres and redis volumes..."
 docker compose down -v
 
+echo "==> Pruning build cache..."
+docker builder prune -f
+
 echo "==> Rebuilding and starting containers..."
 docker compose up --build -d
 
