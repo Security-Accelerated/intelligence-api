@@ -591,8 +591,9 @@ make run    # builds and starts the server
 |--------|-------------|
 | `make` | Run unit tests, then build |
 | `make build` | Compile the binary to `bin/` |
-| `make test` | Run unit tests with race detector |
-| `make test-integration` | Run integration tests |
+| `make deps` | Update dependencies and tidy go.mod |
+| `make test` | Update deps, then run unit tests with race detector |
+| `make test-integration` | Update deps, then run integration tests |
 | `make run` | Build and run the server |
 | `make clean` | Remove build artifacts |
 | `make release V=v0.1.0` | Tag and push a release |

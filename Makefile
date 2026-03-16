@@ -2,7 +2,7 @@ APP_NAME := intelligence-api
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty)
 
-.PHONY: all build clean test test-integration run release deploy docker-reset
+.PHONY: all build clean deps test test-integration run release deploy docker-reset
 
 all: test build
 
@@ -12,10 +12,14 @@ build:
 clean:
 	rm -rf $(BUILD_DIR)
 
-test:
+deps:
+	go get -u ./...
+	go mod tidy
+
+test: deps
 	go test -race -count=1 ./...
 
-test-integration:
+test-integration: deps
 	go test -race -count=1 -tags=integration -v .
 
 run: build
