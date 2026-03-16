@@ -403,6 +403,24 @@ func TestDomainLookup_Reputation_AdminAllowed(t *testing.T) {
 	}
 }
 
+func TestDomainLookup_Reputation_FreeForbidden(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "free")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "reputation requires a pro plan" {
+		t.Errorf("error = %q, want %q", body["error"], "reputation requires a pro plan")
+	}
+}
+
 func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
@@ -444,6 +462,24 @@ func TestDomainLookup_Screenshot_ProAllowed(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_Screenshot_FreeForbidden(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "free")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "screenshot requires a pro plan" {
+		t.Errorf("error = %q, want %q", body["error"], "screenshot requires a pro plan")
 	}
 }
 
@@ -686,6 +722,44 @@ func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com","f.com","g.com","h.com","i.com","j.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+}
+
+func TestDomainLookup_MaxDomains_FreePlanLimit(t *testing.T) {
+	cfg := testCfg(map[string]any{
+		"domain.max_domains.free":  1,
+		"domain.max_domains.basic": 5,
+	})
+
+	t.Run("free plan over limit", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "free", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+			strings.NewReader(`{"domains":["a.com","b.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+		}
+		var body map[string]string
+		json.Unmarshal(w.Body.Bytes(), &body)
+		if body["error"] != "too many domains: maximum 1 allowed for free plan" {
+			t.Errorf("error = %q", body["error"])
+		}
+	})
+
+	t.Run("free plan at limit succeeds", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "free", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+			strings.NewReader(`{"domains":["a.com"]}`))
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 

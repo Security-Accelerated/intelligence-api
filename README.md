@@ -15,8 +15,9 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 
 | Plan | Capabilities |
 |------|-------------|
-| `basic` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security (SPF/DKIM/DMARC) + subdomain enumeration + CT logs + BGP/ASN + technology fingerprinting |
-| `pro` | All basic capabilities + page screenshots + reputation checks |
+| `free` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security + subdomains + CT logs + BGP/ASN + fingerprinting. 1 domain per request. |
+| `basic` | All free capabilities, up to 5 domains per request |
+| `pro` | All basic capabilities + page screenshots + reputation checks, up to 20 domains per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
 The plan is stored in the `customers` table. New customers default to `basic`.
@@ -29,6 +30,7 @@ All authenticated endpoints are rate-limited per API key using a sliding-window 
 
 | Plan | Default Limit |
 |------|---------------|
+| `free` | 5 requests/minute |
 | `basic` | 30 requests/minute |
 | `pro` | 120 requests/minute |
 | `admin` | No limit |
@@ -469,12 +471,15 @@ Config values:
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
+| `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
 | `subdomain.timeout` | `30s` | Timeout for subdomain enumeration |
 | `subdomain.concurrency` | `20` | Max concurrent subdomain lookups |
+| `subdomain.max_domains.free` | `1` | Maximum domains per request for free plan (subdomains) |
 | `subdomain.max_domains.basic` | `3` | Maximum domains per request for basic plan (subdomains) |
 | `subdomain.max_domains.pro` | `5` | Maximum domains per request for pro plan (subdomains) |
+| `rate_limit.free` | `5` | Requests per minute for free plan customers |
 | `rate_limit.basic` | `30` | Requests per minute for basic plan customers |
 | `rate_limit.pro` | `120` | Requests per minute for pro plan customers |
 | `postgres.host` | `localhost` | PostgreSQL host |
@@ -500,8 +505,8 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `003_hash_api_keys.sql` — replaces the plaintext `key` column with `key_hash` (SHA-256, hex-encoded)
 - `004_rename_roles_to_features.sql` — renames `customer_roles` to `customer_features`
 - `005_fingerprint_rules.sql` — creates the `fingerprint_rules` table (append-only, JSONB rules column)
-- `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column (`basic`/`pro`/`admin`)
-- `seed.sql` — inserts test customers (admin, basic, pro) with hashed keys
+- `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column (`free`/`basic`/`pro`/`admin`)
+- `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
 

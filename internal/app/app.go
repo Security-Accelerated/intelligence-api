@@ -26,6 +26,7 @@ func Run(logger *zap.Logger, version string) error {
 
 	port := cfg.GetInt("application.port")
 	rlCfg := middleware.RateLimitConfig{
+		Free:  cfg.GetInt("rate_limit.free"),
 		Basic: cfg.GetInt("rate_limit.basic"),
 		Pro:   cfg.GetInt("rate_limit.pro"),
 	}
@@ -44,10 +45,12 @@ func Run(logger *zap.Logger, version string) error {
 		zap.Duration("cache_ttl", cfg.GetDuration("redis.cache_ttl")),
 		zap.Duration("auth_cache_ttl", cfg.GetDuration("auth.cache_ttl")),
 		zap.Duration("screenshot_timeout", cfg.GetDuration("screenshot.timeout")),
+		zap.Int("domain_max_domains_free", cfg.GetInt("domain.max_domains.free")),
 		zap.Int("domain_max_domains_basic", cfg.GetInt("domain.max_domains.basic")),
 		zap.Int("domain_max_domains_pro", cfg.GetInt("domain.max_domains.pro")),
 		zap.Int("subdomain_max_results", cfg.GetInt("subdomain.max_results")),
 		zap.Int("ct_logs_max_entries", cfg.GetInt("ct_logs.max_entries")),
+		zap.Int("rate_limit_free", rlCfg.Free),
 		zap.Int("rate_limit_basic", rlCfg.Basic),
 		zap.Int("rate_limit_pro", rlCfg.Pro),
 		zap.String("redis_addr", cfg.GetString("redis.addr")),

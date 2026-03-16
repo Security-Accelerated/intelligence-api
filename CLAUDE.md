@@ -48,7 +48,7 @@ The `safenet` package provides a `DialControl` function that rejects connections
 Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after plan changes.
 
 ### Plan-based access control
-Single `plan` column on `customers` table: `basic`, `pro`, `admin`. Controls rate limits, premium feature access (screenshot, reputation), and admin endpoint access. `RequireAdmin()` middleware gates admin-only routes. Rate limits: basic=30/min, pro=120/min, admin=unlimited.
+Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Controls rate limits, premium feature access (screenshot, reputation), and admin endpoint access. `RequireAdmin()` middleware gates admin-only routes. Rate limits: free=5/min, basic=30/min, pro=120/min, admin=unlimited. Free plan: 1 domain per request, no screenshot/reputation.
 
 ### Technology fingerprinting
 `FingerprintEngine` in `internal/domain/fingerprint.go` holds rules behind `sync.RWMutex`. Default rules are embedded via `go:embed` (~90 curated technologies). `FingerprintService` in `internal/service/fingerprint.go` persists rules in PostgreSQL (append-only `fingerprint_rules` table) and loads the latest on startup. Admin endpoints (`GET/POST /v1/admin/fingerprints`) allow hot-reloading rules without redeploying.
@@ -110,7 +110,7 @@ Sample config: `internal/config/sample-config.yml`
 
 PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration.
 
-Tables: `customers` (plan column: basic/pro/admin), `api_keys` (key_hash), `fingerprint_rules` (append-only JSONB rules).
+Tables: `customers` (plan column: free/basic/pro/admin), `api_keys` (key_hash), `fingerprint_rules` (append-only JSONB rules).
 
 ## Infrastructure
 

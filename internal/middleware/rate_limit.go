@@ -14,6 +14,7 @@ import (
 
 // RateLimitConfig holds per-plan request limits (requests per minute).
 type RateLimitConfig struct {
+	Free  int
 	Basic int
 	Pro   int
 }
@@ -46,8 +47,11 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 		}
 
 		limit := cfg.Basic
-		if planStr == "pro" {
+		switch planStr {
+		case "pro":
 			limit = cfg.Pro
+		case "free":
+			limit = cfg.Free
 		}
 
 		bucket := time.Now().Unix() / 60

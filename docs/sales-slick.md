@@ -84,18 +84,18 @@ That's it. One request, one comprehensive response.
 
 ## Plans
 
-| Capability | Basic | Pro |
-|-----------|-------|-----|
-| Domain lookup (WHOIS, DNS, SSL, headers) | Included | Included |
-| Email security (SPF, DMARC, DKIM) | Included | Included |
-| Subdomain enumeration | Included | Included |
-| Certificate transparency logs | Included | Included |
-| BGP/ASN enrichment | Included | Included |
-| Technology fingerprinting | Included | Included |
-| Page screenshots | — | Included |
-| Domain reputation scoring | — | Included |
-| Rate limit | 30 req/min | 120 req/min |
-| Batch size (domain lookup) | 5 domains | 20 domains |
+| Capability | Free | Basic | Pro |
+|-----------|------|-------|-----|
+| Domain lookup (WHOIS, DNS, SSL, headers) | Included | Included | Included |
+| Email security (SPF, DMARC, DKIM) | Included | Included | Included |
+| Subdomain enumeration | Included | Included | Included |
+| Certificate transparency logs | Included | Included | Included |
+| BGP/ASN enrichment | Included | Included | Included |
+| Technology fingerprinting | Included | Included | Included |
+| Page screenshots | — | — | Included |
+| Domain reputation scoring | — | — | Included |
+| Rate limit | 5 req/min | 30 req/min | 120 req/min |
+| Batch size (domain lookup) | 1 domain | 5 domains | 20 domains |
 
 ---
 

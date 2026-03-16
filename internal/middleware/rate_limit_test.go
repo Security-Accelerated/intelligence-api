@@ -232,6 +232,44 @@ func TestRateLimit_ContextKeysSet(t *testing.T) {
 	}
 }
 
+func TestRateLimit_FreePlanGetsFreelimit(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	core, _ := observer.New(zapcore.WarnLevel)
+	logger := zap.New(core)
+
+	cfg := RateLimitConfig{Free: 3, Basic: 10, Pro: 20}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("api_key_id", 1)
+		c.Set("api_key_plan", "free")
+		c.Next()
+	})
+	r.Use(RateLimitWithLogger(client, cfg, logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Free limit is 3, so 3 requests should succeed
+	for i := 0; i < 3; i++ {
+		w := doRequest(r)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: status = %d, want %d", i+1, w.Code, http.StatusOK)
+		}
+	}
+
+	// 4th should be rejected
+	w := doRequest(r)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusTooManyRequests)
+	}
+	if got := w.Header().Get("X-RateLimit-Limit"); got != strconv.Itoa(cfg.Free) {
+		t.Errorf("X-RateLimit-Limit = %q, want %q", got, strconv.Itoa(cfg.Free))
+	}
+}
+
 func TestRateLimit_UnknownPlan_GetsBasicLimit(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})

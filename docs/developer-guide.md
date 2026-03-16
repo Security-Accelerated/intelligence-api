@@ -26,6 +26,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests`. Back off un
 
 | Plan | Limit |
 |------|-------|
+| Free | 5 requests/minute |
 | Basic | 30 requests/minute |
 | Pro | 120 requests/minute |
 
@@ -64,7 +65,7 @@ POST /v1/domain/lookup
 
 Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP header data for each domain. Optional flags enable additional lookups.
 
-**Plans:** Basic, Pro, Admin
+**Plans:** Free, Basic, Pro
 
 ### Request
 
@@ -83,7 +84,7 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `domains` | string[] | Yes | — | Domain names to look up (max 5 basic, 20 pro) |
+| `domains` | string[] | Yes | — | Domain names to look up (max 1 free, 5 basic, 20 pro) |
 | `screenshot` | bool | No | `false` | Capture a page screenshot (pro plan and above) |
 | `reputation` | bool | No | `false` | Check domain against threat blocklists (pro plan and above) |
 | `email_security` | bool | No | `false` | Check SPF, DMARC, and DKIM records |

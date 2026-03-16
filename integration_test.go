@@ -35,6 +35,7 @@ func newStubRepo() *stubRepo {
 		"test-admin-key":  {ID: 1, APIKeyID: 100, Name: "Test Admin", Active: true, Plan: "admin"},
 		"test-lookup-key": {ID: 2, APIKeyID: 200, Name: "Test Lookup User", Active: true, Plan: "basic"},
 		"test-pro-key":    {ID: 3, APIKeyID: 300, Name: "Test Pro User", Active: true, Plan: "pro"},
+		"test-free-key":   {ID: 4, APIKeyID: 400, Name: "Test Free User", Active: true, Plan: "free"},
 	}}
 }
 
@@ -83,12 +84,14 @@ func testConfig() *viper.Viper {
 	cfg.Set("redis.cache_ttl", "5m")
 	cfg.Set("auth.cache_ttl", "5m")
 	cfg.Set("screenshot.timeout", "15s")
+	cfg.Set("rate_limit.free", 5)
 	cfg.Set("rate_limit.basic", 30)
 	cfg.Set("rate_limit.pro", 120)
 	cfg.Set("postgres.host", "localhost")
 	cfg.Set("postgres.port", 5432)
 	cfg.Set("postgres.dbname", "test_db")
 	cfg.Set("postgres.sslmode", "disable")
+	cfg.Set("domain.max_domains.free", 1)
 	cfg.Set("domain.max_domains.basic", 5)
 	cfg.Set("domain.max_domains.pro", 20)
 	return cfg
@@ -185,7 +188,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	cfg := testConfig()
 	nop := zap.NewNop()
 
-	rlCfg := middleware.RateLimitConfig{Basic: 30, Pro: 120}
+	rlCfg := middleware.RateLimitConfig{Free: 5, Basic: 30, Pro: 120}
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -424,6 +427,70 @@ func TestIntegration_Auth_ProKeyCannotAccessInfo(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestIntegration_Auth_FreeKeyCanAccessLookup(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestIntegration_Screenshot_FreeGets403(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_Reputation_FreeGets403(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_FreePlan_MaxDomains(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["a.com","b.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "too many domains: maximum 1 allowed for free plan" {
+		t.Errorf("error = %q", body["error"])
 	}
 }
 

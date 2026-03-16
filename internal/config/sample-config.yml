@@ -18,6 +18,7 @@ auth:
 
 domain:
   max_domains:
+    free: 1
     basic: 5
     pro: 20
 
@@ -31,6 +32,7 @@ ct_logs:
   max_entries: 100
 
 rate_limit:
+  free: 5
   basic: 30
   pro: 120
 
