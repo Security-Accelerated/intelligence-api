@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intelligence API Reference</title>
+<style>
+  :root {
+    --sidebar-bg: #1a1f36;
+    --sidebar-hover: #252b47;
+    --sidebar-text: #a3acb9;
+    --sidebar-active: #ffffff;
+    --sidebar-width: 260px;
+    --content-bg: #ffffff;
+    --content-text: #3c4257;
+    --heading-text: #1a1f36;
+    --accent: #635bff;
+    --accent-light: #7a73ff;
+    --border: #e3e8ee;
+    --code-bg: #f7f8fa;
+    --code-block-bg: #1e2235;
+    --code-block-text: #e3e8ee;
+    --tag-bg: #e8e6ff;
+    --tag-text: #635bff;
+    --pro-bg: #ffecd2;
+    --pro-text: #c76b00;
+    --green: #1ea672;
+    --red: #cd3d64;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--content-text);
+    background: var(--content-bg);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-width);
+    height: 100vh;
+    background: var(--sidebar-bg);
+    overflow-y: auto;
+    z-index: 100;
+    padding: 24px 0;
+  }
+
+  .sidebar-brand {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 16px;
+  }
+
+  .sidebar-brand h2 {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .sidebar-brand span {
+    color: var(--sidebar-text);
+    font-size: 12px;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .sidebar-section {
+    padding: 0 12px;
+    margin-bottom: 8px;
+  }
+
+  .sidebar-section-title {
+    color: rgba(255,255,255,0.4);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 8px 8px 4px;
+  }
+
+  .sidebar a {
+    display: block;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    font-size: 13px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+
+  .sidebar a:hover {
+    color: var(--sidebar-active);
+    background: var(--sidebar-hover);
+  }
+
+  .sidebar a.indent {
+    padding-left: 20px;
+    font-size: 12.5px;
+  }
+
+  /* Mobile toggle */
+  .sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 200;
+    background: var(--sidebar-bg);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    cursor: pointer;
+  }
+
+  /* Main content */
+  .main {
+    margin-left: var(--sidebar-width);
+    padding: 40px 48px 80px;
+    max-width: 880px;
+  }
+
+  /* Hero */
+  .hero {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 32px;
+    margin-bottom: 40px;
+  }
+
+  .hero h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--heading-text);
+    letter-spacing: -0.5px;
+  }
+
+  .hero p {
+    font-size: 17px;
+    color: #697386;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+
+  .hero .base-url {
+    display: inline-block;
+    margin-top: 16px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--accent);
+  }
+
+  /* Section headings */
+  h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--heading-text);
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: -0.3px;
+  }
+
+  h2:first-of-type { margin-top: 0; }
+
+  h3 {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--heading-text);
+    margin: 32px 0 10px;
+  }
+
+  h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--heading-text);
+    margin: 24px 0 8px;
+  }
+
+  p { margin-bottom: 12px; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 14px;
+  }
+
+  th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--heading-text);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 12px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  /* Inline code */
+  code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--accent);
+  }
+
+  /* Code blocks */
+  pre {
+    background: var(--code-block-bg);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 12px 0 20px;
+    line-height: 1.55;
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--code-block-text);
+    font-size: 13px;
+  }
+
+  /* Syntax highlighting */
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .num { color: #f78c6c; }
+  .cmt { color: #676e95; }
+  .url { color: #82aaff; }
+  .hdr { color: #89ddff; }
+  .flag { color: #f07178; }
+
+  /* Tags/badges */
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    vertical-align: middle;
+  }
+
+  .tag-pro {
+    background: var(--pro-bg);
+    color: var(--pro-text);
+  }
+
+  .tag-post {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+  }
+
+  .tag-required {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  .tag-optional {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  /* Method + endpoint display */
+  .endpoint {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0 20px;
+    font-family: var(--font-mono);
+    font-size: 15px;
+  }
+
+  .endpoint .method {
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+
+  .endpoint .path {
+    color: var(--heading-text);
+  }
+
+  /* Note boxes */
+  .note {
+    background: #f0f4ff;
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+
+  .note-warn {
+    background: #fff8f0;
+    border-left-color: #f5a623;
+  }
+
+  /* Risk level colors */
+  .risk-clean { color: var(--green); font-weight: 600; }
+  .risk-low { color: #6772e5; font-weight: 600; }
+  .risk-medium { color: #f5a623; font-weight: 600; }
+  .risk-high { color: var(--red); font-weight: 600; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .sidebar {
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+    }
+
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .sidebar-toggle { display: block; }
+
+    .main {
+      margin-left: 0;
+      padding: 60px 20px 80px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h2>Intelligence API</h2>
+    <span>API Reference</span>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="#authentication">Authentication</a>
+    <a href="#plans">Plans</a>
+    <a href="#rate-limiting">Rate Limiting</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Endpoint</div>
+    <a href="#domain-lookup">Domain Lookup</a>
+    <a href="#request-body" class="indent">Request Body</a>
+    <a href="#example-request" class="indent">Example</a>
+    <a href="#invalid-domains" class="indent">Invalid Domains</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Response Fields</div>
+    <a href="#whois" class="indent">whois</a>
+    <a href="#dns" class="indent">dns</a>
+    <a href="#ssl" class="indent">ssl</a>
+    <a href="#headers" class="indent">headers</a>
+    <a href="#screenshot" class="indent">screenshot</a>
+    <a href="#reputation" class="indent">reputation</a>
+    <a href="#email-security" class="indent">email_security</a>
+    <a href="#subdomains" class="indent">subdomains</a>
+    <a href="#ct-logs" class="indent">ct_logs</a>
+    <a href="#bgp" class="indent">bgp</a>
+    <a href="#fingerprint" class="indent">fingerprint</a>
+    <a href="#errors-field" class="indent">errors</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Reference</div>
+    <a href="#caching">Caching</a>
+    <a href="#error-handling">Error Handling</a>
+    <a href="#request-correlation">Request Correlation</a>
+  </div>
+</nav>
+
+<main class="main">
+
+  <!-- Hero -->
+  <section class="hero" id="top">
+    <h1>Intelligence API</h1>
+    <p>Domain intelligence REST API. Perform concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, and technology fingerprinting lookups for any domain.</p>
+    <div class="base-url">https://api.securityaccelerated.com</div>
+  </section>
+
+  <!-- Authentication -->
+  <h2 id="authentication">Authentication</h2>
+  <p>All requests require an API key passed via the <code>X-API-Key</code> header:</p>
+  <pre><code><span class="hdr">X-API-Key:</span> <span class="str">your-api-key-here</span></code></pre>
+  <table>
+    <thead><tr><th>Scenario</th><th>Response</th></tr></thead>
+    <tbody>
+      <tr><td>Missing API key</td><td><code>401 Unauthorized</code></td></tr>
+      <tr><td>Invalid API key</td><td><code>401 Unauthorized</code></td></tr>
+      <tr><td>Feature not included in plan</td><td><code>403 Forbidden</code></td></tr>
+    </tbody>
+  </table>
+
+  <!-- Plans -->
+  <h2 id="plans">Plans</h2>
+  <p>Feature access and limits are determined by your API key's plan.</p>
+  <table>
+    <thead><tr><th></th><th>Free</th><th>Basic</th><th>Pro</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Rate limit</strong></td><td>5 req/min</td><td>30 req/min</td><td>120 req/min</td></tr>
+      <tr><td><strong>Max domains per request</strong></td><td>1</td><td>5</td><td>20</td></tr>
+      <tr><td><strong>WHOIS, DNS, SSL, Headers</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>Email Security</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>Subdomains</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>CT Logs</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>BGP / ASN</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>Screenshot</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+      <tr><td><strong>Reputation</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+    </tbody>
+  </table>
+
+  <!-- Rate Limiting -->
+  <h2 id="rate-limiting">Rate Limiting</h2>
+  <p>Requests are rate-limited per API key using a sliding window. Every response includes rate limit headers:</p>
+  <table>
+    <thead><tr><th>Header</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests allowed per minute</td></tr>
+      <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
+      <tr><td><code>Retry-After</code></td><td>Seconds until the window resets (only present on <code>429</code> responses)</td></tr>
+    </tbody>
+  </table>
+  <p>When the limit is exceeded, the API returns <code>429 Too Many Requests</code>. Wait until the <code>Retry-After</code> period expires before retrying.</p>
+
+  <!-- Domain Lookup -->
+  <h2 id="domain-lookup">Domain Lookup</h2>
+
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/v1/domain/lookup</span>
+  </div>
+
+  <p>Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP header data by default for each domain. Optional flags enable additional lookups. All lookups run concurrently with a 30-second timeout.</p>
+
+  <h3 id="request-body">Request Body</h3>
+
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>domains</code></td>
+        <td><code>string[]</code></td>
+        <td><span class="tag tag-required">Required</span></td>
+        <td>--</td>
+        <td>Domain names to look up. Max count depends on plan (1 / 5 / 20).</td>
+      </tr>
+      <tr>
+        <td><code>screenshot</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Capture a page screenshot. <span class="tag tag-pro">Pro</span></td>
+      </tr>
+      <tr>
+        <td><code>reputation</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Check domain against threat blocklists. <span class="tag tag-pro">Pro</span></td>
+      </tr>
+      <tr>
+        <td><code>email_security</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Check SPF, DMARC, and DKIM records.</td>
+      </tr>
+      <tr>
+        <td><code>subdomains</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Enumerate subdomains via Certificate Transparency logs.</td>
+      </tr>
+      <tr>
+        <td><code>ct_logs</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Query Certificate Transparency logs for issued certificates.</td>
+      </tr>
+      <tr>
+        <td><code>bgp</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Look up BGP/ASN information for the domain's IP addresses.</td>
+      </tr>
+      <tr>
+        <td><code>fingerprint</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Detect web technologies from HTTP response headers.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h4>Domain Normalization</h4>
+  <p>Domain names are normalized automatically: <code>http://</code> and <code>https://</code> prefixes are stripped, and trailing slashes are removed. Raw IP addresses are rejected.</p>
+
+  <h3 id="example-request">Example</h3>
+  <pre><code><span class="flag">curl</span> <span class="flag">-X</span> POST <span class="url">https://api.securityaccelerated.com/v1/domain/lookup</span> \
+  <span class="flag">-H</span> <span class="str">'Content-Type: application/json'</span> \
+  <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span> \
+  <span class="flag">-H</span> <span class="str">'X-Client-Request-ID: req-001'</span> \
+  <span class="flag">-d</span> <span class="str">'{
+    "domains": ["example.com"],
+    "email_security": true,
+    "subdomains": true
+  }'</span></code></pre>
+
+  <h4>Response Structure</h4>
+  <p>The response is always a JSON array, even for single-domain requests. Each element contains the core lookup results plus any optional fields that were requested.</p>
+  <pre><code>[
+  {
+    <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
+    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+    <span class="str">"whois"</span>: { ... },
+    <span class="str">"dns"</span>: { ... },
+    <span class="str">"ssl"</span>: { ... },
+    <span class="str">"headers"</span>: { ... },
+    <span class="str">"email_security"</span>: { ... },
+    <span class="str">"subdomains"</span>: { ... },
+    <span class="str">"errors"</span>: []
+  }
+]</code></pre>
+  <p>Optional fields (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>) are only present in the response when requested.</p>
+
+  <h3 id="invalid-domains">Invalid Domains</h3>
+  <p>Invalid domains in a multi-domain request do not fail the entire request. They are included in the response with a validation error while valid domains return normally:</p>
+  <pre><code>[
+  {
+    <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
+    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+    <span class="str">"whois"</span>: { <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>, ... },
+    <span class="str">"dns"</span>: { ... },
+    <span class="str">"ssl"</span>: { ... },
+    <span class="str">"headers"</span>: { ... }
+  },
+  {
+    <span class="str">"domain"</span>: <span class="str">"notadomain"</span>,
+    <span class="str">"errors"</span>: [{ <span class="str">"lookup"</span>: <span class="str">"validation"</span>, <span class="str">"message"</span>: <span class="str">"invalid domain name"</span> }]
+  }
+]</code></pre>
+
+  <!-- Response Field Reference -->
+  <h2 id="response-fields">Response Fields</h2>
+
+  <!-- whois -->
+  <h3 id="whois"><code>whois</code> -- Domain Registration</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>domain_name</code></td><td><code>string</code></td><td>The registered domain name</td></tr>
+      <tr><td><code>registrar</code></td><td><code>string</code></td><td>Registrar (e.g., GoDaddy, Namecheap)</td></tr>
+      <tr><td><code>created_date</code></td><td><code>string</code></td><td>Registration date -- new domains are higher risk</td></tr>
+      <tr><td><code>updated_date</code></td><td><code>string</code></td><td>Last modification date</td></tr>
+      <tr><td><code>expiry_date</code></td><td><code>string</code></td><td>Expiration date -- expiring domains are red flags</td></tr>
+      <tr><td><code>status</code></td><td><code>string[]</code></td><td>EPP status codes (e.g., <code>clientTransferProhibited</code>)</td></tr>
+      <tr><td><code>name_servers</code></td><td><code>string[]</code></td><td>Authoritative DNS servers</td></tr>
+      <tr><td><code>registrant</code></td><td><code>object</code></td><td>Registrant contact (<code>name</code>, <code>organization</code>, <code>country</code>, <code>email</code>)</td></tr>
+      <tr><td><code>admin</code></td><td><code>object</code></td><td>Administrative contact</td></tr>
+      <tr><td><code>tech</code></td><td><code>object</code></td><td>Technical contact</td></tr>
+    </tbody>
+  </table>
+  <div class="note">Contact fields are often redacted by WHOIS privacy services.</div>
+
+  <!-- dns -->
+  <h3 id="dns"><code>dns</code> -- DNS Records</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>a</code></td><td><code>string[]</code></td><td>IPv4 addresses</td></tr>
+      <tr><td><code>aaaa</code></td><td><code>string[]</code></td><td>IPv6 addresses</td></tr>
+      <tr><td><code>mx</code></td><td><code>object[]</code></td><td>Mail servers (<code>host</code>, <code>priority</code>)</td></tr>
+      <tr><td><code>ns</code></td><td><code>string[]</code></td><td>Name servers</td></tr>
+      <tr><td><code>txt</code></td><td><code>string[]</code></td><td>TXT records (SPF, verification tokens, etc.)</td></tr>
+      <tr><td><code>cname</code></td><td><code>string</code></td><td>Canonical name alias</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ssl -->
+  <h3 id="ssl"><code>ssl</code> -- TLS Certificate</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>subject</code></td><td><code>string</code></td><td>Entity the certificate was issued to</td></tr>
+      <tr><td><code>issuer</code></td><td><code>string</code></td><td>Certificate authority</td></tr>
+      <tr><td><code>not_before</code></td><td><code>string</code></td><td>Start of validity period</td></tr>
+      <tr><td><code>not_after</code></td><td><code>string</code></td><td>End of validity period</td></tr>
+      <tr><td><code>expired</code></td><td><code>bool</code></td><td>Whether the certificate has expired</td></tr>
+      <tr><td><code>days_until_expiry</code></td><td><code>int</code></td><td>Days remaining until expiration</td></tr>
+      <tr><td><code>sans</code></td><td><code>string[]</code></td><td>Subject Alternative Names -- all hostnames the cert covers</td></tr>
+      <tr><td><code>serial_number</code></td><td><code>string</code></td><td>Certificate serial number</td></tr>
+      <tr><td><code>signature_algorithm</code></td><td><code>string</code></td><td>Cryptographic algorithm (e.g., SHA-256)</td></tr>
+    </tbody>
+  </table>
+
+  <!-- headers -->
+  <h3 id="headers"><code>headers</code> -- HTTP Response</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code (200, 301, 404, etc.)</td></tr>
+      <tr><td><code>headers</code></td><td><code>object</code></td><td>Raw response headers as key-value pairs</td></tr>
+      <tr><td><code>security_headers</code></td><td><code>object</code></td><td>Security header audit (see below)</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Security Headers Checked</h4>
+  <table>
+    <thead><tr><th>Field</th><th>HTTP Header</th></tr></thead>
+    <tbody>
+      <tr><td><code>strict_transport_security</code></td><td>Strict-Transport-Security (HSTS)</td></tr>
+      <tr><td><code>content_security_policy</code></td><td>Content-Security-Policy (CSP)</td></tr>
+      <tr><td><code>x_frame_options</code></td><td>X-Frame-Options</td></tr>
+      <tr><td><code>x_content_type_options</code></td><td>X-Content-Type-Options</td></tr>
+      <tr><td><code>x_xss_protection</code></td><td>X-XSS-Protection</td></tr>
+      <tr><td><code>referrer_policy</code></td><td>Referrer-Policy</td></tr>
+      <tr><td><code>permissions_policy</code></td><td>Permissions-Policy</td></tr>
+    </tbody>
+  </table>
+
+  <!-- screenshot -->
+  <h3 id="screenshot"><code>screenshot</code> -- Page Screenshot <span class="tag tag-pro">Pro</span></h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code from probing the domain</td></tr>
+      <tr><td><code>png</code></td><td><code>string</code></td><td>Base64-encoded PNG image (empty for non-200 responses)</td></tr>
+    </tbody>
+  </table>
+  <div class="note">Tries HTTPS first, then falls back to HTTP. Captured at 1280x720 with headless Chrome.</div>
+
+  <!-- reputation -->
+  <h3 id="reputation"><code>reputation</code> -- Domain Reputation <span class="tag tag-pro">Pro</span></h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>score</code></td><td><code>int</code></td><td>Risk score from 0 (clean) to 100 (maximum risk)</td></tr>
+      <tr><td><code>risk</code></td><td><code>string</code></td><td><code>clean</code>, <code>low</code>, <code>medium</code>, or <code>high</code></td></tr>
+      <tr><td><code>providers</code></td><td><code>array</code></td><td>Per-provider results</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Provider Result</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>listed</code></td><td><code>bool</code></td><td>Whether the domain appears on this blocklist</td></tr>
+      <tr><td><code>category</code></td><td><code>string</code></td><td>Classification if listed (e.g., <code>phishing</code>, <code>malware</code>)</td></tr>
+      <tr><td><code>provider</code></td><td><code>string</code></td><td>Blocklist name</td></tr>
+      <tr><td><code>return_code</code></td><td><code>string</code></td><td>Raw DNS return code (only when listed)</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Providers</h4>
+  <p>The following blocklists are checked: Spamhaus DBL, SURBL, URIBL, and Spamhaus ZEN.</p>
+
+  <h4>Risk Levels</h4>
+  <table>
+    <thead><tr><th>Risk</th><th>Score Range</th></tr></thead>
+    <tbody>
+      <tr><td><span class="risk-clean">clean</span></td><td>0</td></tr>
+      <tr><td><span class="risk-low">low</span></td><td>1 -- 29</td></tr>
+      <tr><td><span class="risk-medium">medium</span></td><td>30 -- 59</td></tr>
+      <tr><td><span class="risk-high">high</span></td><td>60 -- 100</td></tr>
+    </tbody>
+  </table>
+
+  <!-- email_security -->
+  <h3 id="email-security"><code>email_security</code> -- Email Authentication</h3>
+
+  <h4><code>spf</code> -- Sender Policy Framework</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full SPF TXT record</td></tr>
+      <tr><td><code>version</code></td><td><code>string</code></td><td>SPF version (typically <code>spf1</code>)</td></tr>
+      <tr><td><code>mechanisms</code></td><td><code>string[]</code></td><td>Parsed mechanisms (<code>include:</code>, <code>ip4:</code>, etc.)</td></tr>
+      <tr><td><code>all</code></td><td><code>string</code></td><td>Terminal qualifier: <code>-all</code>, <code>~all</code>, <code>?all</code>, or <code>+all</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4><code>dmarc</code> -- DMARC Policy</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DMARC TXT record</td></tr>
+      <tr><td><code>version</code></td><td><code>string</code></td><td>DMARC version (typically <code>DMARC1</code>)</td></tr>
+      <tr><td><code>policy</code></td><td><code>string</code></td><td><code>none</code>, <code>quarantine</code>, or <code>reject</code></td></tr>
+      <tr><td><code>pct</code></td><td><code>int</code></td><td>Percentage of messages the policy applies to</td></tr>
+      <tr><td><code>rua</code></td><td><code>string</code></td><td>Aggregate report destination</td></tr>
+      <tr><td><code>ruf</code></td><td><code>string</code></td><td>Forensic report destination</td></tr>
+      <tr><td><code>sp</code></td><td><code>string</code></td><td>Subdomain policy</td></tr>
+    </tbody>
+  </table>
+
+  <h4><code>dkim</code> -- DKIM Records</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>selector</code></td><td><code>string</code></td><td>Selector name probed</td></tr>
+      <tr><td><code>found</code></td><td><code>bool</code></td><td>Whether a DKIM record exists for this selector</td></tr>
+      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DKIM TXT record (only when found)</td></tr>
+    </tbody>
+  </table>
+  <div class="note">DKIM probes 8 common selectors: <code>google</code>, <code>default</code>, <code>selector1</code>, <code>selector2</code>, <code>k1</code>, <code>s1</code>, <code>mail</code>, <code>dkim</code>.</div>
+
+  <!-- subdomains -->
+  <h3 id="subdomains"><code>subdomains</code> -- Subdomain Enumeration</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>count</code></td><td><code>int</code></td><td>Number of subdomains returned</td></tr>
+      <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (500)</td></tr>
+      <tr><td><code>subdomains</code></td><td><code>array</code></td><td>Discovered subdomains</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Subdomain Entry</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>domain</code></td><td><code>string</code></td><td>The subdomain</td></tr>
+      <tr><td><code>source</code></td><td><code>string</code></td><td>Data source (<code>crt.sh</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ct_logs -->
+  <h3 id="ct-logs"><code>ct_logs</code> -- Certificate Transparency Logs</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>count</code></td><td><code>int</code></td><td>Number of certificate entries returned</td></tr>
+      <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (100)</td></tr>
+      <tr><td><code>entries</code></td><td><code>array</code></td><td>Certificate log entries, sorted newest-first</td></tr>
+    </tbody>
+  </table>
+
+  <h4>CT Log Entry</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>logged_at</code></td><td><code>string</code></td><td>When the certificate was logged to CT</td></tr>
+      <tr><td><code>not_before</code></td><td><code>string</code></td><td>Certificate validity start</td></tr>
+      <tr><td><code>not_after</code></td><td><code>string</code></td><td>Certificate validity end</td></tr>
+      <tr><td><code>issuer</code></td><td><code>string</code></td><td>Certificate Authority</td></tr>
+      <tr><td><code>common_name</code></td><td><code>string</code></td><td>Certificate CN field</td></tr>
+      <tr><td><code>name_value</code></td><td><code>string</code></td><td>All names covered by the certificate</td></tr>
+      <tr><td><code>serial</code></td><td><code>string</code></td><td>Certificate serial number</td></tr>
+    </tbody>
+  </table>
+  <div class="note">Reveals infrastructure, related domains, and issuance patterns. Useful for detecting phishing campaigns and tracking certificate history.</div>
+
+  <!-- bgp -->
+  <h3 id="bgp"><code>bgp</code> -- BGP / ASN Enrichment</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>records</code></td><td><code>array</code></td><td>ASN records, deduplicated by ASN</td></tr>
+    </tbody>
+  </table>
+
+  <h4>ASN Record</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>ip</code></td><td><code>string</code></td><td>Resolved IP address</td></tr>
+      <tr><td><code>asn</code></td><td><code>int</code></td><td>Autonomous System Number</td></tr>
+      <tr><td><code>prefix</code></td><td><code>string</code></td><td>IP prefix (CIDR notation)</td></tr>
+      <tr><td><code>country</code></td><td><code>string</code></td><td>Country code</td></tr>
+      <tr><td><code>registry</code></td><td><code>string</code></td><td>Regional Internet Registry (arin, ripe, apnic, etc.)</td></tr>
+      <tr><td><code>description</code></td><td><code>string</code></td><td>Organization name</td></tr>
+    </tbody>
+  </table>
+  <div class="note">Identifies who owns the IP behind the domain. Useful for pivot analysis and detecting bulletproof hosting.</div>
+
+  <!-- fingerprint -->
+  <h3 id="fingerprint"><code>fingerprint</code> -- Technology Fingerprinting</h3>
+  <p>Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. No extra HTTP requests are made -- detection uses the headers already fetched. Approximately 90 technologies are covered.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>count</code></td><td><code>int</code></td><td>Number of detected technologies</td></tr>
+      <tr><td><code>technologies</code></td><td><code>array</code></td><td>Detected technologies</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Technology Entry</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>name</code></td><td><code>string</code></td><td>Technology name (e.g., <code>Nginx</code>, <code>PHP</code>, <code>Cloudflare</code>)</td></tr>
+      <tr><td><code>category</code></td><td><code>string</code></td><td>Category (see below)</td></tr>
+      <tr><td><code>version</code></td><td><code>string</code></td><td>Version extracted from header value (empty if not detectable)</td></tr>
+      <tr><td><code>confidence</code></td><td><code>string</code></td><td>Which signal matched: <code>header</code> or <code>cookie</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>Categories</h4>
+  <p><code>web-server</code>, <code>language</code>, <code>framework</code>, <code>cdn</code>, <code>cms</code>, <code>analytics</code>, <code>security</code>, <code>hosting</code>, <code>cache</code>, <code>javascript</code>, <code>other</code></p>
+
+  <!-- errors -->
+  <h3 id="errors-field"><code>errors</code> -- Partial Failures</h3>
+  <p>Individual lookups can fail without blocking the rest of the response. Each error contains:</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>lookup</code></td><td><code>string</code></td><td>Which lookup failed (e.g., <code>whois</code>, <code>dns</code>, <code>ssl</code>)</td></tr>
+      <tr><td><code>message</code></td><td><code>string</code></td><td>Human-readable error description</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Caching -->
+  <h2 id="caching">Caching</h2>
+  <p>Results are cached for <strong>60 minutes</strong>. The <code>cache_hit</code> field on each response indicates whether data was served from cache or fetched live.</p>
+  <p>Cache keys are computed from the domain name plus the sorted set of requested options. This means requesting different option combinations (e.g., with vs. without <code>reputation</code>) produces separate cache entries. Adding a new option to a repeat request will fetch fresh data for that option.</p>
+
+  <!-- Error Handling -->
+  <h2 id="error-handling">Error Handling</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>domains</code> field, or invalid domain name</td></tr>
+      <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
+      <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint or feature</td></tr>
+      <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
+      <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact support</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Error Response Format</h4>
+  <p>All error responses use this format:</p>
+  <pre><code>{
+  <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
+}</code></pre>
+
+  <div class="note">Partial failures within a domain lookup are different from HTTP error responses. When individual lookups fail (e.g., a WHOIS server is unreachable), the request still returns <code>200 OK</code> with the successful lookups populated and failures listed in the <code>errors</code> array.</div>
+
+  <!-- Request Correlation -->
+  <h2 id="request-correlation">Request Correlation</h2>
+  <p>You can pass a <code>X-Client-Request-ID</code> header with your own correlation ID for end-to-end tracing. The API echoes it back in the response headers and includes it in server-side logs.</p>
+
+  <table>
+    <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>X-Client-Request-ID</code></td><td>Request</td><td>Your correlation ID (max 64 chars; alphanumeric, hyphens, underscores, dots, colons)</td></tr>
+      <tr><td><code>X-Request-ID</code></td><td>Response</td><td>Server-generated UUID for every request. Reference this when contacting support.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">Invalid or missing client request IDs are silently ignored -- the request still succeeds.</div>
+
+</main>
+
+<script>
+// Close sidebar on mobile when a link is clicked
+document.querySelectorAll('.sidebar a').forEach(function(link) {
+  link.addEventListener('click', function() {
+    if (window.innerWidth <= 768) {
+      document.querySelector('.sidebar').classList.remove('open');
+    }
+  });
+});
+</script>
+
+</body>
+</html>

@@ -51,8 +51,9 @@ func (h *Handler) maxDomains(prefix, plan string) int {
 	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, plan))
 }
 
-// RegisterRoutes registers unauthenticated routes only (health check).
+// RegisterRoutes registers unauthenticated routes only (health check, docs).
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
+	router.GET("/", h.Docs)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
 }

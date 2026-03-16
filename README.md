@@ -45,6 +45,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 
 | Method | Path | Plan | Description |
 |--------|------|------|-------------|
+| GET | `/` | None | API reference documentation (HTML) |
 | GET | `/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
 | GET | `/v1/info` | `admin` | Application and environment info |
 | POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |

@@ -9,6 +9,9 @@
 @proKey = test-pro-key
 @freeKey = test-free-key
 
+### API docs (no auth required)
+GET {{host}}/
+
 ### Health check (no auth required)
 GET {{host}}/v1/hello
 

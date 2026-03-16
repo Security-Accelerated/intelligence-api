@@ -79,6 +79,10 @@ FREE="${SMOKE_FREE_KEY:-test-free-key}"
 DOMAIN='{"domains":["example.com"]}'
 
 echo ""
+echo "=== Docs ==="
+check 200 "GET / (API docs)" "$HOST/"
+
+echo ""
 echo "=== Health Check ==="
 get 200 "GET /hello (no auth)" "/v1/hello" ""
 

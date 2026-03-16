@@ -329,6 +329,22 @@ func TestIntegration_DomainLookup_InvalidDomain(t *testing.T) {
 	}
 }
 
+func TestIntegration_Docs_RootServesHTML(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	ct := w.Header().Get("Content-Type")
+	if !strings.Contains(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+}
+
 func TestIntegration_Hello(t *testing.T) {
 	r, _ := setupRouter(t)
 
