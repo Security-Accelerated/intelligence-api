@@ -340,6 +340,45 @@
   .risk-medium { color: #f5a623; font-weight: 600; }
   .risk-high { color: var(--red); font-weight: 600; }
 
+  /* Language tabs */
+  .lang-tabs {
+    display: flex;
+    gap: 0;
+    margin: 12px 0 0;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .lang-tab {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sidebar-text);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: all 0.15s;
+  }
+
+  .lang-tab:hover {
+    color: var(--heading-text);
+  }
+
+  .lang-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .lang-panel {
+    display: none;
+  }
+
+  .lang-panel.active {
+    display: block;
+  }
+
   /* Responsive */
   @media (max-width: 768px) {
     .sidebar {
@@ -541,6 +580,12 @@
   <p>Domain names are normalized automatically: <code>http://</code> and <code>https://</code> prefixes are stripped, and trailing slashes are removed. Raw IP addresses are rejected.</p>
 
   <h3 id="example-request">Example</h3>
+  <div class="lang-tabs">
+    <button class="lang-tab active" onclick="switchTab(event, 'curl')">curl</button>
+    <button class="lang-tab" onclick="switchTab(event, 'python')">Python</button>
+    <button class="lang-tab" onclick="switchTab(event, 'go')">Go</button>
+  </div>
+  <div id="tab-curl" class="lang-panel active">
   <pre><code><span class="flag">curl</span> <span class="flag">-X</span> POST <span class="url">https://api.securityaccelerated.com/v1/domain/lookup</span> \
   <span class="flag">-H</span> <span class="str">'Content-Type: application/json'</span> \
   <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span> \
@@ -550,6 +595,62 @@
     "email_security": true,
     "subdomains": true
   }'</span></code></pre>
+  </div>
+  <div id="tab-python" class="lang-panel">
+  <pre><code><span class="kw">import</span> requests
+
+resp = requests.post(
+    <span class="str">"https://api.securityaccelerated.com/v1/domain/lookup"</span>,
+    headers={
+        <span class="str">"X-API-Key"</span>: <span class="str">"your-api-key"</span>,
+        <span class="str">"X-Client-Request-ID"</span>: <span class="str">"req-001"</span>,
+    },
+    json={
+        <span class="str">"domains"</span>: [<span class="str">"example.com"</span>],
+        <span class="str">"email_security"</span>: <span class="kw">True</span>,
+        <span class="str">"subdomains"</span>: <span class="kw">True</span>,
+    },
+)
+
+results = resp.json()
+<span class="kw">for</span> result <span class="kw">in</span> results:
+    print(result[<span class="str">"domain"</span>], result[<span class="str">"dns"</span>][<span class="str">"a"</span>])</code></pre>
+  </div>
+  <div id="tab-go" class="lang-panel">
+  <pre><code><span class="kw">package</span> main
+
+<span class="kw">import</span> (
+    <span class="str">"bytes"</span>
+    <span class="str">"encoding/json"</span>
+    <span class="str">"fmt"</span>
+    <span class="str">"net/http"</span>
+)
+
+<span class="kw">func</span> main() {
+    body, _ := json.Marshal(<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>{
+        <span class="str">"domains"</span>:        []<span class="kw">string</span>{<span class="str">"example.com"</span>},
+        <span class="str">"email_security"</span>: <span class="kw">true</span>,
+        <span class="str">"subdomains"</span>:     <span class="kw">true</span>,
+    })
+
+    req, _ := http.NewRequest(<span class="str">"POST"</span>,
+        <span class="str">"https://api.securityaccelerated.com/v1/domain/lookup"</span>,
+        bytes.NewReader(body))
+    req.Header.Set(<span class="str">"Content-Type"</span>, <span class="str">"application/json"</span>)
+    req.Header.Set(<span class="str">"X-API-Key"</span>, <span class="str">"your-api-key"</span>)
+    req.Header.Set(<span class="str">"X-Client-Request-ID"</span>, <span class="str">"req-001"</span>)
+
+    resp, err := http.DefaultClient.Do(req)
+    <span class="kw">if</span> err != <span class="kw">nil</span> {
+        panic(err)
+    }
+    <span class="kw">defer</span> resp.Body.Close()
+
+    <span class="kw">var</span> results []<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>
+    json.NewDecoder(resp.Body).Decode(&results)
+    fmt.Println(results[<span class="num">0</span>][<span class="str">"domain"</span>])
+}</code></pre>
+  </div>
 
   <h4>Response Structure</h4>
   <p>The response is always a JSON array, even for single-domain requests. Each element contains the core lookup results plus any optional fields that were requested.</p>
@@ -897,6 +998,17 @@
 </main>
 
 <script>
+// Language tab switching
+function switchTab(event, lang) {
+  var tabs = event.target.parentElement.querySelectorAll('.lang-tab');
+  tabs.forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+
+  var container = event.target.parentElement.parentElement;
+  container.querySelectorAll('.lang-panel').forEach(function(p) { p.classList.remove('active'); });
+  container.querySelector('#tab-' + lang).classList.add('active');
+}
+
 // Close sidebar on mobile when a link is clicked
 document.querySelectorAll('.sidebar a').forEach(function(link) {
   link.addEventListener('click', function() {
