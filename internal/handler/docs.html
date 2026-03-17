@@ -1287,7 +1287,7 @@ results = resp.json()
 
   <!-- Request Correlation -->
   <h2 id="request-correlation">Request Correlation</h2>
-  <p>You can pass a <code>X-Client-Request-ID</code> header with your own correlation ID for end-to-end tracing. The API echoes it back in the response headers and includes it in server-side logs.</p>
+  <p>You can pass an optional <code>X-Client-Request-ID</code> header with your own correlation ID for end-to-end tracing. The API echoes it back in the response headers and includes it in server-side logs.</p>
 
   <table>
     <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
@@ -1296,9 +1296,6 @@ results = resp.json()
       <tr><td><code>X-Request-ID</code></td><td>Response</td><td>Server-generated UUID for every request. Reference this when contacting support.</td></tr>
     </tbody>
   </table>
-
-  <div class="note">Invalid or missing client request IDs are silently ignored -- the request still succeeds.</div>
-
 </main>
 
 <script>
