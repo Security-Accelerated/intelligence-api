@@ -152,6 +152,13 @@ post 403 "POST fingerprints (basic — not admin)" "/v1/admin/fingerprints" "$BA
 post 401 "POST fingerprints (no key)"           "/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 
 echo ""
+echo "=== Billing ==="
+check 200 "GET /billing/success (no session_id — renders error page)" "$HOST/billing/success"
+check 200 "GET /billing/success (invalid session_id — renders error page)" "$HOST/billing/success?session_id=invalid"
+check 400 "POST /billing/webhook (no signature)" -X POST "$HOST/billing/webhook" -H "Content-Type: application/json" -d '{}'
+check 400 "POST /billing/webhook (bad signature)" -X POST "$HOST/billing/webhook" -H "Content-Type: application/json" -H "Stripe-Signature: t=123,v1=bad" -d '{}'
+
+echo ""
 echo "=== Response Body Validation ==="
 check_json "GET /hello returns {message: hello world}" \
     '.message == "hello world"' \
