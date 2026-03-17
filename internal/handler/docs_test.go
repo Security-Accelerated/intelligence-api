@@ -12,7 +12,7 @@ import (
 func TestDocs_Returns200WithHTML(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, "test", nil, nil, nil)
+	h := New(nil, nil, nil, nil, "test", nil, nil, nil)
 	h.RegisterRoutes(r)
 
 	w := httptest.NewRecorder()

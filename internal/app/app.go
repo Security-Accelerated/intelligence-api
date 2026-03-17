@@ -17,6 +17,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/service"
+	"github.com/security-accelerated/intelligence-api/internal/usage"
 	"go.uber.org/zap"
 )
 
@@ -158,9 +159,23 @@ func Run(logger *zap.Logger, version string) error {
 		logger.Info("stripe billing disabled (no credentials configured)")
 	}
 
+	// Usage tracking
+	usageLogger := usage.NewUsageLogger(
+		db,
+		cfg.GetInt("usage.buffer_size"),
+		cfg.GetDuration("usage.flush_interval"),
+		logger,
+	)
+	defer usageLogger.Stop()
+	usageQuerySvc := usage.NewQueryService(db)
+	logger.Info("usage tracking enabled",
+		zap.Int("buffer_size", cfg.GetInt("usage.buffer_size")),
+		zap.Duration("flush_interval", cfg.GetDuration("usage.flush_interval")),
+	)
+
 	// HTTP
-	h := handler.New(domainService, fpService, billingSvc, version, cfg, redisCache, cachedRepo)
-	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, cfg.GetString("application.mode"))
+	h := handler.New(domainService, fpService, billingSvc, usageQuerySvc, version, cfg, redisCache, cachedRepo)
+	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"))
 	server := httpapi.NewServer(router, port)
 
 	// Shutdown signal

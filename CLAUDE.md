@@ -19,6 +19,7 @@ internal/httpapi/             → Gin router assembly, middleware chain, server 
 internal/cache/               → Cache interface + Redis implementation
 internal/auth/                → Customer model, PostgreSQL repository, in-memory cached repository, key hashing
 internal/billing/              → Stripe billing (webhook handling, key provisioning, noop fallback)
+internal/usage/                → Usage tracking (buffered async INSERT, admin query endpoint, noop fallback)
 internal/notifications/        → Pushover alerting (upstream throttle + error spike detection)
 internal/safenet/             → SSRF prevention (blocks private/reserved IPs at dial time)
 internal/logging/             → Zap logger init (ECS format in production, pretty in dev)
@@ -60,6 +61,9 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 ### Stripe billing
 `internal/billing/` follows the notifications pattern (interface + real impl + noop fallback). `Service` interface defines `HandleWebhook` and `GetProvisionedKey`. `StripeService` verifies webhook signatures, handles checkout/subscription/payment events, and provisions API keys. `NoopService` returns "billing not configured" errors. `Repository` wraps billing-specific DB operations (customer+key creation, provisioned key storage, plan updates, stale key cleanup). Key provisioning: on checkout, generates a random API key, stores hash in `api_keys`, stores raw key in `provisioned_keys` (1hr expiry, one-time retrieval). `keygen.go` generates 64-char hex keys via `crypto/rand`. Auth cache is invalidated after any plan change. `last_used_at` on `api_keys` is updated on auth cache-miss lookups (fire-and-forget goroutine). `StripeService` accepts a `notifications.Notifier` and sends async Pushover notifications on all billing events (new signup, plan change, cancellation, payment failure). Customer Portal link is configurable via `STRIPE_PORTAL_LINK` and shown on docs/success pages. Config: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICES_BASIC_MONTHLY`, `STRIPE_PRICES_PRO_MONTHLY`, `STRIPE_PAYMENT_LINK_BASIC`, `STRIPE_PAYMENT_LINK_PRO`, `STRIPE_PORTAL_LINK`, `BILLING_STALE_KEY_DAYS`.
 
+### Usage tracking
+`internal/usage/` follows the notifications/billing pattern (interface + real impl + noop). `Recorder` interface accepts `UsageEntry` values; `Queryer` interface returns aggregated `UsageSummary`. `UsageLogger` buffers entries on a channel and batch-inserts to PostgreSQL's `request_log` table on a timer (default 5s) or when the batch hits 50 entries. Channel full = silent drop with warning log. `NoopRecorder` discards entries when usage tracking isn't needed (tests). `QueryService` runs aggregation SQL for the admin endpoint. Middleware `UsageLog()` collects request metadata after `c.Next()` and calls `recorder.Record()`. Admin endpoint: `GET /v1/admin/usage?days=30&customer_id=X&api_key_id=Y`. Config: `USAGE_BUFFER_SIZE`, `USAGE_FLUSH_INTERVAL`.
+
 ### Notifications
 `internal/notifications/` provides interface-driven alerting. `Notifier` interface abstracts the delivery channel (currently Pushover); `ErrorRecorder` interface abstracts error tracking (currently `Alerter`). The `Alerter` uses sliding-window counters behind a mutex to detect per-lookup throttling (default: 5 failures in 5m) and global error spikes (default: 15 errors in 5m). Alerts fire asynchronously with a 15-minute cooldown to prevent alert fatigue. `DomainService` depends on `ErrorRecorder`; when Pushover credentials are absent, a `NoopRecorder` is wired in. Config: `PUSHOVER_API_TOKEN`, `PUSHOVER_USER_KEY`, `ALERTS_THROTTLE_THRESHOLD`, `ALERTS_THROTTLE_WINDOW`, `ALERTS_SPIKE_THRESHOLD`, `ALERTS_SPIKE_WINDOW`, `ALERTS_COOLDOWN`.
 
@@ -70,9 +74,10 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 3. `BodyLimit(1MB)` — rejects oversized request bodies
 4. `ClientRequestID()` — validates/echoes X-Client-Request-ID header, sets context key
 5. `RequestLogger()` — structured request logging with context keys (runs after `c.Next()` returns)
-6. *(protected routes only)* `APIKeyAuth()` — validates key, sets api_key_id/api_key_plan in context
+6. *(protected routes only)* `APIKeyAuth()` — validates key, sets customer_id/api_key_id/api_key_plan in context
 7. *(protected routes only)* `RateLimit()` — per-key sliding window via Redis, fail-open, admin bypass
-8. *(admin routes only)* `RequireAdmin()` — checks plan == "admin"
+8. *(protected + admin routes)* `UsageLog()` — records request metadata to usage.Recorder after response
+9. *(admin routes only)* `RequireAdmin()` — checks plan == "admin"
 
 ## Development Workflow
 
@@ -114,7 +119,7 @@ Sample config: `internal/config/sample-config.yml`
 
 PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration.
 
-Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout).
+Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout), `request_log` (usage tracking — per-request metadata for admin analytics).
 
 ## Infrastructure
 

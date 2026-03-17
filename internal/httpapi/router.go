@@ -9,11 +9,12 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/security-accelerated/intelligence-api/internal/usage"
 	"go.uber.org/zap"
 )
 
 // NewRouter builds the gin engine with all middleware and routes registered.
-func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClient *redis.Client, rlCfg middleware.RateLimitConfig, mode string) *gin.Engine {
+func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClient *redis.Client, rlCfg middleware.RateLimitConfig, recorder usage.Recorder, mode string) *gin.Engine {
 	if mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -27,12 +28,13 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 
 	authMW := middleware.APIKeyAuth(cachedRepo)
 	rateLimitMW := middleware.RateLimit(redisClient, rlCfg)
+	usageMW := middleware.UsageLog(recorder)
 
 	h.RegisterRoutes(router)
-	h.RegisterProtectedRoutes(router, authMW, rateLimitMW)
+	h.RegisterProtectedRoutes(router, authMW, rateLimitMW, usageMW)
 
 	admin := router.Group("/v1/admin")
-	admin.Use(authMW, rateLimitMW, middleware.RequireAdmin())
+	admin.Use(authMW, rateLimitMW, usageMW, middleware.RequireAdmin())
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
 		if v, ok := c.Get("api_key_id"); ok {
@@ -48,6 +50,7 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 
 	admin.GET("/fingerprints", h.GetFingerprints)
 	admin.POST("/fingerprints", h.UpdateFingerprints)
+	admin.GET("/usage", h.GetUsage)
 
 	return router
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
+	"github.com/security-accelerated/intelligence-api/internal/usage"
 	"github.com/spf13/viper"
 )
 
@@ -31,17 +32,19 @@ type Handler struct {
 	domainService      DomainLookupService
 	fingerprintService FingerprintAdminService
 	billingService     billing.Service
+	usageService       usage.Queryer
 	version            string
 	cfg                *viper.Viper
 	redisCache         *cache.RedisCache
 	authCacheStats     AuthCacheStats
 }
 
-func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, version string, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats) *Handler {
+func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, version string, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats) *Handler {
 	return &Handler{
 		domainService:      domainService,
 		fingerprintService: fingerprintService,
 		billingService:     billingService,
+		usageService:       usageService,
 		version:            version,
 		cfg:                cfg,
 		redisCache:         redisCache,

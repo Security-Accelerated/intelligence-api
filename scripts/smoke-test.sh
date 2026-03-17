@@ -152,6 +152,13 @@ post 403 "POST fingerprints (basic — not admin)" "/v1/admin/fingerprints" "$BA
 post 401 "POST fingerprints (no key)"           "/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 
 echo ""
+echo "=== Admin — Usage ==="
+get  200 "GET usage (admin)"             "/v1/admin/usage" "$ADMIN"
+get  200 "GET usage ?days=7 (admin)"     "/v1/admin/usage?days=7" "$ADMIN"
+get  403 "GET usage (basic — not admin)" "/v1/admin/usage" "$BASIC"
+get  401 "GET usage (no key)"            "/v1/admin/usage" ""
+
+echo ""
 echo "=== Billing ==="
 check 200 "GET /billing/success (no session_id — renders error page)" "$HOST/billing/success"
 check 200 "GET /billing/success (invalid session_id — renders error page)" "$HOST/billing/success?session_id=invalid"

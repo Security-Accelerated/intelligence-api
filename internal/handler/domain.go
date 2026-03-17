@@ -40,6 +40,7 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 	}
 
 	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation, EmailSecurity: req.EmailSecurity, Subdomains: req.Subdomains, CTLogs: req.CTLogs, BGP: req.BGP, Fingerprint: req.Fingerprint}
+	c.Set("domain_count", len(req.Domains))
 	c.Set("screenshot_requested", req.Screenshot)
 	c.Set("reputation_requested", req.Reputation)
 	c.Set("email_security_requested", req.EmailSecurity)

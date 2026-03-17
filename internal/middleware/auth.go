@@ -48,6 +48,7 @@ func APIKeyAuthWithLogger(repo auth.Repository, logger *zap.Logger) gin.HandlerF
 			return
 		}
 
+		c.Set("customer_id", customer.ID)
 		c.Set("api_key_id", customer.APIKeyID)
 		c.Set("api_key_plan", customer.Plan)
 		c.Next()

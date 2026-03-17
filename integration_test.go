@@ -21,6 +21,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/service"
+	"github.com/security-accelerated/intelligence-api/internal/usage"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -66,6 +67,24 @@ func (s *stubFingerprintService) GetRules() []domain.TechRule {
 func (s *stubFingerprintService) UpdateRules(_ context.Context, rules []domain.TechRule, _ int) error {
 	s.rules = rules
 	return nil
+}
+
+// stubUsageQueryer returns a fixed summary for integration tests.
+type stubUsageQueryer struct{}
+
+func (stubUsageQueryer) QueryUsage(_, _ int, since, until time.Time) (*usage.UsageSummary, error) {
+	return &usage.UsageSummary{
+		TotalRequests:  42,
+		CacheHits:      10,
+		CacheHitRate:   23.81,
+		AvgLatencyMs:   500,
+		TotalDomains:   50,
+		StatusCodes:    map[string]int{"200": 40, "400": 2},
+		FeatureUsage:   map[string]int{"screenshot": 5, "reputation": 3},
+		RequestsByPath: map[string]int{"/v1/domain/lookup": 40},
+		PeriodStart:    since,
+		PeriodEnd:      until,
+	}, nil
 }
 
 func testConfig() *viper.Viper {
@@ -200,18 +219,22 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	authMW := middleware.APIKeyAuthWithLogger(cachedRepo, nop)
 	rateLimitMW := middleware.RateLimitWithLogger(rc.Client(), rlCfg, nop)
 
-	h := handler.New(svc, fpSvc, nil, "test", cfg, rc, cachedRepo)
+	usageQ := &stubUsageQueryer{}
+	usageRec := usage.NoopRecorder{}
+
+	h := handler.New(svc, fpSvc, nil, usageQ, "test", cfg, rc, cachedRepo)
 	h.RegisterRoutes(r)
-	h.RegisterProtectedRoutes(r, authMW, rateLimitMW)
+	h.RegisterProtectedRoutes(r, authMW, rateLimitMW, middleware.UsageLog(usageRec))
 
 	admin := r.Group("/v1/admin")
-	admin.Use(authMW, rateLimitMW, middleware.RequireAdmin())
+	admin.Use(authMW, rateLimitMW, middleware.UsageLog(usageRec), middleware.RequireAdmin())
 	admin.POST("/auth/cache/invalidate", func(c *gin.Context) {
 		cachedRepo.InvalidateAll()
 		c.JSON(http.StatusOK, gin.H{"message": "auth cache invalidated"})
 	})
 	admin.GET("/fingerprints", h.GetFingerprints)
 	admin.POST("/fingerprints", h.UpdateFingerprints)
+	admin.GET("/usage", h.GetUsage)
 
 	return r, mr
 }
@@ -1346,5 +1369,64 @@ func TestIntegration_DomainLookup_EmptyDomainsArray(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestIntegration_AdminUsage_AdminAllowed(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", nil)
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp usage.UsageSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.TotalRequests != 42 {
+		t.Errorf("TotalRequests = %d, want 42", resp.TotalRequests)
+	}
+}
+
+func TestIntegration_AdminUsage_CustomDays(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage?days=7", nil)
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestIntegration_AdminUsage_NonAdminForbidden(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", nil)
+	req.Header.Set("X-API-Key", "test-lookup-key") // basic plan
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestIntegration_AdminUsage_NoKeyUnauthorized(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }

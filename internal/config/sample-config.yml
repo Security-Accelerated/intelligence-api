@@ -61,6 +61,10 @@ stripe:
 billing:
   stale_key_days: 365
 
+usage:
+  buffer_size: 256
+  flush_interval: 5s
+
 postgres:
   host: postgres
   port: 5432

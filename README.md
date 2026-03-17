@@ -54,6 +54,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | POST | `/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 | GET | `/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
 | POST | `/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
+| GET | `/v1/admin/usage` | `admin` | Aggregated API usage statistics |
 
 ### POST /v1/domain/lookup
 
@@ -420,6 +421,37 @@ Each technology entry contains:
 
 Rules are stored in PostgreSQL and loaded into memory at startup. The default ruleset covers ~90 technologies. Admin users can update rules via `POST /v1/admin/fingerprints` without redeploying.
 
+### `GET /v1/admin/usage` — Usage Statistics (Admin Only)
+
+Returns aggregated API usage statistics for a configurable time window.
+
+**Query parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `days` | `30` | Number of days to look back (1–365) |
+| `customer_id` | — | Filter by customer ID |
+| `api_key_id` | — | Filter by API key ID |
+
+**Response:**
+```json
+{
+  "total_requests": 1247,
+  "cache_hits": 312,
+  "cache_hit_rate": 25.02,
+  "avg_latency_ms": 842.5,
+  "total_domains": 1580,
+  "status_codes": {"200": 1190, "400": 32, "403": 15, "429": 10},
+  "feature_usage": {
+    "screenshot": 45, "reputation": 120, "email_security": 310,
+    "subdomains": 200, "ct_logs": 85, "bgp": 60, "fingerprint": 400
+  },
+  "requests_by_path": {"/v1/domain/lookup": 1200, "/v1/admin/fingerprints": 12},
+  "period_start": "2026-03-04T00:00:00Z",
+  "period_end": "2026-03-11T00:00:00Z"
+}
+```
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
@@ -506,6 +538,8 @@ Config values:
 | `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
 | `stripe.portal_link` | `""` | Stripe Customer Portal URL for subscription management |
 | `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
+| `usage.buffer_size` | `256` | Channel buffer size for async usage logging |
+| `usage.flush_interval` | `5s` | How often buffered usage entries are flushed to PostgreSQL |
 
 ### Database Setup
 
@@ -518,6 +552,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `005_fingerprint_rules.sql` — creates the `fingerprint_rules` table (append-only, JSONB rules column)
 - `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column (`free`/`basic`/`pro`/`admin`)
 - `007_billing.sql` — adds `email`, `stripe_customer_id` to customers; `last_used_at` to api_keys; creates `provisioned_keys` table
+- `008_request_log.sql` — creates the `request_log` table for usage tracking (indexed on `created_at`, `customer_id`, `api_key_id`)
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
@@ -659,6 +694,8 @@ git push origin main:release      # trigger Fly deploy
 | `STRIPE_PAYMENT_LINK_BASIC` | Stripe Payment Link URL for basic plan |
 | `STRIPE_PAYMENT_LINK_PRO` | Stripe Payment Link URL for pro plan |
 | `STRIPE_PORTAL_LINK` | Stripe Customer Portal URL for subscription management |
+| `USAGE_BUFFER_SIZE` | Channel buffer size for async usage logging (default: 256) |
+| `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |
 
 ### Scripts
 
