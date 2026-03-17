@@ -93,10 +93,11 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Notifications
 	var alerter notifications.ErrorRecorder
+	var notifier notifications.Notifier
 	pushoverToken := cfg.GetString("pushover.api_token")
 	pushoverUser := cfg.GetString("pushover.user_key")
 	if pushoverToken != "" && pushoverUser != "" {
-		notifier := notifications.NewPushoverNotifier(pushoverToken, pushoverUser)
+		notifier = notifications.NewPushoverNotifier(pushoverToken, pushoverUser)
 		alerter = notifications.NewAlerter(notifier, notifications.AlerterConfig{
 			ThrottleThreshold: cfg.GetInt("alerts.throttle_threshold"),
 			ThrottleWindow:    cfg.GetDuration("alerts.throttle_window"),
@@ -106,6 +107,7 @@ func Run(logger *zap.Logger, version string) error {
 		})
 		logger.Info("pushover notifications enabled")
 	} else {
+		notifier = &notifications.NoopNotifier{}
 		alerter = &notifications.NoopRecorder{}
 		logger.Info("pushover notifications disabled (no credentials configured)")
 	}
@@ -138,7 +140,7 @@ func Run(logger *zap.Logger, version string) error {
 			priceMap[p] = "pro"
 		}
 		billingRepo := billing.NewRepository(db)
-		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo)
+		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo, notifier)
 		logger.Info("stripe billing enabled")
 	} else {
 		billingSvc = &billing.NoopService{}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/stripe/stripe-go/v84"
 	"github.com/stripe/stripe-go/v84/checkout/session"
 	"github.com/stripe/stripe-go/v84/webhook"
@@ -18,19 +19,21 @@ type StripeService struct {
 	priceToplan   map[string]string
 	repo          *Repository
 	cachedRepo    *auth.CachedRepository
+	notifier      notifications.Notifier
 }
 
 // NewStripeService creates a billing service backed by Stripe.
 // secretKey is used to authenticate API calls to Stripe.
 // webhookSecret is used to verify webhook signatures.
 // priceMap maps Stripe Price IDs to plan names (e.g., "price_xxx" -> "basic").
-func NewStripeService(secretKey, webhookSecret string, priceMap map[string]string, repo *Repository, cachedRepo *auth.CachedRepository) *StripeService {
+func NewStripeService(secretKey, webhookSecret string, priceMap map[string]string, repo *Repository, cachedRepo *auth.CachedRepository, notifier notifications.Notifier) *StripeService {
 	stripe.Key = secretKey
 	return &StripeService{
 		webhookSecret: webhookSecret,
 		priceToplan:   priceMap,
 		repo:          repo,
 		cachedRepo:    cachedRepo,
+		notifier:      notifier,
 	}
 }
 
@@ -153,6 +156,8 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 		zap.String("session_id", sess.ID),
 	)
 
+	s.notify(ctx, "New Subscriber", fmt.Sprintf("%s signed up for the %s plan", email, plan))
+
 	return nil
 }
 
@@ -184,6 +189,8 @@ func (s *StripeService) handleSubscriptionUpdated(ctx context.Context, event *st
 		zap.String("new_plan", plan),
 	)
 
+	s.notify(ctx, "Plan Change", fmt.Sprintf("Customer %s changed to %s plan", stripeCustomerID, plan))
+
 	return nil
 }
 
@@ -202,6 +209,8 @@ func (s *StripeService) handleSubscriptionDeleted(ctx context.Context, event *st
 	logger.Info("customer downgraded to free on subscription cancellation",
 		zap.String("stripe_customer_id", stripeCustomerID),
 	)
+
+	s.notify(ctx, "Subscription Cancelled", fmt.Sprintf("Customer %s cancelled their subscription", stripeCustomerID))
 
 	return nil
 }
@@ -222,7 +231,18 @@ func (s *StripeService) handlePaymentFailed(ctx context.Context, event *stripe.E
 		zap.String("stripe_customer_id", stripeCustomerID),
 	)
 
+	s.notify(ctx, "Payment Failed", fmt.Sprintf("Payment failed for customer %s, downgraded to free", stripeCustomerID))
+
 	return nil
+}
+
+// notify sends a push notification asynchronously. Failures are logged but not returned.
+func (s *StripeService) notify(ctx context.Context, title, message string) {
+	go func() {
+		if err := s.notifier.Send(ctx, title, message, 0); err != nil {
+			logging.Logger().Warn("billing notification failed", zap.Error(err))
+		}
+	}()
 }
 
 // GetProvisionedKey retrieves a one-time provisioned key by checkout session ID.

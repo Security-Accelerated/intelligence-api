@@ -504,6 +504,7 @@ Config values:
 | `stripe.prices.pro_monthly` | `""` | Stripe Price ID for pro monthly plan |
 | `stripe.payment_link.basic` | `""` | Stripe Payment Link URL for basic plan |
 | `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
+| `stripe.portal_link` | `""` | Stripe Customer Portal URL for subscription management |
 | `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
 
 ### Database Setup
@@ -657,6 +658,7 @@ git push origin main:release      # trigger Fly deploy
 | `STRIPE_PRICES_PRO_MONTHLY` | Stripe Price ID for pro monthly plan |
 | `STRIPE_PAYMENT_LINK_BASIC` | Stripe Payment Link URL for basic plan |
 | `STRIPE_PAYMENT_LINK_PRO` | Stripe Payment Link URL for pro plan |
+| `STRIPE_PORTAL_LINK` | Stripe Customer Portal URL for subscription management |
 
 ### Scripts
 
@@ -710,6 +712,11 @@ Self-service billing via Stripe. Customers click a Stripe Payment Link on the do
 - **Cancellation** (`customer.subscription.deleted`): downgrades to free
 - **Payment failure** (`invoice.payment_failed`): downgrades to free
 - Auth cache is invalidated after any plan change
+- Pushover notifications are sent for all billing events (new signup, plan change, cancellation, payment failure)
+
+### Subscription management
+
+Customers can manage their subscription (cancel, update payment method) via the Stripe Customer Portal. The portal link is shown on the docs page and checkout success page when `STRIPE_PORTAL_LINK` is configured.
 
 ### Stale key cleanup
 
@@ -717,7 +724,7 @@ Self-service billing via Stripe. Customers click a Stripe Payment Link on the do
 
 ### Configuration
 
-Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to enable. Without them, the app starts with a noop billing service. Map Stripe Price IDs to plans via `STRIPE_PRICES_BASIC_MONTHLY` and `STRIPE_PRICES_PRO_MONTHLY`. Configure Payment Link URLs via `STRIPE_PAYMENT_LINK_BASIC` and `STRIPE_PAYMENT_LINK_PRO` to show subscribe buttons on the docs page.
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to enable. Without them, the app starts with a noop billing service. Map Stripe Price IDs to plans via `STRIPE_PRICES_BASIC_MONTHLY` and `STRIPE_PRICES_PRO_MONTHLY`. Configure Payment Link URLs via `STRIPE_PAYMENT_LINK_BASIC` and `STRIPE_PAYMENT_LINK_PRO` to show subscribe buttons on the docs page. Set `STRIPE_PORTAL_LINK` to show a "Manage subscription" link on the docs and success pages.
 
 ## Testing
 
