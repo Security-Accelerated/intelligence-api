@@ -24,7 +24,7 @@ func (s *stubRepo) GetByKey(_ context.Context, _ string) (*auth.Customer, error)
 	return s.customer, nil
 }
 
-func newInfoRouter(version string, cfg *viper.Viper, rc *cache.RedisCache, cr *auth.CachedRepository) *gin.Engine {
+func newInfoRouter(version string, cfg *viper.Viper, rc *cache.RedisCache, cr AuthCacheStats) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := New(nil, nil, nil, version, cfg, rc, cr)
@@ -79,7 +79,7 @@ func TestInfo_NilRedisAndNilCachedRepo(t *testing.T) {
 		t.Error("'redis' key should be absent when redisCache is nil")
 	}
 	if _, ok := resp["auth_cache"]; ok {
-		t.Error("'auth_cache' key should be absent when cachedRepo is nil")
+		t.Error("'auth_cache' key should be absent when authCacheStats is nil")
 	}
 }
 

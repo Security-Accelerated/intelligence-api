@@ -17,8 +17,8 @@ import (
 type StripeService struct {
 	webhookSecret string
 	priceToplan   map[string]string
-	repo          *Repository
-	cachedRepo    *auth.CachedRepository
+	repo          BillingRepository
+	authCache     AuthCacheInvalidator
 	notifier      notifications.Notifier
 }
 
@@ -26,13 +26,13 @@ type StripeService struct {
 // secretKey is used to authenticate API calls to Stripe.
 // webhookSecret is used to verify webhook signatures.
 // priceMap maps Stripe Price IDs to plan names (e.g., "price_xxx" -> "basic").
-func NewStripeService(secretKey, webhookSecret string, priceMap map[string]string, repo *Repository, cachedRepo *auth.CachedRepository, notifier notifications.Notifier) *StripeService {
+func NewStripeService(secretKey, webhookSecret string, priceMap map[string]string, repo BillingRepository, authCache AuthCacheInvalidator, notifier notifications.Notifier) *StripeService {
 	stripe.Key = secretKey
 	return &StripeService{
 		webhookSecret: webhookSecret,
 		priceToplan:   priceMap,
 		repo:          repo,
-		cachedRepo:    cachedRepo,
+		authCache:     authCache,
 		notifier:      notifier,
 	}
 }
@@ -182,7 +182,7 @@ func (s *StripeService) handleSubscriptionUpdated(ctx context.Context, event *st
 		return fmt.Errorf("update plan: %w", err)
 	}
 
-	s.cachedRepo.InvalidateAll()
+	s.authCache.InvalidateAll()
 
 	logger.Info("customer plan updated via subscription change",
 		zap.String("stripe_customer_id", stripeCustomerID),
@@ -204,7 +204,7 @@ func (s *StripeService) handleSubscriptionDeleted(ctx context.Context, event *st
 		return fmt.Errorf("downgrade on cancellation: %w", err)
 	}
 
-	s.cachedRepo.InvalidateAll()
+	s.authCache.InvalidateAll()
 
 	logger.Info("customer downgraded to free on subscription cancellation",
 		zap.String("stripe_customer_id", stripeCustomerID),
@@ -225,7 +225,7 @@ func (s *StripeService) handlePaymentFailed(ctx context.Context, event *stripe.E
 		return fmt.Errorf("downgrade on payment failure: %w", err)
 	}
 
-	s.cachedRepo.InvalidateAll()
+	s.authCache.InvalidateAll()
 
 	logger.Info("customer downgraded to free on payment failure",
 		zap.String("stripe_customer_id", stripeCustomerID),

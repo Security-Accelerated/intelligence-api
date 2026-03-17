@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/billing"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
@@ -23,6 +22,11 @@ type DomainLookupService interface {
 	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool)
 }
 
+// AuthCacheStats provides read-only access to auth cache metrics for the info endpoint.
+type AuthCacheStats interface {
+	Size() int
+}
+
 type Handler struct {
 	domainService      DomainLookupService
 	fingerprintService FingerprintAdminService
@@ -30,10 +34,10 @@ type Handler struct {
 	version            string
 	cfg                *viper.Viper
 	redisCache         *cache.RedisCache
-	cachedRepo         *auth.CachedRepository
+	authCacheStats     AuthCacheStats
 }
 
-func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, version string, cfg *viper.Viper, redisCache *cache.RedisCache, cachedRepo *auth.CachedRepository) *Handler {
+func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, version string, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats) *Handler {
 	return &Handler{
 		domainService:      domainService,
 		fingerprintService: fingerprintService,
@@ -41,7 +45,7 @@ func New(domainService DomainLookupService, fingerprintService FingerprintAdminS
 		version:            version,
 		cfg:                cfg,
 		redisCache:         redisCache,
-		cachedRepo:         cachedRepo,
+		authCacheStats:     authCacheStats,
 	}
 }
 

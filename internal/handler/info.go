@@ -64,10 +64,10 @@ func (h *Handler) Info(c *gin.Context) {
 		resp["redis"] = redisInfo
 	}
 
-	if h.cachedRepo != nil {
+	if h.authCacheStats != nil {
 		resp["auth_cache"] = gin.H{
 			"ttl":  h.cfg.GetDuration("auth.cache_ttl").String(),
-			"size": h.cachedRepo.Size(),
+			"size": h.authCacheStats.Size(),
 		}
 	}
 
