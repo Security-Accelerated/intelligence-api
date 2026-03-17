@@ -115,6 +115,6 @@ That's it. One request, one comprehensive response.
 
 ## Get Started
 
-Contact us for an API key and start making calls in minutes. No SDK required — just HTTPS and JSON.
+Sign up at [api.securityaccelerated.com](https://api.securityaccelerated.com) and get your API key instantly. No SDK required — just HTTPS and JSON.
 
 **Security Accelerated** — securityaccelerated.com

@@ -4,7 +4,7 @@ Base URL: `https://api.securityaccelerated.com/v1`
 
 ## Authentication
 
-All requests require an API key passed in the `X-API-Key` header:
+All requests require an API key passed in the `X-API-Key` header. Sign up at [api.securityaccelerated.com](https://api.securityaccelerated.com) to get your key instantly.
 
 ```
 X-API-Key: your-api-key-here
