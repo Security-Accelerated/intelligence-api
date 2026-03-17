@@ -17,9 +17,10 @@ var checkoutSuccessHTML string
 var checkoutSuccessTmpl = template.Must(template.New("checkout_success").Parse(checkoutSuccessHTML))
 
 type checkoutSuccessData struct {
-	APIKey string
-	Plan   string
-	Error  string
+	APIKey     string
+	Plan       string
+	Error      string
+	PortalLink string
 }
 
 // StripeWebhook handles incoming Stripe webhook events.
@@ -66,12 +67,18 @@ func (h *Handler) CheckoutSuccess(c *gin.Context) {
 		return
 	}
 
+	var portalLink string
+	if h.cfg != nil {
+		portalLink = h.cfg.GetString("stripe.portal_link")
+	}
+
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.Status(http.StatusOK)
 	checkoutSuccessTmpl.Execute(c.Writer, checkoutSuccessData{
-		APIKey: rawKey,
-		Plan:   "paid",
+		APIKey:     rawKey,
+		Plan:       "paid",
+		PortalLink: portalLink,
 	})
 }
 

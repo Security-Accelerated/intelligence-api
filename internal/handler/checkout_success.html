@@ -185,6 +185,10 @@
     <p>Include this key in your requests via the <code style="font-family:var(--font-mono);font-size:13px;background:var(--code-bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--accent);">X-API-Key</code> header.</p>
 
     <a href="/" class="docs-link">View API documentation</a>
+    {{if .PortalLink}}
+    <span style="margin: 0 8px; color: var(--border);">|</span>
+    <a href="{{.PortalLink}}" class="docs-link" target="_blank">Manage subscription</a>
+    {{end}}
     {{end}}
   </div>
 </div>

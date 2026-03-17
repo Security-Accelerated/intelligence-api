@@ -79,6 +79,7 @@ func init() {
 	config.SetDefault("stripe.prices.pro_monthly", "")
 	config.SetDefault("stripe.payment_link.basic", "")
 	config.SetDefault("stripe.payment_link.pro", "")
+	config.SetDefault("stripe.portal_link", "")
 	config.SetDefault("billing.stale_key_days", 365)
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host

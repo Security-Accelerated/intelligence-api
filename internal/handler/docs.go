@@ -16,6 +16,7 @@ var docsTmpl = template.Must(template.New("docs").Parse(docsHTML))
 type docsData struct {
 	BasicPaymentLink string
 	ProPaymentLink   string
+	PortalLink       string
 }
 
 func (h *Handler) Docs(c *gin.Context) {
@@ -23,6 +24,7 @@ func (h *Handler) Docs(c *gin.Context) {
 	if h.cfg != nil {
 		data.BasicPaymentLink = h.cfg.GetString("stripe.payment_link.basic")
 		data.ProPaymentLink = h.cfg.GetString("stripe.payment_link.pro")
+		data.PortalLink = h.cfg.GetString("stripe.portal_link")
 	}
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
