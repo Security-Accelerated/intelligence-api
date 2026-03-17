@@ -1263,7 +1263,6 @@ results = resp.json()
   <!-- Caching -->
   <h2 id="caching">Caching</h2>
   <p>Results are cached for <strong>60 minutes</strong>. The <code>cache_hit</code> field on each response indicates whether data was served from cache or fetched live.</p>
-  <p>Cache keys are computed from the domain name plus the sorted set of requested options. This means requesting different option combinations (e.g., with vs. without <code>reputation</code>) produces separate cache entries. Adding a new option to a repeat request will fetch fresh data for that option.</p>
 
   <!-- Error Handling -->
   <h2 id="error-handling">Error Handling</h2>
