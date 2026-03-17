@@ -33,8 +33,8 @@ func NewVirusTotalProvider(apiKey string) *VirusTotalProvider {
 func (p *VirusTotalProvider) Name() string { return "virustotal" }
 
 func (p *VirusTotalProvider) Query(ctx context.Context, domain string) (*ThreatIntelProviderResult, error) {
-	if err := p.limiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("virustotal rate limit: %w", err)
+	if !p.limiter.Allow() {
+		return &ThreatIntelProviderResult{Provider: "virustotal", Detected: false, Details: "skipped (rate limit)"}, nil
 	}
 
 	url := "https://www.virustotal.com/api/v3/domains/" + domain
