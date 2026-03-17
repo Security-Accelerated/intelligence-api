@@ -444,6 +444,7 @@
 
   <div class="sidebar-section">
     <div class="sidebar-section-title">Reference</div>
+    <a href="#full-response-example">Full Response Example</a>
     <a href="#caching">Caching</a>
     <a href="#error-handling">Error Handling</a>
     <a href="#request-correlation">Request Correlation</a>
@@ -745,6 +746,16 @@ results = resp.json()
       <tr><td><code>tech</code></td><td><code>object</code></td><td>Technical contact</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>,
+  <span class="str">"registrar"</span>: <span class="str">"RESERVED-Internet Assigned Numbers Authority"</span>,
+  <span class="str">"created_date"</span>: <span class="str">"1995-08-14T04:00:00Z"</span>,
+  <span class="str">"updated_date"</span>: <span class="str">"2024-08-14T07:01:38Z"</span>,
+  <span class="str">"expiry_date"</span>: <span class="str">"2025-08-13T04:00:00Z"</span>,
+  <span class="str">"status"</span>: [<span class="str">"clientDeleteProhibited"</span>, <span class="str">"clientTransferProhibited"</span>],
+  <span class="str">"name_servers"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>],
+  <span class="str">"registrant"</span>: { <span class="str">"organization"</span>: <span class="str">"REDACTED FOR PRIVACY"</span>, <span class="str">"country"</span>: <span class="str">"US"</span> }
+}</code></pre>
   <div class="note">Contact fields are often redacted by WHOIS privacy services.</div>
 
   <!-- dns -->
@@ -760,6 +771,13 @@ results = resp.json()
       <tr><td><code>cname</code></td><td><code>string</code></td><td>Canonical name alias</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>],
+  <span class="str">"aaaa"</span>: [<span class="str">"2606:2800:220:1:248:1893:25c8:1946"</span>],
+  <span class="str">"mx"</span>: [{ <span class="str">"host"</span>: <span class="str">"mail.example.com"</span>, <span class="str">"priority"</span>: <span class="num">10</span> }],
+  <span class="str">"ns"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>],
+  <span class="str">"txt"</span>: [<span class="str">"v=spf1 -all"</span>]
+}</code></pre>
 
   <!-- ssl -->
   <h3 id="ssl"><code>ssl</code> -- TLS Certificate</h3>
@@ -777,6 +795,17 @@ results = resp.json()
       <tr><td><code>signature_algorithm</code></td><td><code>string</code></td><td>Cryptographic algorithm (e.g., SHA-256)</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"subject"</span>: <span class="str">"www.example.org"</span>,
+  <span class="str">"issuer"</span>: <span class="str">"DigiCert Global G2 TLS RSA SHA256 2020 CA1"</span>,
+  <span class="str">"not_before"</span>: <span class="str">"2024-01-30T00:00:00Z"</span>,
+  <span class="str">"not_after"</span>: <span class="str">"2025-03-01T23:59:59Z"</span>,
+  <span class="str">"expired"</span>: <span class="kw">false</span>,
+  <span class="str">"days_until_expiry"</span>: <span class="num">142</span>,
+  <span class="str">"sans"</span>: [<span class="str">"www.example.org"</span>, <span class="str">"example.net"</span>, <span class="str">"example.org"</span>],
+  <span class="str">"serial_number"</span>: <span class="str">"0F:BE:08:B0:85:4D:05:73:8A:B0..."</span>,
+  <span class="str">"signature_algorithm"</span>: <span class="str">"SHA256-RSA"</span>
+}</code></pre>
 
   <!-- headers -->
   <h3 id="headers"><code>headers</code> -- HTTP Response</h3>
@@ -802,6 +831,19 @@ results = resp.json()
       <tr><td><code>permissions_policy</code></td><td>Permissions-Policy</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"status_code"</span>: <span class="num">200</span>,
+  <span class="str">"headers"</span>: {
+    <span class="str">"Server"</span>: <span class="str">"ECAcc (dcd/7D5A)"</span>,
+    <span class="str">"Content-Type"</span>: <span class="str">"text/html; charset=UTF-8"</span>,
+    <span class="str">"Cache-Control"</span>: <span class="str">"max-age=604800"</span>
+  },
+  <span class="str">"security_headers"</span>: {
+    <span class="str">"strict_transport_security"</span>: <span class="str">"max-age=31536000"</span>,
+    <span class="str">"x_content_type_options"</span>: <span class="str">"nosniff"</span>,
+    <span class="str">"x_frame_options"</span>: <span class="str">"DENY"</span>
+  }
+}</code></pre>
 
   <!-- screenshot -->
   <h3 id="screenshot"><code>screenshot</code> -- Page Screenshot <span class="tag tag-pro">Pro</span></h3>
@@ -812,6 +854,10 @@ results = resp.json()
       <tr><td><code>png</code></td><td><code>string</code></td><td>Base64-encoded PNG image (empty for non-200 responses)</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"status_code"</span>: <span class="num">200</span>,
+  <span class="str">"png"</span>: <span class="str">"iVBORw0KGgoAAAANSUhEUgAA..."</span>
+}</code></pre>
   <div class="note">Tries HTTPS first, then falls back to HTTP. Captured at 1280x720 with headless Chrome.</div>
 
   <!-- reputation -->
@@ -835,6 +881,17 @@ results = resp.json()
       <tr><td><code>return_code</code></td><td><code>string</code></td><td>Raw DNS return code (only when listed)</td></tr>
     </tbody>
   </table>
+
+  <pre><code>{
+  <span class="str">"score"</span>: <span class="num">35</span>,
+  <span class="str">"risk"</span>: <span class="str">"medium"</span>,
+  <span class="str">"providers"</span>: [
+    { <span class="str">"listed"</span>: <span class="kw">true</span>, <span class="str">"category"</span>: <span class="str">"phishing"</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_dbl"</span>, <span class="str">"return_code"</span>: <span class="str">"127.0.1.4"</span> },
+    { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"surbl"</span> },
+    { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"uribl"</span> },
+    { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_zen"</span> }
+  ]
+}</code></pre>
 
   <h4>Providers</h4>
   <p>The following blocklists are checked: Spamhaus DBL, SURBL, URIBL, and Spamhaus ZEN.</p>
@@ -887,6 +944,24 @@ results = resp.json()
       <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DKIM TXT record (only when found)</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"spf"</span>: {
+    <span class="str">"raw"</span>: <span class="str">"v=spf1 include:_spf.google.com -all"</span>,
+    <span class="str">"version"</span>: <span class="str">"spf1"</span>,
+    <span class="str">"mechanisms"</span>: [<span class="str">"include:_spf.google.com"</span>],
+    <span class="str">"all"</span>: <span class="str">"-all"</span>
+  },
+  <span class="str">"dmarc"</span>: {
+    <span class="str">"raw"</span>: <span class="str">"v=DMARC1; p=reject; rua=mailto:dmarc@example.com"</span>,
+    <span class="str">"version"</span>: <span class="str">"DMARC1"</span>,
+    <span class="str">"policy"</span>: <span class="str">"reject"</span>,
+    <span class="str">"rua"</span>: <span class="str">"mailto:dmarc@example.com"</span>
+  },
+  <span class="str">"dkim"</span>: [
+    { <span class="str">"selector"</span>: <span class="str">"google"</span>, <span class="str">"found"</span>: <span class="kw">true</span>, <span class="str">"raw"</span>: <span class="str">"v=DKIM1; k=rsa; p=MIGf..."</span> },
+    { <span class="str">"selector"</span>: <span class="str">"default"</span>, <span class="str">"found"</span>: <span class="kw">false</span> }
+  ]
+}</code></pre>
   <div class="note">DKIM probes 8 common selectors: <code>google</code>, <code>default</code>, <code>selector1</code>, <code>selector2</code>, <code>k1</code>, <code>s1</code>, <code>mail</code>, <code>dkim</code>.</div>
 
   <!-- subdomains -->
@@ -908,6 +983,15 @@ results = resp.json()
       <tr><td><code>source</code></td><td><code>string</code></td><td>Data source (<code>crt.sh</code>)</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"count"</span>: <span class="num">3</span>,
+  <span class="str">"capped"</span>: <span class="kw">false</span>,
+  <span class="str">"subdomains"</span>: [
+    { <span class="str">"domain"</span>: <span class="str">"www.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> },
+    { <span class="str">"domain"</span>: <span class="str">"mail.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> },
+    { <span class="str">"domain"</span>: <span class="str">"api.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> }
+  ]
+}</code></pre>
 
   <!-- ct_logs -->
   <h3 id="ct-logs"><code>ct_logs</code> -- Certificate Transparency Logs</h3>
@@ -933,6 +1017,20 @@ results = resp.json()
       <tr><td><code>serial</code></td><td><code>string</code></td><td>Certificate serial number</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"count"</span>: <span class="num">2</span>,
+  <span class="str">"capped"</span>: <span class="kw">false</span>,
+  <span class="str">"entries"</span>: [
+    {
+      <span class="str">"logged_at"</span>: <span class="str">"2024-01-15T00:00:00"</span>,
+      <span class="str">"not_before"</span>: <span class="str">"2024-01-15T00:00:00"</span>,
+      <span class="str">"not_after"</span>: <span class="str">"2025-04-15T23:59:59"</span>,
+      <span class="str">"issuer"</span>: <span class="str">"Let's Encrypt"</span>,
+      <span class="str">"common_name"</span>: <span class="str">"example.com"</span>,
+      <span class="str">"serial"</span>: <span class="str">"abc123def456"</span>
+    }
+  ]
+}</code></pre>
   <div class="note">Reveals infrastructure, related domains, and issuance patterns. Useful for detecting phishing campaigns and tracking certificate history.</div>
 
   <!-- bgp -->
@@ -956,6 +1054,18 @@ results = resp.json()
       <tr><td><code>description</code></td><td><code>string</code></td><td>Organization name</td></tr>
     </tbody>
   </table>
+  <pre><code>{
+  <span class="str">"records"</span>: [
+    {
+      <span class="str">"ip"</span>: <span class="str">"93.184.216.34"</span>,
+      <span class="str">"asn"</span>: <span class="num">15133</span>,
+      <span class="str">"prefix"</span>: <span class="str">"93.184.216.0/24"</span>,
+      <span class="str">"country"</span>: <span class="str">"US"</span>,
+      <span class="str">"registry"</span>: <span class="str">"arin"</span>,
+      <span class="str">"description"</span>: <span class="str">"EDGECAST, US"</span>
+    }
+  ]
+}</code></pre>
   <div class="note">Identifies who owns the IP behind the domain. Useful for pivot analysis and detecting bulletproof hosting.</div>
 
   <!-- fingerprint -->
@@ -979,6 +1089,14 @@ results = resp.json()
       <tr><td><code>confidence</code></td><td><code>string</code></td><td>Which signal matched: <code>header</code> or <code>cookie</code></td></tr>
     </tbody>
   </table>
+
+  <pre><code>{
+  <span class="str">"count"</span>: <span class="num">2</span>,
+  <span class="str">"technologies"</span>: [
+    { <span class="str">"name"</span>: <span class="str">"Nginx"</span>, <span class="str">"category"</span>: <span class="str">"web-server"</span>, <span class="str">"version"</span>: <span class="str">"1.25.3"</span>, <span class="str">"confidence"</span>: <span class="str">"header"</span> },
+    { <span class="str">"name"</span>: <span class="str">"Cloudflare"</span>, <span class="str">"category"</span>: <span class="str">"cdn"</span>, <span class="str">"version"</span>: <span class="str">""</span>, <span class="str">"confidence"</span>: <span class="str">"header"</span> }
+  ]
+}</code></pre>
 
   <h4>Categories</h4>
   <p><code>web-server</code>, <code>language</code>, <code>framework</code>, <code>cdn</code>, <code>cms</code>, <code>analytics</code>, <code>security</code>, <code>hosting</code>, <code>cache</code>, <code>javascript</code>, <code>other</code></p>
@@ -1008,6 +1126,32 @@ results = resp.json()
     </tbody>
   </table>
 
+  <pre><code>{
+  <span class="str">"risk_level"</span>: <span class="str">"medium"</span>,
+  <span class="str">"score"</span>: <span class="num">45</span>,
+  <span class="str">"categories"</span>: [<span class="str">"malware"</span>],
+  <span class="str">"providers"</span>: [
+    {
+      <span class="str">"provider"</span>: <span class="str">"virustotal"</span>,
+      <span class="str">"detected"</span>: <span class="kw">true</span>,
+      <span class="str">"score"</span>: <span class="num">3</span>,
+      <span class="str">"categories"</span>: [<span class="str">"malware"</span>],
+      <span class="str">"details"</span>: <span class="str">"3/70 engines detected this domain"</span>
+    },
+    {
+      <span class="str">"provider"</span>: <span class="str">"urlhaus"</span>,
+      <span class="str">"detected"</span>: <span class="kw">false</span>
+    },
+    {
+      <span class="str">"provider"</span>: <span class="str">"alienvault_otx"</span>,
+      <span class="str">"detected"</span>: <span class="kw">true</span>,
+      <span class="str">"score"</span>: <span class="num">20</span>,
+      <span class="str">"categories"</span>: [<span class="str">"malware"</span>],
+      <span class="str">"details"</span>: <span class="str">"5 threat pulses reference this domain"</span>
+    }
+  ]
+}</code></pre>
+
   <h4>Scoring</h4>
   <p>The aggregate score is a weighted average across providers: VirusTotal (50%), URLhaus (30%), AlienVault OTX (20%). Risk levels map from the aggregate score: 0 = none, 1--20 = low, 21--50 = medium, 51--80 = high, 81--100 = critical.</p>
 
@@ -1021,6 +1165,100 @@ results = resp.json()
       <tr><td><code>message</code></td><td><code>string</code></td><td>Human-readable error description</td></tr>
     </tbody>
   </table>
+
+  <!-- Full Response Example -->
+  <h2 id="full-response-example">Full Response Example</h2>
+  <p>A complete response with all optional features enabled (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>):</p>
+  <pre><code>[
+  {
+    <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
+    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+    <span class="str">"whois"</span>: {
+      <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>,
+      <span class="str">"registrar"</span>: <span class="str">"RESERVED-Internet Assigned Numbers Authority"</span>,
+      <span class="str">"created_date"</span>: <span class="str">"1995-08-14T04:00:00Z"</span>,
+      <span class="str">"expiry_date"</span>: <span class="str">"2025-08-13T04:00:00Z"</span>,
+      <span class="str">"name_servers"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>]
+    },
+    <span class="str">"dns"</span>: {
+      <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>],
+      <span class="str">"aaaa"</span>: [<span class="str">"2606:2800:220:1:248:1893:25c8:1946"</span>],
+      <span class="str">"ns"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>],
+      <span class="str">"txt"</span>: [<span class="str">"v=spf1 -all"</span>]
+    },
+    <span class="str">"ssl"</span>: {
+      <span class="str">"subject"</span>: <span class="str">"www.example.org"</span>,
+      <span class="str">"issuer"</span>: <span class="str">"DigiCert Global G2 TLS RSA SHA256 2020 CA1"</span>,
+      <span class="str">"not_after"</span>: <span class="str">"2025-03-01T23:59:59Z"</span>,
+      <span class="str">"expired"</span>: <span class="kw">false</span>,
+      <span class="str">"days_until_expiry"</span>: <span class="num">142</span>,
+      <span class="str">"sans"</span>: [<span class="str">"www.example.org"</span>, <span class="str">"example.net"</span>, <span class="str">"example.org"</span>]
+    },
+    <span class="str">"headers"</span>: {
+      <span class="str">"status_code"</span>: <span class="num">200</span>,
+      <span class="str">"headers"</span>: { <span class="str">"Server"</span>: <span class="str">"ECAcc (dcd/7D5A)"</span> },
+      <span class="str">"security_headers"</span>: {
+        <span class="str">"strict_transport_security"</span>: <span class="str">"max-age=31536000"</span>,
+        <span class="str">"x_content_type_options"</span>: <span class="str">"nosniff"</span>
+      }
+    },
+    <span class="str">"screenshot"</span>: {
+      <span class="str">"status_code"</span>: <span class="num">200</span>,
+      <span class="str">"png"</span>: <span class="str">"iVBORw0KGgoAAAANSUhEUgAA..."</span>
+    },
+    <span class="str">"reputation"</span>: {
+      <span class="str">"score"</span>: <span class="num">0</span>,
+      <span class="str">"risk"</span>: <span class="str">"clean"</span>,
+      <span class="str">"providers"</span>: [
+        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_dbl"</span> },
+        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"surbl"</span> },
+        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"uribl"</span> },
+        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_zen"</span> }
+      ]
+    },
+    <span class="str">"email_security"</span>: {
+      <span class="str">"spf"</span>: { <span class="str">"raw"</span>: <span class="str">"v=spf1 -all"</span>, <span class="str">"version"</span>: <span class="str">"spf1"</span>, <span class="str">"all"</span>: <span class="str">"-all"</span> },
+      <span class="str">"dmarc"</span>: { <span class="str">"raw"</span>: <span class="str">"v=DMARC1; p=reject"</span>, <span class="str">"version"</span>: <span class="str">"DMARC1"</span>, <span class="str">"policy"</span>: <span class="str">"reject"</span> },
+      <span class="str">"dkim"</span>: [{ <span class="str">"selector"</span>: <span class="str">"default"</span>, <span class="str">"found"</span>: <span class="kw">false</span> }]
+    },
+    <span class="str">"subdomains"</span>: {
+      <span class="str">"count"</span>: <span class="num">2</span>,
+      <span class="str">"capped"</span>: <span class="kw">false</span>,
+      <span class="str">"subdomains"</span>: [
+        { <span class="str">"domain"</span>: <span class="str">"www.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> },
+        { <span class="str">"domain"</span>: <span class="str">"mail.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> }
+      ]
+    },
+    <span class="str">"ct_logs"</span>: {
+      <span class="str">"count"</span>: <span class="num">1</span>,
+      <span class="str">"capped"</span>: <span class="kw">false</span>,
+      <span class="str">"entries"</span>: [
+        { <span class="str">"logged_at"</span>: <span class="str">"2024-01-15T00:00:00"</span>, <span class="str">"issuer"</span>: <span class="str">"Let's Encrypt"</span>, <span class="str">"common_name"</span>: <span class="str">"example.com"</span>, <span class="str">"serial"</span>: <span class="str">"abc123"</span> }
+      ]
+    },
+    <span class="str">"bgp"</span>: {
+      <span class="str">"records"</span>: [
+        { <span class="str">"ip"</span>: <span class="str">"93.184.216.34"</span>, <span class="str">"asn"</span>: <span class="num">15133</span>, <span class="str">"prefix"</span>: <span class="str">"93.184.216.0/24"</span>, <span class="str">"country"</span>: <span class="str">"US"</span>, <span class="str">"description"</span>: <span class="str">"EDGECAST, US"</span> }
+      ]
+    },
+    <span class="str">"fingerprint"</span>: {
+      <span class="str">"count"</span>: <span class="num">1</span>,
+      <span class="str">"technologies"</span>: [
+        { <span class="str">"name"</span>: <span class="str">"ECAcc"</span>, <span class="str">"category"</span>: <span class="str">"cdn"</span>, <span class="str">"version"</span>: <span class="str">""</span>, <span class="str">"confidence"</span>: <span class="str">"header"</span> }
+      ]
+    },
+    <span class="str">"threat_intel"</span>: {
+      <span class="str">"risk_level"</span>: <span class="str">"none"</span>,
+      <span class="str">"score"</span>: <span class="num">0</span>,
+      <span class="str">"providers"</span>: [
+        { <span class="str">"provider"</span>: <span class="str">"virustotal"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> },
+        { <span class="str">"provider"</span>: <span class="str">"urlhaus"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> },
+        { <span class="str">"provider"</span>: <span class="str">"alienvault_otx"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> }
+      ]
+    },
+    <span class="str">"errors"</span>: []
+  }
+]</code></pre>
 
   <!-- Caching -->
   <h2 id="caching">Caching</h2>
