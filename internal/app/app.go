@@ -23,6 +23,7 @@ import (
 
 // Run wires up all dependencies and runs the server until shutdown.
 func Run(logger *zap.Logger, version string) error {
+	logger = logger.With(zap.String("version", version))
 	cfg := config.Config()
 
 	port := cfg.GetInt("application.port")
