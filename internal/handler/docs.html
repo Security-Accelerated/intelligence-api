@@ -438,6 +438,7 @@
     <a href="#ct-logs" class="indent">ct_logs</a>
     <a href="#bgp" class="indent">bgp</a>
     <a href="#fingerprint" class="indent">fingerprint</a>
+    <a href="#threat-intel" class="indent">threat_intel</a>
     <a href="#errors-field" class="indent">errors</a>
   </div>
 
@@ -455,7 +456,7 @@
   <section class="hero" id="top">
     <p style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--accent);margin-bottom:4px;">Security Accelerated</p>
     <h1>Intelligence API</h1>
-    <p>Domain intelligence REST API. Perform concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, and technology fingerprinting lookups for any domain.</p>
+    <p>Domain intelligence REST API. Perform concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for any domain.</p>
     <div class="base-url">https://api.securityaccelerated.com</div>
     <p style="margin-top:12px;font-size:14px;color:#697386;">Questions? <a href="mailto:support@securityaccelerated.com" style="color:var(--accent);text-decoration:none;">support@securityaccelerated.com</a></p>
   </section>
@@ -489,6 +490,7 @@
       <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
       <tr><td><strong>Screenshot</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
       <tr><td><strong>Reputation</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+      <tr><td><strong>Threat Intelligence</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
     </tbody>
   </table>
 
@@ -510,7 +512,7 @@
       </tr>
       <tr>
         <td><strong>Pro</strong></td>
-        <td>120 req/min, 20 domains/request, all lookups + screenshot + reputation</td>
+        <td>120 req/min, 20 domains/request, all lookups + screenshot + reputation + threat intel</td>
         <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" style="background:var(--accent);color:#fff;padding:6px 16px;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Subscribe</a>{{else}}Contact us{{end}}</td>
       </tr>
     </tbody>
@@ -601,6 +603,13 @@
         <td><span class="tag tag-optional">Optional</span></td>
         <td><code>false</code></td>
         <td>Detect web technologies from HTTP response headers.</td>
+      </tr>
+      <tr>
+        <td><code>threat_intel</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Query threat intelligence feeds (VirusTotal, URLhaus, AlienVault OTX). <span class="tag tag-pro">Pro</span></td>
       </tr>
     </tbody>
   </table>
@@ -693,10 +702,11 @@ results = resp.json()
     <span class="str">"headers"</span>: { ... },
     <span class="str">"email_security"</span>: { ... },
     <span class="str">"subdomains"</span>: { ... },
+    <span class="str">"threat_intel"</span>: { ... },
     <span class="str">"errors"</span>: []
   }
 ]</code></pre>
-  <p>Optional fields (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>) are only present in the response when requested.</p>
+  <p>Optional fields (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>) are only present in the response when requested.</p>
 
   <h3 id="invalid-domains">Invalid Domains</h3>
   <p>Invalid domains in a multi-domain request do not fail the entire request. They are included in the response with a validation error while valid domains return normally:</p>
@@ -972,6 +982,34 @@ results = resp.json()
 
   <h4>Categories</h4>
   <p><code>web-server</code>, <code>language</code>, <code>framework</code>, <code>cdn</code>, <code>cms</code>, <code>analytics</code>, <code>security</code>, <code>hosting</code>, <code>cache</code>, <code>javascript</code>, <code>other</code></p>
+
+  <!-- threat_intel -->
+  <h3 id="threat-intel"><code>threat_intel</code> -- Threat Intelligence <span class="tag tag-pro">Pro</span></h3>
+  <p>Queries external threat intelligence feeds concurrently and returns an aggregated risk assessment. Three providers are queried: <strong>VirusTotal</strong> (70+ antivirus engines), <strong>URLhaus</strong> (Abuse.ch malware URL database), and <strong>AlienVault OTX</strong> (community threat pulses).</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>risk_level</code></td><td><code>string</code></td><td>Aggregate risk: <code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, or <code>critical</code></td></tr>
+      <tr><td><code>score</code></td><td><code>int</code></td><td>Weighted aggregate score (0--100)</td></tr>
+      <tr><td><code>categories</code></td><td><code>string[]</code></td><td>Merged threat categories across all providers</td></tr>
+      <tr><td><code>providers</code></td><td><code>array</code></td><td>Per-provider results (see below)</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Provider Result</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>provider</code></td><td><code>string</code></td><td>Provider name: <code>virustotal</code>, <code>urlhaus</code>, or <code>alienvault_otx</code></td></tr>
+      <tr><td><code>detected</code></td><td><code>bool</code></td><td>Whether the provider flagged this domain</td></tr>
+      <tr><td><code>score</code></td><td><code>int</code></td><td>Provider-specific score (0--100). Omitted when not detected.</td></tr>
+      <tr><td><code>categories</code></td><td><code>string[]</code></td><td>Threat categories from this provider. Omitted when not detected.</td></tr>
+      <tr><td><code>details</code></td><td><code>string</code></td><td>Human-readable summary (e.g., "3/70 engines detected this domain"). Omitted when not detected.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Scoring</h4>
+  <p>The aggregate score is a weighted average across providers: VirusTotal (50%), URLhaus (30%), AlienVault OTX (20%). Risk levels map from the aggregate score: 0 = none, 1--20 = low, 21--50 = medium, 51--80 = high, 81--100 = critical.</p>
 
   <!-- errors -->
   <h3 id="errors-field"><code>errors</code> -- Partial Failures</h3>

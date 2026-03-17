@@ -35,7 +35,7 @@ docs/                         → Sales slick, developer guide, domain lookup ov
 Services use function fields (`lookupWhois`, `lookupDNS`, etc.) instead of interfaces for each lookup. The constructor wires in real implementations from the `domain` package. Tests swap them via `SetLookups()` and per-feature setters (`SetEmailSecurityLookup`, `SetSubdomainLookup`). This avoids interface pollution while keeping tests fully deterministic.
 
 ### Concurrent fan-out with shared response
-`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains, ct_logs, bgp) only spawn when requested. Fingerprint runs as post-processing after `wg.Wait()` using already-fetched headers data (zero extra network calls). A 30-second context timeout covers the entire operation.
+`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains, ct_logs, bgp, threat_intel) only spawn when requested. Fingerprint runs as post-processing after `wg.Wait()` using already-fetched headers data (zero extra network calls). A 30-second context timeout covers the entire operation.
 
 ### Partial failure tolerance
 Each lookup goroutine catches its own errors. Failures are appended to `resp.Errors` with sanitized messages — the rest of the response still returns. Full errors are logged server-side; users see only safe summaries via `sanitizeErr()`.
