@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 0
       - name: Get version from git
         id: version
-        run: echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null || git describe --tags --always)" >> "$GITHUB_OUTPUT"
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only --build-arg VERSION=${{ steps.version.outputs.version }}
         env:
