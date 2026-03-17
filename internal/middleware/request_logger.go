@@ -21,6 +21,7 @@ var ContextKeys = []string{
 	"ct_logs_requested",
 	"bgp_requested",
 	"fingerprint_requested",
+	"threat_intel_requested",
 }
 
 // IntContextKeys lists integer gin context keys logged per request.

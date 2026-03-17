@@ -128,7 +128,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
 	})
 
-	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100, fpEngine, &notifications.NoopRecorder{})
+	svc := service.NewDomainService(rc, 5*time.Minute, 15*time.Second, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -195,6 +195,19 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		return &domain.BGPInfo{
 			Records: []domain.ASNRecord{
 				{IP: "93.184.216.34", ASN: 15133, Prefix: "93.184.216.0/24", Country: "US", Registry: "arin", Description: "EDGECAST, US"},
+			},
+		}, nil
+	})
+
+	svc.SetThreatIntelLookup(func(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+		return &domain.ThreatIntelInfo{
+			RiskLevel:  "medium",
+			Score:      45,
+			Categories: []string{"malware"},
+			Providers: []*domain.ThreatIntelProviderResult{
+				{Provider: "virustotal", Detected: true, Score: 5, Categories: []string{"malware"}, Details: "3/70 engines detected this domain"},
+				{Provider: "urlhaus", Detected: false},
+				{Provider: "alienvault_otx", Detected: true, Score: 20, Categories: []string{"malware"}, Details: "5 threat pulses reference this domain"},
 			},
 		}, nil
 	})
@@ -1428,5 +1441,88 @@ func TestIntegration_AdminUsage_NoKeyUnauthorized(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+// --- Threat Intel integration tests ---
+
+func TestIntegration_ThreatIntel_FreeGets403(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_ThreatIntel_BasicGets403(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestIntegration_ThreatIntel_ProAllowed(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-pro-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].ThreatIntel == nil {
+		t.Fatal("expected ThreatIntel to be populated")
+	}
+	if resp[0].ThreatIntel.RiskLevel != "medium" {
+		t.Errorf("RiskLevel = %q, want %q", resp[0].ThreatIntel.RiskLevel, "medium")
+	}
+	if len(resp[0].ThreatIntel.Providers) != 3 {
+		t.Errorf("len(Providers) = %d, want 3", len(resp[0].ThreatIntel.Providers))
+	}
+}
+
+func TestIntegration_ThreatIntel_AdminAllowed(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp []*domain.DomainResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp[0].ThreatIntel == nil {
+		t.Fatal("expected ThreatIntel to be populated")
 	}
 }

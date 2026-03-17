@@ -147,6 +147,29 @@ func failBGP(_ context.Context, _ string) (*domain.BGPInfo, error) {
 	return nil, errors.New("bgp failed")
 }
 
+func okThreatIntel(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+	return &domain.ThreatIntelInfo{
+		RiskLevel: "medium",
+		Score:     45,
+		Categories: []string{"malware"},
+		Providers: []*domain.ThreatIntelProviderResult{
+			{Provider: "virustotal", Detected: true, Score: 5, Categories: []string{"malware"}, Details: "3/70 engines detected this domain"},
+			{Provider: "urlhaus", Detected: false},
+			{Provider: "alienvault_otx", Detected: true, Score: 20, Categories: []string{"malware"}, Details: "5 threat pulses reference this domain"},
+		},
+	}, nil
+}
+func failThreatIntel(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+	return &domain.ThreatIntelInfo{
+		RiskLevel: "none",
+		Score:     0,
+		Providers: []*domain.ThreatIntelProviderResult{},
+	}, []domain.LookupError{
+		{Lookup: "threat_intel:virustotal", Message: "virustotal: rate limit"},
+		{Lookup: "threat_intel:urlhaus", Message: "urlhaus: connection refused"},
+	}
+}
+
 func newTestService(mc *mockCache) *DomainService {
 	return &DomainService{
 		cache:               mc,
@@ -165,6 +188,7 @@ func newTestService(mc *mockCache) *DomainService {
 		lookupSubdomains:    okSubdomains,
 		lookupCTLogs:        okCTLogs,
 		lookupBGP:           okBGP,
+		lookupThreatIntel:   okThreatIntel,
 	}
 }
 
@@ -251,6 +275,7 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 		lookupSubdomains:    failSubdomains,
 		lookupCTLogs:        failCTLogs,
 		lookupBGP:           failBGP,
+		lookupThreatIntel:   failThreatIntel,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "fail.com", noOpts())
@@ -285,6 +310,7 @@ func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
 		lookupSubdomains:    okSubdomains,
 		lookupCTLogs:        okCTLogs,
 		lookupBGP:           okBGP,
+		lookupThreatIntel:   okThreatIntel,
 	}
 
 	resp, hit := svc.Lookup(context.Background(), "partial.com", noOpts())
@@ -1074,6 +1100,7 @@ func allOpts() domain.LookupOptions {
 		CTLogs:        true,
 		BGP:           true,
 		Fingerprint:   true,
+		ThreatIntel:   true,
 	}
 }
 
@@ -1124,6 +1151,9 @@ func TestLookup_AllOptions_AllSucceed(t *testing.T) {
 	if resp.Fingerprint == nil {
 		t.Error("expected Fingerprint")
 	}
+	if resp.ThreatIntel == nil {
+		t.Error("expected ThreatIntel")
+	}
 	if len(resp.Errors) != 0 {
 		t.Errorf("expected no errors, got %v", resp.Errors)
 	}
@@ -1131,7 +1161,7 @@ func TestLookup_AllOptions_AllSucceed(t *testing.T) {
 	// Should cache under the combined key
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
-	if _, ok := mc.store["example.com:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains"]; !ok {
+	if _, ok := mc.store["example.com:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains+threat_intel"]; !ok {
 		t.Error("expected combined cache key")
 	}
 }
@@ -1155,6 +1185,7 @@ func TestLookup_AllOptions_AllOptionalFail(t *testing.T) {
 		lookupSubdomains:    failSubdomains,
 		lookupCTLogs:        failCTLogs,
 		lookupBGP:           failBGP,
+		lookupThreatIntel:   failThreatIntel,
 	}
 
 	resp, _ := svc.Lookup(context.Background(), "example.com", allOpts())
@@ -1184,12 +1215,15 @@ func TestLookup_AllOptions_AllOptionalFail(t *testing.T) {
 		t.Error("expected BGP to be nil on failure")
 	}
 
-	// Reputation always returns a result struct (even on failure)
+	// Reputation and ThreatIntel always return a result struct (even on failure)
 	if resp.Reputation == nil {
 		t.Error("expected Reputation to be non-nil (always returned)")
 	}
+	if resp.ThreatIntel == nil {
+		t.Error("expected ThreatIntel to be non-nil (always returned)")
+	}
 
-	// Should have errors for screenshot, email_security, subdomains, ct_logs, bgp, plus 4 reputation provider errors
+	// Should have errors for screenshot, email_security, subdomains, ct_logs, bgp, plus reputation + threat_intel provider errors
 	if len(resp.Errors) < 5 {
 		t.Errorf("expected at least 5 errors, got %d: %v", len(resp.Errors), resp.Errors)
 	}
@@ -1225,5 +1259,102 @@ func TestLookup_SetFingerprintEngine(t *testing.T) {
 	}
 	if resp.Fingerprint.Technologies[0].Name != "Custom" {
 		t.Errorf("Name = %q, want %q", resp.Fingerprint.Technologies[0].Name, "Custom")
+	}
+}
+
+// --- Threat Intel tests ---
+
+func threatIntelOpts() domain.LookupOptions { return domain.LookupOptions{ThreatIntel: true} }
+
+func TestLookup_ThreatIntel_Populated(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", threatIntelOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	if resp.ThreatIntel == nil {
+		t.Fatal("expected ThreatIntel to be populated")
+	}
+	if resp.ThreatIntel.Score != 45 {
+		t.Errorf("ThreatIntel.Score = %d, want 45", resp.ThreatIntel.Score)
+	}
+	if resp.ThreatIntel.RiskLevel != "medium" {
+		t.Errorf("ThreatIntel.RiskLevel = %q, want %q", resp.ThreatIntel.RiskLevel, "medium")
+	}
+	if len(resp.ThreatIntel.Providers) != 3 {
+		t.Errorf("len(ThreatIntel.Providers) = %d, want 3", len(resp.ThreatIntel.Providers))
+	}
+}
+
+func TestLookup_ThreatIntel_NotIncludedWithoutOpt(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.ThreatIntel != nil {
+		t.Error("expected ThreatIntel to be nil when not requested")
+	}
+}
+
+func TestLookup_ThreatIntel_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupThreatIntel = failThreatIntel
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", threatIntelOpts())
+	if resp.ThreatIntel == nil {
+		t.Fatal("expected ThreatIntel to be non-nil (always returned)")
+	}
+	if resp.ThreatIntel.Score != 0 {
+		t.Errorf("expected Score = 0 when all providers fail, got %d", resp.ThreatIntel.Score)
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if strings.HasPrefix(e.Lookup, "threat_intel:") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected threat_intel provider errors in resp.Errors")
+	}
+}
+
+func TestLookup_ThreatIntel_SeparateCacheKey(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	svc.Lookup(context.Background(), "example.com", threatIntelOpts())
+
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, ok := mc.store["example.com"]; !ok {
+		t.Error("expected cache entry for base key 'example.com'")
+	}
+	if _, ok := mc.store["example.com:threat_intel"]; !ok {
+		t.Error("expected cache entry for threat_intel key 'example.com:threat_intel'")
+	}
+	if mc.setCalls != 2 {
+		t.Errorf("expected 2 cache Set calls, got %d", mc.setCalls)
+	}
+}
+
+func TestLookup_SetThreatIntelLookup(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	called := false
+	svc.SetThreatIntelLookup(func(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+		called = true
+		return &domain.ThreatIntelInfo{RiskLevel: "none", Score: 0, Providers: []*domain.ThreatIntelProviderResult{}}, nil
+	})
+
+	svc.Lookup(context.Background(), "example.com", threatIntelOpts())
+	if !called {
+		t.Error("expected custom threat intel lookup to be called")
 	}
 }

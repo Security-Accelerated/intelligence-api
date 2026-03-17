@@ -20,6 +20,7 @@ type UsageEntry struct {
 	CTLogs        bool
 	BGP           bool
 	Fingerprint   bool
+	ThreatIntel   bool
 }
 
 // Recorder accepts usage entries for persistent storage.

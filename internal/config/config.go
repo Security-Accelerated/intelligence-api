@@ -83,6 +83,8 @@ func init() {
 	config.SetDefault("billing.stale_key_days", 365)
 	config.SetDefault("usage.buffer_size", 256)
 	config.SetDefault("usage.flush_interval", "5s")
+	config.SetDefault("threat_intel.virustotal_api_key", "")
+	config.SetDefault("threat_intel.alienvault_api_key", "")
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

@@ -65,6 +65,10 @@ usage:
   buffer_size: 256
   flush_interval: 5s
 
+threat_intel:
+  virustotal_api_key: ""
+  alienvault_api_key: ""
+
 postgres:
   host: postgres
   port: 5432

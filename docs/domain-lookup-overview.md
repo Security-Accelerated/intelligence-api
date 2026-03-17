@@ -38,6 +38,8 @@ Status code, raw response headers, and a security header audit (HSTS, CSP, X-Fra
 
 **Reputation** — Checks the domain against four DNS-based blocklists concurrently (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) and computes a risk score from 0 (clean) to 100 (maximum risk). Each provider result includes whether the domain is listed and the category (phishing, malware, spam, botnet C2, etc.).
 
+**Threat Intel** — Queries VirusTotal, URLhaus (Abuse.ch), and AlienVault OTX for threat intelligence data on the domain. Returns malware detections, campaign attribution, and indicator of compromise (IOC) details. Each source is queried concurrently and results are merged into a unified view: detection ratios, malware families, associated campaigns, and last-seen timestamps. Pro and admin plans only.
+
 ## How To Use It
 
 ### Basic lookup
@@ -65,7 +67,8 @@ curl -X POST https://api.securityaccelerated.com/v1/domain/lookup \
     "bgp": true,
     "fingerprint": true,
     "reputation": true,
-    "screenshot": true
+    "screenshot": true,
+    "threat_intel": true
   }'
 ```
 
@@ -193,6 +196,7 @@ Domain input is flexible: raw domains, URLs with `http://`/`https://` prefixes, 
 | **bgp** | Who's hosting this? What country? Is it a known bulletproof hoster? Same ASN as other targets? |
 | **fingerprint** | What web technologies are running? What server/framework/CDN/CMS? What version? |
 | **reputation** | Is this domain on any blocklists? What category (phishing, malware, spam, botnet)? |
+| **threat_intel** | Any malware detections? What campaigns is it tied to? What IOCs are associated? |
 | **screenshot** | What does the page actually look like? |
 
 ## Partial Failures

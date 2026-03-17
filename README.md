@@ -1,7 +1,7 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, subdomain enumeration, certificate transparency, BGP/ASN, and technology fingerprinting lookups for one or more domains, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, subdomain enumeration, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for one or more domains, with Redis caching.
 
 **Production URL:** `https://api.securityaccelerated.com`
 
@@ -17,12 +17,12 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 |------|-------------|
 | `free` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security + subdomains + CT logs + BGP/ASN + fingerprinting. 1 domain per request. |
 | `basic` | All free capabilities, up to 5 domains per request |
-| `pro` | All basic capabilities + page screenshots + reputation checks, up to 20 domains per request |
+| `pro` | All basic capabilities + page screenshots + reputation checks + threat intelligence, up to 20 domains per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
 The plan is stored in the `customers` table. New customers default to `basic`.
 
-Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Basic plan requests for pro-only options (screenshot, reputation) receive `403 Forbidden`. The `/v1/hello` health check requires no authentication.
+Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Basic plan requests for pro-only options (screenshot, reputation, threat_intel) receive `403 Forbidden`. The `/v1/hello` health check requires no authentication.
 
 ### Rate Limiting
 
@@ -64,6 +64,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
   "domains": ["example.com", "example.org"],
   "screenshot": true,
   "reputation": true,
+  "threat_intel": true,
   "email_security": true,
   "subdomains": true,
   "ct_logs": true,
@@ -77,6 +78,8 @@ The `domains` field accepts an array of domain names. Each entry accepts raw dom
 The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
 
 The optional `reputation` field (default `false`) checks each domain against multiple DNS-based blocklists concurrently (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) and returns a computed risk score. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
+
+The optional `threat_intel` field (default `false`) queries multiple threat intelligence providers (VirusTotal, URLhaus, AlienVault OTX) to assess whether a domain is associated with malicious activity. Returns a composite risk score, risk level, threat categories, and per-provider results. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
 
 The optional `email_security` field (default `false`) checks SPF, DMARC, and DKIM records for each domain via DNS lookups. Available to **all plans**. DKIM probes 8 common selectors (`google`, `default`, `selector1`, `selector2`, `k1`, `s1`, `mail`, `dkim`).
 
@@ -115,6 +118,16 @@ curl -X POST http://localhost:8080/v1/domain/lookup \
         { "listed": false, "provider": "surbl" },
         { "listed": false, "provider": "uribl" },
         { "listed": false, "provider": "spamhaus_zen" }
+      ]
+    },
+    "threat_intel": {
+      "risk_level": "medium",
+      "score": 45,
+      "categories": ["malware"],
+      "providers": [
+        { "provider": "virustotal", "detected": true, "score": 3, "categories": ["malware"], "details": "3/70 engines detected this domain" },
+        { "provider": "urlhaus", "detected": false },
+        { "provider": "alienvault_otx", "detected": true, "score": 5, "categories": ["malware"], "details": "5 threat pulses reference this domain" }
       ]
     },
     "email_security": {
@@ -306,6 +319,37 @@ Each provider entry contains:
 
 **Scoring:** Each provider listing adds points based on category severity. Multiple listings across providers stack. The score is capped at 100. Higher-trust, domain-specific providers (Spamhaus DBL) carry more weight than IP-based providers (Spamhaus ZEN).
 
+### `threat_intel` — Threat Intelligence (Pro/Admin Only)
+
+Queries multiple threat intelligence providers to assess whether a domain is associated with malicious activity. Only present when `"threat_intel": true` is included in the request.
+
+| Field | What it means |
+|-------|---------------|
+| `risk_level` | Composite risk level: `clean`, `low`, `medium`, `high`, `critical` |
+| `score` | Composite risk score from 0 (clean) to 100 (maximum risk) |
+| `categories` | Aggregated threat categories across all providers (e.g. `malware`, `phishing`, `c2`) |
+| `providers` | Array of per-provider results |
+
+Each provider entry contains:
+
+| Field | What it means |
+|-------|---------------|
+| `provider` | Which threat intel source was queried |
+| `detected` | Whether this provider flagged the domain as malicious |
+| `score` | Provider-specific detection score (only when detected) |
+| `categories` | Threat categories from this provider (only when detected) |
+| `details` | Human-readable summary of the detection (only when detected) |
+
+**Providers:**
+
+| Provider | Source | What it checks |
+|----------|--------|---------------|
+| `virustotal` | VirusTotal | Aggregates results from 70+ antivirus engines and URL scanners |
+| `urlhaus` | URLhaus (Abuse.ch) | Database of malicious URLs used for malware distribution |
+| `alienvault_otx` | AlienVault OTX | Open threat exchange with community-contributed threat pulses |
+
+**Scoring:** Each provider contributes to the composite score based on detection severity. Multiple detections across providers stack. The score is capped at 100. The `risk_level` maps from the composite score: `clean` (0), `low` (1-29), `medium` (30-59), `high` (60-79), `critical` (80-100).
+
 ### `email_security` — Email Security (All Plans)
 
 Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"email_security": true` is included in the request.
@@ -443,7 +487,7 @@ Returns aggregated API usage statistics for a configurable time window.
   "total_domains": 1580,
   "status_codes": {"200": 1190, "400": 32, "403": 15, "429": 10},
   "feature_usage": {
-    "screenshot": 45, "reputation": 120, "email_security": 310,
+    "screenshot": 45, "reputation": 120, "threat_intel": 95, "email_security": 310,
     "subdomains": 200, "ct_logs": 85, "bgp": 60, "fingerprint": 400
   },
   "requests_by_path": {"/v1/domain/lookup": 1200, "/v1/admin/fingerprints": 12},
@@ -461,11 +505,12 @@ Optional features use composite cache keys built from sorted feature suffixes. E
 - `domain:email_security` — base + email security
 - `domain:reputation` — base + reputation
 - `domain:screenshot` — base + screenshot
+- `domain:threat_intel` — base + threat intelligence
 - `domain:subdomains` — base + subdomain enumeration
 - `domain:bgp` — base + BGP/ASN
 - `domain:ct_logs` — base + CT logs
 - `domain:fingerprint` — base + technology fingerprinting
-- `domain:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains` — base + all optional features
+- `domain:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains+threat_intel` — base + all optional features
 
 ## Getting Started
 
@@ -506,6 +551,8 @@ Config values:
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
+| `threat_intel.virustotal_api_key` | `""` | VirusTotal API key (enables VirusTotal provider) |
+| `threat_intel.alienvault_api_key` | `""` | AlienVault OTX API key (enables AlienVault provider) |
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
@@ -696,6 +743,8 @@ git push origin main:release      # trigger Fly deploy
 | `STRIPE_PORTAL_LINK` | Stripe Customer Portal URL for subscription management |
 | `USAGE_BUFFER_SIZE` | Channel buffer size for async usage logging (default: 256) |
 | `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |
+| `THREAT_INTEL_VIRUSTOTAL_API_KEY` | VirusTotal API key (enables VirusTotal threat intel provider) |
+| `THREAT_INTEL_ALIENVAULT_API_KEY` | AlienVault OTX API key (enables AlienVault threat intel provider) |
 
 ### Scripts
 

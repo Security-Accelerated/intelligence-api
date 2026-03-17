@@ -39,7 +39,7 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		return
 	}
 
-	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation, EmailSecurity: req.EmailSecurity, Subdomains: req.Subdomains, CTLogs: req.CTLogs, BGP: req.BGP, Fingerprint: req.Fingerprint}
+	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation, EmailSecurity: req.EmailSecurity, Subdomains: req.Subdomains, CTLogs: req.CTLogs, BGP: req.BGP, Fingerprint: req.Fingerprint, ThreatIntel: req.ThreatIntel}
 	c.Set("domain_count", len(req.Domains))
 	c.Set("screenshot_requested", req.Screenshot)
 	c.Set("reputation_requested", req.Reputation)
@@ -48,6 +48,7 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 	c.Set("ct_logs_requested", req.CTLogs)
 	c.Set("bgp_requested", req.BGP)
 	c.Set("fingerprint_requested", req.Fingerprint)
+	c.Set("threat_intel_requested", req.ThreatIntel)
 
 	if req.Screenshot && planStr != "pro" && planStr != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "screenshot requires a pro plan"})
@@ -56,6 +57,11 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 
 	if req.Reputation && planStr != "pro" && planStr != "admin" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "reputation requires a pro plan"})
+		return
+	}
+
+	if req.ThreatIntel && planStr != "pro" && planStr != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "threat_intel requires a pro plan"})
 		return
 	}
 

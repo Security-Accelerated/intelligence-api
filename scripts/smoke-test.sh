@@ -113,6 +113,10 @@ post 200 "reputation (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains
 post 403 "reputation (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"reputation":true}'
 post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"reputation":true}'
 post 200 "screenshot+reputation (admin)" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"screenshot":true,"reputation":true}'
+post 200 "threat_intel (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"threat_intel":true}'
+post 200 "threat_intel (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"threat_intel":true}'
+post 403 "threat_intel (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"threat_intel":true}'
+post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"threat_intel":true}'
 
 echo ""
 echo "=== Domain Lookup — All-Plan Options ==="

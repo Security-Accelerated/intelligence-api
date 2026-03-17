@@ -78,7 +78,8 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
   "subdomains": false,
   "ct_logs": false,
   "bgp": false,
-  "fingerprint": false
+  "fingerprint": false,
+  "threat_intel": false
 }
 ```
 
@@ -92,6 +93,7 @@ Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP head
 | `ct_logs` | bool | No | `false` | Query Certificate Transparency logs for all issued certificates |
 | `bgp` | bool | No | `false` | Look up BGP/ASN information for the domain's IP addresses |
 | `fingerprint` | bool | No | `false` | Detect web technologies from HTTP response headers |
+| `threat_intel` | bool | No | `false` | Query threat intelligence feeds (pro plan and above) |
 
 Domain names are normalized automatically: `http://` and `https://` prefixes are stripped, trailing slashes are removed. Raw IP addresses are rejected.
 
@@ -113,12 +115,13 @@ Domain names are normalized automatically: `http://` and `https://` prefixes are
     "ct_logs": { },
     "bgp": { },
     "fingerprint": { },
+    "threat_intel": { },
     "errors": []
   }
 ]
 ```
 
-Optional fields (`screenshot`, `reputation`, `email_security`, `subdomains`, `ct_logs`, `bgp`, `fingerprint`) are only present when requested.
+Optional fields (`screenshot`, `reputation`, `email_security`, `subdomains`, `ct_logs`, `bgp`, `fingerprint`, `threat_intel`) are only present when requested.
 
 ### Example
 
@@ -355,6 +358,31 @@ Each technology:
 | `category` | string | Category: `web-server`, `language`, `framework`, `cdn`, `cms`, `analytics`, `security`, `hosting`, `cache`, `javascript`, `other` |
 | `version` | string | Version extracted from header value (empty if not detectable) |
 | `confidence` | string | Which signal matched: `header` or `cookie` |
+
+## `threat_intel` — Threat Intelligence (Pro)
+
+Queries multiple threat intelligence feeds and returns a consolidated risk assessment. Only present when `"threat_intel": true` is included in the request.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `score` | int | Aggregate risk score from 0 (clean) to 100 (maximum risk) |
+| `risk` | string | `clean`, `low`, `medium`, or `high` |
+| `providers` | array | Per-provider results |
+
+Each provider:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `provider` | string | Feed name (`virustotal`, `urlhaus`, `alienvault_otx`) |
+| `detected` | bool | Whether the domain was flagged by this provider |
+| `category` | string | Classification if detected (e.g. `malware`, `phishing`, `c2`) |
+| `details` | object | Provider-specific metadata (varies by provider) |
+
+**VirusTotal** — Checks domain against aggregated antivirus and URL scanner results. `details` includes `positives` (number of engines flagging the domain) and `total` (total engines queried).
+
+**URLhaus** — Checks for known malware distribution URLs associated with the domain. `details` includes `threat` (malware family if known) and `url_count` (number of malicious URLs tracked).
+
+**AlienVault OTX** — Checks Open Threat Exchange pulse data for indicators of compromise. `details` includes `pulse_count` (number of threat intelligence pulses referencing the domain) and `tags` (associated threat tags).
 
 ## `errors` — Partial Failures
 

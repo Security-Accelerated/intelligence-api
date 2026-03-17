@@ -51,9 +51,10 @@ type DomainService struct {
 	lookupSubdomains     func(ctx context.Context, d string, opts domain.SubdomainOptions) (*domain.SubdomainInfo, error)
 	lookupCTLogs         func(ctx context.Context, d string, maxEntries int) (*domain.CTLogsInfo, error)
 	lookupBGP            func(ctx context.Context, d string) (*domain.BGPInfo, error)
+	lookupThreatIntel    func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -78,6 +79,9 @@ func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, 
 		lookupSubdomains:    domain.LookupSubdomains,
 		lookupCTLogs:        domain.LookupCTLogs,
 		lookupBGP:           domain.LookupBGP,
+		lookupThreatIntel: func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+			return domain.LookupThreatIntel(ctx, d, tiProviders)
+		},
 	}
 }
 
@@ -125,6 +129,13 @@ func (s *DomainService) SetBGPLookup(
 	s.lookupBGP = fn
 }
 
+// SetThreatIntelLookup replaces the threat intel lookup function (for testing).
+func (s *DomainService) SetThreatIntelLookup(
+	fn func(context.Context, string) (*domain.ThreatIntelInfo, []domain.LookupError),
+) {
+	s.lookupThreatIntel = fn
+}
+
 // SetFingerprintEngine replaces the fingerprint engine (for testing).
 func (s *DomainService) SetFingerprintEngine(engine *domain.FingerprintEngine) {
 	s.fingerprintEngine = engine
@@ -152,6 +163,9 @@ func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	}
 	if opts.Subdomains {
 		suffixes = append(suffixes, "subdomains")
+	}
+	if opts.ThreatIntel {
+		suffixes = append(suffixes, "threat_intel")
 	}
 	if len(suffixes) == 0 {
 		return domainName
@@ -373,6 +387,21 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		}()
 	}
 
+	if opts.ThreatIntel {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, errs := s.lookupThreatIntel(ctx, domainName)
+			mu.Lock()
+			defer mu.Unlock()
+			if len(errs) > 0 {
+				s.alerter.RecordLookupError("threat_intel")
+			}
+			resp.Errors = append(resp.Errors, errs...)
+			resp.ThreatIntel = result
+		}()
+	}
+
 	wg.Wait()
 
 	// Fingerprint runs after all lookups complete — it uses already-fetched headers data.
@@ -380,7 +409,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		resp.Fingerprint = s.fingerprintEngine.Match(resp.Headers)
 	}
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil || resp.ThreatIntel != nil
 	if hasData {
 		if data, err := json.Marshal(resp); err != nil {
 			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))

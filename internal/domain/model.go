@@ -11,6 +11,7 @@ type DomainRequest struct {
 	CTLogs        bool     `json:"ct_logs,omitempty"`
 	BGP           bool     `json:"bgp,omitempty"`
 	Fingerprint   bool     `json:"fingerprint,omitempty"`
+	ThreatIntel   bool     `json:"threat_intel,omitempty"`
 }
 
 type LookupOptions struct {
@@ -21,6 +22,7 @@ type LookupOptions struct {
 	CTLogs        bool
 	BGP           bool
 	Fingerprint   bool
+	ThreatIntel   bool
 }
 
 type DomainResponse struct {
@@ -37,6 +39,7 @@ type DomainResponse struct {
 	CTLogs        *CTLogsInfo        `json:"ct_logs,omitempty"`
 	BGP           *BGPInfo           `json:"bgp,omitempty"`
 	Fingerprint   *FingerprintInfo   `json:"fingerprint,omitempty"`
+	ThreatIntel   *ThreatIntelInfo   `json:"threat_intel,omitempty"`
 	Errors        []LookupError      `json:"errors,omitempty"`
 }
 
@@ -204,4 +207,21 @@ type ASNRecord struct {
 	Country     string `json:"country"`
 	Registry    string `json:"registry"`
 	Description string `json:"description"`
+}
+
+// --- Threat Intelligence (optional field on domain lookup) ---
+
+type ThreatIntelProviderResult struct {
+	Provider   string   `json:"provider"`
+	Detected   bool     `json:"detected"`
+	Score      int      `json:"score,omitempty"`
+	Categories []string `json:"categories,omitempty"`
+	Details    string   `json:"details,omitempty"`
+}
+
+type ThreatIntelInfo struct {
+	RiskLevel  string                       `json:"risk_level"`
+	Score      int                          `json:"score"`
+	Categories []string                     `json:"categories,omitempty"`
+	Providers  []*ThreatIntelProviderResult `json:"providers"`
 }

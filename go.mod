@@ -16,6 +16,7 @@ require (
 	github.com/stripe/stripe-go/v84 v84.4.1
 	go.elastic.co/ecszap v1.0.3
 	go.uber.org/zap v1.27.1
+	golang.org/x/time v0.15.0
 )
 
 require (

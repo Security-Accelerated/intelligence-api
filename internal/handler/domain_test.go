@@ -512,16 +512,18 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 		wantCTLogs        bool
 		wantBGP           bool
 		wantFingerprint   bool
+		wantThreatIntel   bool
 	}{
-		{"no opts", `{"domains":["example.com"]}`, false, false, false, false, false, false, false},
-		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false, false, false, false, false},
-		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false, false, false, false, false},
-		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true, false, false, false, false},
-		{"subdomains only", `{"domains":["example.com"],"subdomains":true}`, false, false, false, true, false, false, false},
-		{"ct_logs only", `{"domains":["example.com"],"ct_logs":true}`, false, false, false, false, true, false, false},
-		{"bgp only", `{"domains":["example.com"],"bgp":true}`, false, false, false, false, false, true, false},
-		{"fingerprint only", `{"domains":["example.com"],"fingerprint":true}`, false, false, false, false, false, false, true},
-		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true}`, true, true, true, true, true, true, true},
+		{"no opts", `{"domains":["example.com"]}`, false, false, false, false, false, false, false, false},
+		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false, false, false, false, false, false},
+		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false, false, false, false, false, false},
+		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true, false, false, false, false, false},
+		{"subdomains only", `{"domains":["example.com"],"subdomains":true}`, false, false, false, true, false, false, false, false},
+		{"ct_logs only", `{"domains":["example.com"],"ct_logs":true}`, false, false, false, false, true, false, false, false},
+		{"bgp only", `{"domains":["example.com"],"bgp":true}`, false, false, false, false, false, true, false, false},
+		{"fingerprint only", `{"domains":["example.com"],"fingerprint":true}`, false, false, false, false, false, false, true, false},
+		{"threat_intel only", `{"domains":["example.com"],"threat_intel":true}`, false, false, false, false, false, false, false, true},
+		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true,"threat_intel":true}`, true, true, true, true, true, true, true, true},
 	}
 
 	for _, tt := range tests {
@@ -557,12 +559,15 @@ func TestDomainLookup_OptsPassedToService(t *testing.T) {
 			if svc.lastOpts.Fingerprint != tt.wantFingerprint {
 				t.Errorf("opts.Fingerprint = %v, want %v", svc.lastOpts.Fingerprint, tt.wantFingerprint)
 			}
+			if svc.lastOpts.ThreatIntel != tt.wantThreatIntel {
+				t.Errorf("opts.ThreatIntel = %v, want %v", svc.lastOpts.ThreatIntel, tt.wantThreatIntel)
+			}
 		})
 	}
 }
 
 // domainLoggerKeys derived from middleware.ContextKeys.
-var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "subdomain", "cache_hit", "ct_logs", "bgp", "fingerprint")
+var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "subdomain", "cache_hit", "ct_logs", "bgp", "fingerprint", "threat_intel")
 
 func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 	tests := []struct {
@@ -573,12 +578,12 @@ func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
 		{
 			"no optional features",
 			`{"domains":["example.com"]}`,
-			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "subdomain_requested": false, "ct_logs_requested": false, "bgp_requested": false, "fingerprint_requested": false, "cache_hit": false},
+			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "subdomain_requested": false, "ct_logs_requested": false, "bgp_requested": false, "fingerprint_requested": false, "threat_intel_requested": false, "cache_hit": false},
 		},
 		{
 			"all optional features",
-			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true}`,
-			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "subdomain_requested": true, "ct_logs_requested": true, "bgp_requested": true, "fingerprint_requested": true, "cache_hit": false},
+			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true,"threat_intel":true}`,
+			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "subdomain_requested": true, "ct_logs_requested": true, "bgp_requested": true, "fingerprint_requested": true, "threat_intel_requested": true, "cache_hit": false},
 		},
 	}
 
@@ -843,5 +848,67 @@ func TestDomainLookup_Fingerprint_AllPlansAllowed(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_ThreatIntel_ProAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "pro")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_ThreatIntel_AdminAllowed(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "admin")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestDomainLookup_ThreatIntel_FreeForbidden(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "free")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "threat_intel requires a pro plan" {
+		t.Errorf("error = %q, want %q", body["error"], "threat_intel requires a pro plan")
+	}
+}
+
+func TestDomainLookup_ThreatIntel_BasicForbidden(t *testing.T) {
+	r := newTestRouterWithPlan(&mockService{}, "basic")
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "threat_intel requires a pro plan" {
+		t.Errorf("error = %q, want %q", body["error"], "threat_intel requires a pro plan")
 	}
 }

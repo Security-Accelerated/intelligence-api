@@ -83,6 +83,11 @@ func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 				entry.Fingerprint = b
 			}
 		}
+		if v, ok := c.Get("threat_intel_requested"); ok {
+			if b, ok := v.(bool); ok {
+				entry.ThreatIntel = b
+			}
+		}
 
 		recorder.Record(entry)
 	}

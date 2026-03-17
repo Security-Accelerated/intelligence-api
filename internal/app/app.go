@@ -133,7 +133,18 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("fingerprint engine loaded", zap.Int("rule_count", fpService.Engine().RuleCount()))
 
-	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter)
+	// Threat intelligence providers — built based on config.
+	var tiProviders []domain.ThreatIntelProvider
+	if vtKey := cfg.GetString("threat_intel.virustotal_api_key"); vtKey != "" {
+		tiProviders = append(tiProviders, domain.NewVirusTotalProvider(vtKey))
+	}
+	tiProviders = append(tiProviders, domain.NewURLhausProvider()) // always enabled (no key)
+	if otxKey := cfg.GetString("threat_intel.alienvault_api_key"); otxKey != "" {
+		tiProviders = append(tiProviders, domain.NewAlienVaultProvider(otxKey))
+	}
+	logger.Info("threat intelligence providers loaded", zap.Int("provider_count", len(tiProviders)))
+
+	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
 	var billingSvc billing.Service

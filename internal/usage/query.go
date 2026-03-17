@@ -46,16 +46,17 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 		COALESCE(SUM(CASE WHEN subdomains THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN ct_logs THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN bgp THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN fingerprint THEN 1 ELSE 0 END), 0)
+		COALESCE(SUM(CASE WHEN fingerprint THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(CASE WHEN threat_intel THEN 1 ELSE 0 END), 0)
 		FROM request_log %s`, where)
 
-	var screenshot, reputation, emailSecurity, subdomains, ctLogs, bgp, fingerprint int
+	var screenshot, reputation, emailSecurity, subdomains, ctLogs, bgp, fingerprint, threatIntel int
 	err := qs.db.QueryRowContext(ctx, aggQuery, args...).Scan(
 		&summary.TotalRequests,
 		&summary.CacheHits,
 		&summary.AvgLatencyMs,
 		&summary.TotalDomains,
-		&screenshot, &reputation, &emailSecurity, &subdomains, &ctLogs, &bgp, &fingerprint,
+		&screenshot, &reputation, &emailSecurity, &subdomains, &ctLogs, &bgp, &fingerprint, &threatIntel,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query usage aggregates: %w", err)
@@ -73,6 +74,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 	summary.FeatureUsage["ct_logs"] = ctLogs
 	summary.FeatureUsage["bgp"] = bgp
 	summary.FeatureUsage["fingerprint"] = fingerprint
+	summary.FeatureUsage["threat_intel"] = threatIntel
 
 	// Status code breakdown
 	scQuery := fmt.Sprintf(`SELECT status_code, COUNT(*) FROM request_log %s GROUP BY status_code`, where)

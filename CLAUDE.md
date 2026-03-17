@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, and technology fingerprinting lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
+Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
 
 **Module:** `github.com/security-accelerated/intelligence-api`
 
@@ -50,10 +50,13 @@ The `safenet` package provides a `DialControl` function that rejects connections
 Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after plan changes.
 
 ### Plan-based access control
-Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Controls rate limits, premium feature access (screenshot, reputation), and admin endpoint access. `RequireAdmin()` middleware gates admin-only routes. Rate limits: free=5/min, basic=30/min, pro=120/min, admin=unlimited. Free plan: 1 domain per request, no screenshot/reputation.
+Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Controls rate limits, premium feature access (screenshot, reputation, threat_intel), and admin endpoint access. `RequireAdmin()` middleware gates admin-only routes. Rate limits: free=5/min, basic=30/min, pro=120/min, admin=unlimited. Free plan: 1 domain per request, no screenshot/reputation/threat_intel.
 
 ### Technology fingerprinting
 `FingerprintEngine` in `internal/domain/fingerprint.go` holds rules behind `sync.RWMutex`. Default rules are embedded via `go:embed` (~90 curated technologies). `FingerprintService` in `internal/service/fingerprint.go` persists rules in PostgreSQL (append-only `fingerprint_rules` table) and loads the latest on startup. Admin endpoints (`GET/POST /v1/admin/fingerprints`) allow hot-reloading rules without redeploying.
+
+### Threat intelligence
+`internal/domain/threatintel.go` defines the `ThreatIntelProvider` interface (`Name()`, `Query()`) and the `LookupThreatIntel` coordinator that fans out to all providers concurrently (same pattern as `LookupReputation`). Three providers: **VirusTotal** (v3 API, `x-apikey` header, 4 req/min rate limit), **URLhaus** (Abuse.ch, free, no key needed), **AlienVault OTX** (`X-OTX-API-KEY` header, 10 req/s). Each provider uses `safeTransport` for SSRF protection and `golang.org/x/time/rate` for per-provider token bucket rate limiting. `ScoreThreatIntel()` computes a weighted aggregate score (VT 50%, URLhaus 30%, OTX 20%) mapped to risk levels: none/low/medium/high/critical. Providers are built conditionally at startup in `app.go` based on config keys — URLhaus always enabled, VT/OTX enabled when API keys are present. Pro/admin plan only. Config: `THREAT_INTEL_VIRUSTOTAL_API_KEY`, `THREAT_INTEL_ALIENVAULT_API_KEY`.
 
 ### Error sanitization
 `sanitizeErr()` strips internal error details before including them in API responses. `safenet.BlockedError` gets a specific user-friendly message. Other errors are truncated to the final segment after `: `. Full context is always logged server-side.

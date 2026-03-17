@@ -14,7 +14,7 @@ Security teams waste hours manually checking domains across dozens of disconnect
 
 One API. One call. Every signal that matters.
 
-Submit a domain and get back a complete intelligence profile in seconds: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, what technologies it runs, and even a visual screenshot of the page. Batch multiple domains in a single request. Results are cached for fast repeat lookups.
+Submit a domain and get back a complete intelligence profile in seconds: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, what technologies it runs, whether it's linked to known malware campaigns, and even a visual screenshot of the page. Batch multiple domains in a single request. Results are cached for fast repeat lookups.
 
 ---
 
@@ -33,6 +33,9 @@ Audit a domain's email authentication posture: SPF, DMARC, and DKIM. See exactly
 
 ### Domain Reputation
 Check domains against multiple DNS-based threat intelligence feeds (Spamhaus, SURBL, URIBL) and get a computed risk score from 0 to 100 with a clear risk level: clean, low, medium, or high.
+
+### Threat Intelligence
+Query multiple threat intelligence sources — VirusTotal, URLhaus (Abuse.ch), and AlienVault OTX — in a single call. Get malware detection verdicts, campaign attribution from known threat actors, and community threat pulses. Know whether a domain is actively distributing malware, part of a botnet, or flagged by the security research community.
 
 ### Page Screenshots
 Capture a visual screenshot of any domain's web page with headless Chrome. See what users see without visiting the site. Invaluable for phishing investigations and brand monitoring.
@@ -63,7 +66,8 @@ POST /v1/domain/lookup
   "subdomains": true,
   "ct_logs": true,
   "bgp": true,
-  "fingerprint": true
+  "fingerprint": true,
+  "threat_intel": true
 }
 ```
 
@@ -94,6 +98,7 @@ That's it. One request, one comprehensive response.
 | Technology fingerprinting | Included | Included | Included |
 | Page screenshots | — | — | Included |
 | Domain reputation scoring | — | — | Included |
+| Threat intelligence | — | — | Included |
 | Rate limit | 5 req/min | 30 req/min | 120 req/min |
 | Batch size (domain lookup) | 1 domain | 5 domains | 20 domains |
 
@@ -101,13 +106,13 @@ That's it. One request, one comprehensive response.
 
 ## Use Cases
 
-**Security Operations** — Triage suspicious domains from phishing reports, SIEM alerts, and threat feeds. Get the full picture in seconds instead of hours.
+**Security Operations** — Triage suspicious domains from phishing reports, SIEM alerts, and threat feeds. Cross-reference against VirusTotal, URLhaus, and AlienVault OTX in the same call. Get the full picture in seconds instead of hours.
 
 **Brand Protection** — Investigate domains impersonating your brand. Use subdomain enumeration, CT logs, and reputation scoring to assess threats.
 
 **Vendor Risk Assessment** — Evaluate third-party domains for certificate hygiene, email authentication, and blocklist presence during procurement.
 
-**Incident Response** — During an active incident, rapidly profile attacker infrastructure: hosting, registration, related subdomains, and reputation.
+**Incident Response** — During an active incident, rapidly profile attacker infrastructure: hosting, registration, related subdomains, reputation, and known malware associations.
 
 **Compliance & Audit** — Assess your own domains for security header compliance, email authentication, and certificate management.
 
