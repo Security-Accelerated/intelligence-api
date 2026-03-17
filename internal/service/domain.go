@@ -297,8 +297,8 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			result, errs := s.lookupReputation(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
-			if len(errs) > 0 {
-				s.alerter.RecordLookupError("reputation")
+			for _, e := range errs {
+				s.alerter.RecordLookupError(e.Lookup) // e.g. "reputation:spamhaus_dbl"
 			}
 			resp.Errors = append(resp.Errors, errs...)
 			resp.Reputation = result
@@ -394,8 +394,8 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			result, errs := s.lookupThreatIntel(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
-			if len(errs) > 0 {
-				s.alerter.RecordLookupError("threat_intel")
+			for _, e := range errs {
+				s.alerter.RecordLookupError(e.Lookup) // e.g. "threat_intel:virustotal"
 			}
 			resp.Errors = append(resp.Errors, errs...)
 			resp.ThreatIntel = result
