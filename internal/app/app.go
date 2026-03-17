@@ -105,7 +105,13 @@ func Run(logger *zap.Logger, version string) error {
 			SpikeWindow:       cfg.GetDuration("alerts.spike_window"),
 			Cooldown:          cfg.GetDuration("alerts.cooldown"),
 		})
-		logger.Info("pushover notifications enabled")
+		logger.Info("pushover notifications enabled",
+			zap.Int("throttle_threshold", cfg.GetInt("alerts.throttle_threshold")),
+			zap.Duration("throttle_window", cfg.GetDuration("alerts.throttle_window")),
+			zap.Int("spike_threshold", cfg.GetInt("alerts.spike_threshold")),
+			zap.Duration("spike_window", cfg.GetDuration("alerts.spike_window")),
+			zap.Duration("cooldown", cfg.GetDuration("alerts.cooldown")),
+		)
 	} else {
 		notifier = &notifications.NoopNotifier{}
 		alerter = &notifications.NoopRecorder{}
@@ -141,7 +147,11 @@ func Run(logger *zap.Logger, version string) error {
 		}
 		billingRepo := billing.NewRepository(db)
 		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo, notifier)
-		logger.Info("stripe billing enabled")
+		logger.Info("stripe billing enabled",
+			zap.Int("price_mappings", len(priceMap)),
+			zap.Bool("portal_link_configured", cfg.GetString("stripe.portal_link") != ""),
+			zap.Int("stale_key_days", cfg.GetInt("billing.stale_key_days")),
+		)
 	} else {
 		billingSvc = &billing.NoopService{}
 		logger.Info("stripe billing disabled (no credentials configured)")
