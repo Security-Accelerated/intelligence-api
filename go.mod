@@ -13,7 +13,7 @@ require (
 	github.com/likexian/whois-parser v1.24.21
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/spf13/viper v1.21.0
-	github.com/stripe/stripe-go/v82 v82.5.1
+	github.com/stripe/stripe-go/v84 v84.4.1
 	go.elastic.co/ecszap v1.0.3
 	go.uber.org/zap v1.27.1
 )

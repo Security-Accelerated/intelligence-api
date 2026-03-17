@@ -6,9 +6,9 @@ import (
 
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
-	"github.com/stripe/stripe-go/v82"
-	"github.com/stripe/stripe-go/v82/checkout/session"
-	"github.com/stripe/stripe-go/v82/webhook"
+	"github.com/stripe/stripe-go/v84"
+	"github.com/stripe/stripe-go/v84/checkout/session"
+	"github.com/stripe/stripe-go/v84/webhook"
 	"go.uber.org/zap"
 )
 
