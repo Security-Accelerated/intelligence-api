@@ -75,6 +75,7 @@ ADMIN="${SMOKE_ADMIN_KEY:-test-admin-key}"
 BASIC="${SMOKE_BASIC_KEY:-test-basic-key}"
 PRO="${SMOKE_PRO_KEY:-test-pro-key}"
 FREE="${SMOKE_FREE_KEY:-test-free-key}"
+FREE2="${SMOKE_FREE_KEY_2:-test-free-key-2}"
 
 DOMAIN='{"domains":["example.com"]}'
 
@@ -99,6 +100,7 @@ post 200 "lookup (admin)"      "/v1/domain/lookup" "$ADMIN" "$DOMAIN"
 post 200 "lookup (pro)"        "/v1/domain/lookup" "$PRO"   "$DOMAIN"
 post 200 "lookup (basic)"      "/v1/domain/lookup" "$BASIC" "$DOMAIN"
 post 200 "lookup (free)"       "/v1/domain/lookup" "$FREE"  "$DOMAIN"
+post 400 "free plan max domains" "/v1/domain/lookup" "$FREE" '{"domains":["a.com","b.com"]}'
 post 401 "lookup (no key)"     "/v1/domain/lookup" ""       "$DOMAIN"
 post 401 "lookup (wrong key)"  "/v1/domain/lookup" "totally-wrong-key" "$DOMAIN"
 
@@ -111,19 +113,19 @@ post 403 "screenshot (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domai
 post 200 "reputation (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"reputation":true}'
 post 200 "reputation (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"reputation":true}'
 post 403 "reputation (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"reputation":true}'
-post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"reputation":true}'
+post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"reputation":true}'
 post 200 "screenshot+reputation (admin)" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"screenshot":true,"reputation":true}'
 post 200 "threat_intel (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"threat_intel":true}'
 post 200 "threat_intel (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"threat_intel":true}'
 post 403 "threat_intel (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"threat_intel":true}'
-post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"threat_intel":true}'
+post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"threat_intel":true}'
 
 echo ""
 echo "=== Domain Lookup — All-Plan Options ==="
 post 200 "email_security (admin)"  "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"email_security":true}'
 post 200 "email_security (pro)"    "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"email_security":true}'
 post 200 "email_security (basic)"  "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"email_security":true}'
-post 200 "email_security (free)"   "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"email_security":true}'
+post 200 "email_security (free)"   "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"email_security":true}'
 post 200 "subdomains (admin)"      "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"subdomains":true}'
 post 200 "subdomains (basic)"      "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"subdomains":true}'
 post 200 "ct_logs (admin)"         "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"ct_logs":true}'
@@ -139,7 +141,6 @@ post 400 "empty domains"       "/v1/domain/lookup" "$ADMIN" '{"domains":[]}'
 post 400 "missing domains"     "/v1/domain/lookup" "$ADMIN" '{}'
 post 400 "invalid domain"      "/v1/domain/lookup" "$ADMIN" '{"domains":["notadomain"]}'
 post 400 "raw IP"              "/v1/domain/lookup" "$ADMIN" '{"domains":["1.2.3.4"]}'
-post 400 "free plan max domains" "/v1/domain/lookup" "$FREE" '{"domains":["a.com","b.com"]}'
 
 echo ""
 echo "=== Admin ==="
