@@ -8,7 +8,7 @@ require (
 	github.com/chromedp/chromedp v0.14.2
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
-	github.com/lib/pq v1.11.2
+	github.com/lib/pq v1.12.0
 	github.com/likexian/whois v1.15.7
 	github.com/likexian/whois-parser v1.24.21
 	github.com/redis/go-redis/v9 v9.18.0
