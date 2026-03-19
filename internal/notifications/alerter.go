@@ -120,9 +120,7 @@ func (a *Alerter) sendAsync(title, message string, priority int) {
 		logging.Logger().Warn("notification dropped, send queue full", zap.String("title", title))
 		return
 	}
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
+	a.wg.Go(func() {
 		defer func() { <-a.sem }()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -132,7 +130,7 @@ func (a *Alerter) sendAsync(title, message string, priority int) {
 				zap.Error(err),
 			)
 		}
-	}()
+	})
 }
 
 // errorWindow tracks timestamps of errors for sliding window counting.

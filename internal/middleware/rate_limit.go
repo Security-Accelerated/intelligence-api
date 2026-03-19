@@ -94,10 +94,7 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 		count := int64(math.Ceil(weighted))
 
 		c.Header("X-RateLimit-Limit", strconv.Itoa(limit))
-		remaining := limit - int(count)
-		if remaining < 0 {
-			remaining = 0
-		}
+		remaining := max(limit-int(count), 0)
 		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
 
 		c.Set("rate_limit", limit)
