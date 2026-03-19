@@ -7,10 +7,14 @@ ENV_FILE="$(dirname "$0")/../.env"
 # Read specific keys from .env without sourcing (connection strings contain & which
 # breaks shell sourcing). Falls back to environment variables if .env is absent.
 env_get() {
-    local key="$1"
+    local key="$1" val=""
     if [ -f "$ENV_FILE" ]; then
-        grep "^${key}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true
+        val=$(grep "^${key}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true)
+        # Strip surrounding quotes if present
+        val="${val#\"}" ; val="${val%\"}"
+        val="${val#\'}" ; val="${val%\'}"
     fi
+    echo "$val"
 }
 
 APP="security-accelerated-intelligence-api"
