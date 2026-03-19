@@ -26,7 +26,7 @@ internal/logging/             → Zap logger init (ECS format in production, pre
 internal/config/              → Viper config with YAML files + env var overrides
 migrations/                   → PostgreSQL schema (applied via Docker initdb on first start only)
 scripts/                      → docker-reset.sh (dev), smoke-test.sh (dev)
-docs/                         → Sales slick, developer guide, domain lookup overview
+docs/                         → Sales slick; live API docs served via embedded HTML in handler
 ```
 
 ## Key Design Decisions
@@ -149,7 +149,7 @@ Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, las
 7. Update handler to pass the option through
 8. Add a setter method for tests (`SetThingLookup`)
 9. Update all test files that call `New()` or `SetLookups()`
-10. Update README, developer guide, integration tests
+10. Update README, integration tests
 
 ## Adding a New Endpoint
 
@@ -161,4 +161,4 @@ Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, las
 6. Wire the service in `internal/app/app.go`
 7. Update handler `New()` signature and all test call sites
 8. Add context keys to `middleware/request_logger.go` if needed
-9. Update README, developer guide, api.http, smoke test, integration tests
+9. Update README, api.http, smoke test, integration tests
