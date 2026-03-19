@@ -52,11 +52,6 @@ func (ul *UsageLogger) Record(entry UsageEntry) {
 	}
 }
 
-// Dropped returns the total number of entries dropped since startup.
-func (ul *UsageLogger) Dropped() int64 {
-	return ul.dropped.Load()
-}
-
 // Stop drains remaining entries and waits for the background goroutine to exit.
 func (ul *UsageLogger) Stop() {
 	close(ul.stopCh)
