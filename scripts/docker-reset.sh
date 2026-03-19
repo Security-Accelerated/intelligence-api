@@ -8,6 +8,8 @@ cd "$(dirname "$0")/.."
 VERSION=$(git describe --tags --always --dirty)
 export VERSION
 
+echo "==> Deploying version: $VERSION"
+echo ""
 echo "==> Stopping containers..."
 docker compose down
 
