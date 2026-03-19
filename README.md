@@ -536,6 +536,8 @@ Copy the sample config to your preferred location:
 sudo cp internal/config/sample-config.yml /etc/security-accelerated/intelligence-api.yaml
 ```
 
+Every config key can be overridden by an environment variable: replace dots with underscores and uppercase (e.g. `server.write_timeout` → `SERVER_WRITE_TIMEOUT`). Environment variables take precedence over the YAML file. All active config values are visible at `GET /v1/info` (admin only).
+
 Config values:
 
 | Key | Default | Description |
