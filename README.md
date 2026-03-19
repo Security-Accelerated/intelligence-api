@@ -542,6 +542,11 @@ Config values:
 |-----|---------|-------------|
 | `application.mode` | `""` | `local` or `production` |
 | `application.port` | `8080` | HTTP server port |
+| `server.read_timeout` | `10s` | HTTP server read timeout |
+| `server.write_timeout` | `45s` | HTTP server write timeout |
+| `server.idle_timeout` | `60s` | HTTP server idle connection timeout |
+| `server.shutdown_timeout` | `15s` | Graceful shutdown deadline |
+| `server.body_limit` | `1048576` | Maximum request body size in bytes (1 MB) |
 | `redis.addr` | `localhost:6379` | Redis address |
 | `redis.password` | `""` | Redis password |
 | `redis.db` | `0` | Redis database number |
@@ -549,10 +554,13 @@ Config values:
 | `gin.mode` | `""` | Gin framework mode (`debug`, `release`, `test`) |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
+| `screenshot.max_png_bytes` | `5242880` | Maximum screenshot PNG size in bytes (5 MB) |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
+| `subdomain.max_response_bytes` | `10485760` | Maximum crt.sh response body size in bytes (10 MB) |
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
 | `threat_intel.virustotal_api_key` | `""` | VirusTotal API key (enables VirusTotal provider) |
 | `threat_intel.alienvault_api_key` | `""` | AlienVault OTX API key (enables AlienVault provider) |
+| `domain.lookup_timeout` | `30s` | Overall timeout for all concurrent lookups per domain |
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
@@ -581,6 +589,8 @@ Config values:
 | `alerts.spike_threshold` | `15` | Total errors across all lookups to trigger spike alert |
 | `alerts.spike_window` | `5m` | Time window for spike detection |
 | `alerts.cooldown` | `15m` | Minimum time between duplicate alerts |
+| `alerts.max_concurrent_sends` | `5` | Maximum concurrent notification goroutines |
+| `alerts.max_window_size` | `1000` | Maximum error timestamps tracked per sliding window |
 | `stripe.secret_key` | `""` | Stripe secret key (enables billing) |
 | `stripe.webhook_secret` | `""` | Stripe webhook signing secret |
 | `stripe.prices.basic_monthly` | `""` | Stripe Price ID for basic monthly plan |

@@ -101,11 +101,13 @@ func Run(logger *zap.Logger, version string) error {
 	if pushoverToken != "" && pushoverUser != "" {
 		notifier = notifications.NewPushoverNotifier(pushoverToken, pushoverUser)
 		alerter = notifications.NewAlerter(notifier, notifications.AlerterConfig{
-			ThrottleThreshold: cfg.GetInt("alerts.throttle_threshold"),
-			ThrottleWindow:    cfg.GetDuration("alerts.throttle_window"),
-			SpikeThreshold:    cfg.GetInt("alerts.spike_threshold"),
-			SpikeWindow:       cfg.GetDuration("alerts.spike_window"),
-			Cooldown:          cfg.GetDuration("alerts.cooldown"),
+			ThrottleThreshold:  cfg.GetInt("alerts.throttle_threshold"),
+			ThrottleWindow:     cfg.GetDuration("alerts.throttle_window"),
+			SpikeThreshold:     cfg.GetInt("alerts.spike_threshold"),
+			SpikeWindow:        cfg.GetDuration("alerts.spike_window"),
+			Cooldown:           cfg.GetDuration("alerts.cooldown"),
+			MaxConcurrentSends: cfg.GetInt("alerts.max_concurrent_sends"),
+			MaxWindowSize:      cfg.GetInt("alerts.max_window_size"),
 		})
 		logger.Info("pushover notifications enabled",
 			zap.Int("throttle_threshold", cfg.GetInt("alerts.throttle_threshold")),
@@ -147,7 +149,15 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("threat intelligence providers loaded", zap.Int("provider_count", len(tiProviders)))
 
-	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
+	// Set configurable limits on domain package vars before constructing the service.
+	if v := cfg.GetInt("screenshot.max_png_bytes"); v > 0 {
+		domain.DefaultMaxPNGBytes = v
+	}
+	if v := cfg.GetInt64("subdomain.max_response_bytes"); v > 0 {
+		domain.MaxResponseBody = v
+	}
+
+	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
 	var billingSvc billing.Service
@@ -189,15 +199,22 @@ func Run(logger *zap.Logger, version string) error {
 
 	// HTTP
 	h := handler.New(domainService, fpService, billingSvc, usageQuerySvc, version, cfg, redisCache, cachedRepo)
-	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"))
-	server := httpapi.NewServer(router, port)
+	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
+	serverCfg := httpapi.ServerConfig{
+		Port:            port,
+		ReadTimeout:     cfg.GetDuration("server.read_timeout"),
+		WriteTimeout:    cfg.GetDuration("server.write_timeout"),
+		IdleTimeout:     cfg.GetDuration("server.idle_timeout"),
+		ShutdownTimeout: cfg.GetDuration("server.shutdown_timeout"),
+	}
+	server := httpapi.NewServer(router, serverCfg)
 
 	// Shutdown signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 
-	if err := httpapi.Serve(server, sigCh, cancel, logger); err != nil {
+	if err := httpapi.Serve(server, sigCh, cancel, logger, serverCfg.ShutdownTimeout); err != nil {
 		return err
 	}
 

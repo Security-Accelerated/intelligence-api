@@ -10,14 +10,15 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-const maxPNGBytes = 5 << 20 // 5 MB
+// DefaultMaxPNGBytes is the default maximum size for a screenshot PNG (5 MB).
+var DefaultMaxPNGBytes = 5 << 20
 
 // LookupScreenshot navigates to the domain in headless Chrome and captures a
 // PNG screenshot. It tries HTTPS first, falling back to HTTP. Only a 200 OK
 // triggers an actual screenshot capture; other status codes are recorded
 // without image data. The timeout parameter controls the deadline for the
-// entire operation (probe + capture).
-func LookupScreenshot(ctx context.Context, domain string, timeout time.Duration) (*ScreenshotInfo, error) {
+// entire operation (probe + capture). maxPNGBytes limits the captured image size.
+func LookupScreenshot(ctx context.Context, domain string, timeout time.Duration, maxPNGBytes int) (*ScreenshotInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

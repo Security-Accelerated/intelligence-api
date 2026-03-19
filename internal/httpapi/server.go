@@ -11,14 +11,23 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewServer creates an http.Server with production-ready timeouts.
-func NewServer(handler http.Handler, port int) *http.Server {
+// ServerConfig holds configurable HTTP server parameters.
+type ServerConfig struct {
+	Port            int
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	ShutdownTimeout time.Duration
+}
+
+// NewServer creates an http.Server with the given configuration.
+func NewServer(handler http.Handler, cfg ServerConfig) *http.Server {
 	return &http.Server{
-		Addr:         fmt.Sprintf(":%d", port),
+		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 45 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		IdleTimeout:  cfg.IdleTimeout,
 	}
 }
 
@@ -26,7 +35,7 @@ func NewServer(handler http.Handler, port int) *http.Server {
 // server error occurs. It calls appCancel to tear down app-level resources,
 // then gracefully drains in-flight requests. A second signal forces immediate
 // shutdown. Returns nil on clean shutdown.
-func Serve(server *http.Server, sigCh <-chan os.Signal, appCancel context.CancelFunc, logger *zap.Logger) error {
+func Serve(server *http.Server, sigCh <-chan os.Signal, appCancel context.CancelFunc, logger *zap.Logger, shutdownTimeout time.Duration) error {
 	serverErr := make(chan error, 1)
 	go func() {
 		logger.Info("server started", zap.String("addr", server.Addr))
@@ -58,7 +67,7 @@ func Serve(server *http.Server, sigCh <-chan os.Signal, appCancel context.Cancel
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {

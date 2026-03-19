@@ -22,14 +22,20 @@ func TestServe_ShutdownOnSignal(t *testing.T) {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	server := NewServer(mux, 0) // port 0 = pick a free port
+	server := NewServer(mux, ServerConfig{
+		Port:            0,
+		ReadTimeout:     10 * time.Second,
+		WriteTimeout:    45 * time.Second,
+		IdleTimeout:     60 * time.Second,
+		ShutdownTimeout: 5 * time.Second,
+	})
 
 	sigCh := make(chan os.Signal, 1)
 	done := make(chan error, 1)
 	cancelled := false
 
 	go func() {
-		done <- Serve(server, sigCh, func() { cancelled = true }, logger)
+		done <- Serve(server, sigCh, func() { cancelled = true }, logger, 5*time.Second)
 	}()
 
 	// Give the server time to start
@@ -63,7 +69,7 @@ func TestServe_ServerListenError(t *testing.T) {
 
 	sigCh := make(chan os.Signal, 1)
 
-	err := Serve(server, sigCh, func() {}, logger)
+	err := Serve(server, sigCh, func() {}, logger, 5*time.Second)
 	if err == nil {
 		t.Fatal("expected error from Serve, got nil")
 	}

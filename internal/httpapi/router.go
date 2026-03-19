@@ -14,7 +14,7 @@ import (
 )
 
 // NewRouter builds the gin engine with all middleware and routes registered.
-func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClient *redis.Client, rlCfg middleware.RateLimitConfig, recorder usage.Recorder, mode string) *gin.Engine {
+func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClient *redis.Client, rlCfg middleware.RateLimitConfig, recorder usage.Recorder, mode string, bodyLimit int64) *gin.Engine {
 	if mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -22,7 +22,7 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(middleware.SecurityHeaders())
-	router.Use(middleware.BodyLimit(1 << 20)) // 1 MB
+	router.Use(middleware.BodyLimit(bodyLimit))
 	router.Use(middleware.ClientRequestID())
 	router.Use(middleware.RequestLogger())
 

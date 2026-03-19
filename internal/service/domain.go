@@ -35,6 +35,7 @@ func sanitizeErr(err error) string {
 type DomainService struct {
 	cache             cache.Cache
 	cacheTTL          time.Duration
+	lookupTimeout     time.Duration
 	screenshotTimeout time.Duration
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
@@ -54,16 +55,20 @@ type DomainService struct {
 	lookupThreatIntel    func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, lookupTimeout, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
 	if ctLogsMaxEntries <= 0 {
 		ctLogsMaxEntries = 100
 	}
+	if lookupTimeout <= 0 {
+		lookupTimeout = 30 * time.Second
+	}
 	return &DomainService{
 		cache:               c,
 		cacheTTL:            cacheTTL,
+		lookupTimeout:       lookupTimeout,
 		screenshotTimeout:   screenshotTimeout,
 		subdomainMaxResults: subdomainMaxResults,
 		ctLogsMaxEntries:    ctLogsMaxEntries,
@@ -73,7 +78,9 @@ func NewDomainService(c cache.Cache, cacheTTL, screenshotTimeout time.Duration, 
 		lookupDNS:           domain.LookupDNS,
 		lookupSSL:           domain.LookupSSL,
 		lookupHeaders:       domain.LookupHeaders,
-		lookupScreenshot:    domain.LookupScreenshot,
+		lookupScreenshot: func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error) {
+			return domain.LookupScreenshot(ctx, d, timeout, domain.DefaultMaxPNGBytes)
+		},
 		lookupReputation:    domain.LookupReputation,
 		lookupEmailSecurity: domain.LookupEmailSecurity,
 		lookupSubdomains:    domain.LookupSubdomains,
@@ -189,10 +196,9 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 	}
 
 	// Respect any tighter deadline from the parent (e.g. HTTP server write timeout).
-	const lookupTimeout = 30 * time.Second
-	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > lookupTimeout {
+	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > s.lookupTimeout {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, lookupTimeout)
+		ctx, cancel = context.WithTimeout(ctx, s.lookupTimeout)
 		defer cancel()
 	}
 

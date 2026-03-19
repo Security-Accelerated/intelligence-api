@@ -10,10 +10,11 @@ import (
 	"strings"
 )
 
-const (
-	crtShURL       = "https://crt.sh/?q=%%.%s&output=json"
-	maxResponseBody = 10 << 20 // 10 MB
-)
+const crtShURL = "https://crt.sh/?q=%%.%s&output=json"
+
+// MaxResponseBody is the maximum response body size for crt.sh API calls,
+// shared by subdomain and CT log lookups. Set from config at startup.
+var MaxResponseBody int64 = 10 << 20 // 10 MB default
 
 // crtShEntry is the minimal structure returned by the crt.sh JSON API.
 type crtShEntry struct {
@@ -46,7 +47,7 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 		return nil, fmt.Errorf("crt.sh returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBody))
 	if err != nil {
 		return nil, fmt.Errorf("read crt.sh response: %w", err)
 	}

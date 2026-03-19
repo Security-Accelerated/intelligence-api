@@ -18,11 +18,13 @@ type ErrorRecorder interface {
 
 // AlerterConfig holds thresholds and timing for the alerter.
 type AlerterConfig struct {
-	ThrottleThreshold int           // errors per lookup type to trigger throttle alert
-	ThrottleWindow    time.Duration // time window for throttle detection
-	SpikeThreshold    int           // total errors across all lookups to trigger spike alert
-	SpikeWindow       time.Duration // time window for spike detection
-	Cooldown          time.Duration // minimum time between duplicate alerts
+	ThrottleThreshold  int           // errors per lookup type to trigger throttle alert
+	ThrottleWindow     time.Duration // time window for throttle detection
+	SpikeThreshold     int           // total errors across all lookups to trigger spike alert
+	SpikeWindow        time.Duration // time window for spike detection
+	Cooldown           time.Duration // minimum time between duplicate alerts
+	MaxConcurrentSends int           // max concurrent notification goroutines
+	MaxWindowSize      int           // max error timestamps tracked per window
 }
 
 // Alerter tracks error rates and sends notifications when thresholds are exceeded.
@@ -46,14 +48,20 @@ type Alerter struct {
 
 // NewAlerter creates an alerter with the given notifier and config.
 func NewAlerter(notifier Notifier, cfg AlerterConfig) *Alerter {
+	if cfg.MaxConcurrentSends <= 0 {
+		cfg.MaxConcurrentSends = 5
+	}
+	if cfg.MaxWindowSize <= 0 {
+		cfg.MaxWindowSize = 1000
+	}
 	return &Alerter{
 		notifier:     notifier,
 		cfg:          cfg,
 		lookupErrors: make(map[string]*errorWindow),
-		globalErrors: &errorWindow{},
+		globalErrors: &errorWindow{maxSize: cfg.MaxWindowSize},
 		lastAlert:    make(map[string]time.Time),
 		now:          time.Now,
-		sem:          make(chan struct{}, 5),
+		sem:          make(chan struct{}, cfg.MaxConcurrentSends),
 	}
 }
 
@@ -72,7 +80,7 @@ func (a *Alerter) RecordLookupError(lookupName string) {
 	// Record per-lookup error
 	w, ok := a.lookupErrors[lookupName]
 	if !ok {
-		w = &errorWindow{}
+		w = &errorWindow{maxSize: a.cfg.MaxWindowSize}
 		a.lookupErrors[lookupName] = w
 	}
 	w.record(now)
@@ -134,15 +142,14 @@ func (a *Alerter) sendAsync(title, message string, priority int) {
 }
 
 // errorWindow tracks timestamps of errors for sliding window counting.
-// Capped at maxWindowSize entries to bound memory usage under sustained errors.
+// Capped at maxSize entries to bound memory usage under sustained errors.
 type errorWindow struct {
 	timestamps []time.Time
+	maxSize    int
 }
 
-const maxWindowSize = 1000
-
 func (w *errorWindow) record(now time.Time) {
-	if len(w.timestamps) >= maxWindowSize {
+	if w.maxSize > 0 && len(w.timestamps) >= w.maxSize {
 		// Drop oldest entry to stay within cap.
 		w.timestamps = w.timestamps[1:]
 	}

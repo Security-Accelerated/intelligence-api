@@ -53,7 +53,7 @@ func LookupCTLogs(ctx context.Context, domainName string, maxEntries int) (*CTLo
 		return nil, fmt.Errorf("ct_logs: crt.sh returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBody))
 	if err != nil {
 		return nil, fmt.Errorf("ct_logs: read response: %w", err)
 	}

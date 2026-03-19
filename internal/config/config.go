@@ -89,6 +89,16 @@ func init() {
 	config.SetDefault("usage.flush_interval", "5s")
 	config.SetDefault("threat_intel.virustotal_api_key", "")
 	config.SetDefault("threat_intel.alienvault_api_key", "")
+	config.SetDefault("server.read_timeout", "10s")
+	config.SetDefault("server.write_timeout", "45s")
+	config.SetDefault("server.idle_timeout", "60s")
+	config.SetDefault("server.shutdown_timeout", "15s")
+	config.SetDefault("server.body_limit", 1048576) // 1 MB
+	config.SetDefault("domain.lookup_timeout", "30s")
+	config.SetDefault("screenshot.max_png_bytes", 5242880) // 5 MB
+	config.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
+	config.SetDefault("alerts.max_concurrent_sends", 5)
+	config.SetDefault("alerts.max_window_size", 1000)
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
