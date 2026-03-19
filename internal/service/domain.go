@@ -209,12 +209,9 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	wg.Add(4)
-
 	logger := logging.Logger()
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		result, err := s.lookupWhois(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -228,10 +225,9 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			return
 		}
 		resp.Whois = result
-	}()
+	})
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		result, err := s.lookupDNS(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -245,10 +241,9 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			return
 		}
 		resp.DNS = result
-	}()
+	})
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		result, err := s.lookupSSL(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -262,10 +257,9 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			return
 		}
 		resp.SSL = result
-	}()
+	})
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		result, err := s.lookupHeaders(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -279,12 +273,10 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 			return
 		}
 		resp.Headers = result
-	}()
+	})
 
 	if opts.Screenshot {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, err := s.lookupScreenshot(ctx, domainName, s.screenshotTimeout)
 			mu.Lock()
 			defer mu.Unlock()
@@ -298,28 +290,24 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				return
 			}
 			resp.Screenshot = result
-		}()
+		})
 	}
 
 	if opts.Reputation {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, errs := s.lookupReputation(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
 			for _, e := range errs {
-				s.alerter.RecordLookupError(e.Lookup) // e.g. "reputation:spamhaus_dbl"
+				s.alerter.RecordLookupError(e.Lookup)
 			}
 			resp.Errors = append(resp.Errors, errs...)
 			resp.Reputation = result
-		}()
+		})
 	}
 
 	if opts.EmailSecurity {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, err := s.lookupEmailSecurity(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
@@ -333,13 +321,11 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				return
 			}
 			resp.EmailSecurity = result
-		}()
+		})
 	}
 
 	if opts.Subdomains {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, err := s.lookupSubdomains(ctx, domainName, domain.SubdomainOptions{
 				MaxResults: s.subdomainMaxResults,
 			})
@@ -355,13 +341,11 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				return
 			}
 			resp.Subdomains = result
-		}()
+		})
 	}
 
 	if opts.CTLogs {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, err := s.lookupCTLogs(ctx, domainName, s.ctLogsMaxEntries)
 			mu.Lock()
 			defer mu.Unlock()
@@ -375,13 +359,11 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				return
 			}
 			resp.CTLogs = result
-		}()
+		})
 	}
 
 	if opts.BGP {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, err := s.lookupBGP(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
@@ -395,22 +377,20 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				return
 			}
 			resp.BGP = result
-		}()
+		})
 	}
 
 	if opts.ThreatIntel {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			result, errs := s.lookupThreatIntel(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
 			for _, e := range errs {
-				s.alerter.RecordLookupError(e.Lookup) // e.g. "threat_intel:virustotal"
+				s.alerter.RecordLookupError(e.Lookup)
 			}
 			resp.Errors = append(resp.Errors, errs...)
 			resp.ThreatIntel = result
-		}()
+		})
 	}
 
 	wg.Wait()
