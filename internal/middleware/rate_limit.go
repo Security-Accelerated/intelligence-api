@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,8 +21,12 @@ type RateLimitConfig struct {
 }
 
 // RateLimit returns middleware that enforces per-API-key, plan-aware rate
-// limiting using a Redis sliding-window counter. It must run after APIKeyAuth
-// so that api_key_id and api_key_plan are available in the context.
+// limiting using a weighted sliding window over two adjacent one-minute
+// buckets in Redis. It must run after APIKeyAuth so that api_key_id and
+// api_key_plan are available in the context.
+//
+// The weighted approach prevents the boundary-straddling issue where a
+// fixed bucket allows up to 2× the limit across adjacent minutes.
 //
 // If Redis is unavailable the request is allowed (fail-open) to avoid blocking
 // the API during a Redis outage.
@@ -54,20 +59,39 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 			limit = cfg.Free
 		}
 
-		bucket := time.Now().Unix() / 60
-		redisKey := fmt.Sprintf("ratelimit:%d:%d", keyID, bucket)
+		now := time.Now()
+		currentBucket := now.Unix() / 60
+		previousBucket := currentBucket - 1
+		elapsedFraction := float64(now.Unix()%60) / 60.0
+
+		currentKey := fmt.Sprintf("ratelimit:%d:%d", keyID, currentBucket)
+		previousKey := fmt.Sprintf("ratelimit:%d:%d", keyID, previousBucket)
 
 		ctx := c.Request.Context()
-		count, err := client.Incr(ctx, redisKey).Result()
-		if err != nil {
-			logger.Warn("rate limiter redis error, allowing request", zap.Error(err))
+
+		// Increment current bucket and read previous bucket in a pipeline.
+		pipe := client.Pipeline()
+		currentCmd := pipe.Incr(ctx, currentKey)
+		previousCmd := pipe.Get(ctx, previousKey)
+		pipe.Expire(ctx, currentKey, 2*time.Minute)
+		_, execErr := pipe.Exec(ctx)
+
+		// If the INCR on the current bucket failed, Redis is likely down — fail open.
+		// We check currentCmd specifically because previousCmd returns redis.Nil for
+		// missing keys which is expected and not a real error.
+		currentCount := currentCmd.Val()
+		if currentCount == 0 && execErr != nil {
+			logger.Warn("rate limiter redis error, allowing request", zap.Error(execErr))
 			c.Next()
 			return
 		}
 
-		if count == 1 {
-			client.Expire(ctx, redisKey, 2*time.Minute)
-		}
+		previousCount, _ := previousCmd.Int64() // 0 if key expired/missing
+
+		// Weighted sliding window: weight previous bucket by how much of it
+		// still falls within the trailing 60-second window.
+		weighted := float64(currentCount) + float64(previousCount)*(1.0-elapsedFraction)
+		count := int64(math.Ceil(weighted))
 
 		c.Header("X-RateLimit-Limit", strconv.Itoa(limit))
 		remaining := limit - int(count)
@@ -80,7 +104,7 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 		c.Set("rate_limit_remaining", remaining)
 
 		if int(count) > limit {
-			retryAfter := 60 - (time.Now().Unix() % 60)
+			retryAfter := 60 - (now.Unix() % 60)
 			c.Header("Retry-After", strconv.FormatInt(retryAfter, 10))
 			logger.Warn("rate limit exceeded",
 				zap.Int("api_key_id", keyID.(int)),

@@ -22,6 +22,14 @@ func normalizeDomain(raw string) (string, bool) {
 	if net.ParseIP(d) != nil {
 		return d, false
 	}
+	// FQDN max length per RFC 1035.
+	if len(d) > 253 {
+		return d, false
+	}
+	// Reject trailing dots and consecutive dots (e.g. "example..com").
+	if strings.HasSuffix(d, ".") || strings.Contains(d, "..") {
+		return d, false
+	}
 	return d, true
 }
 

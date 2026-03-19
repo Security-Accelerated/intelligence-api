@@ -365,8 +365,8 @@ Queries multiple threat intelligence feeds and returns a consolidated risk asses
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `score` | int | Aggregate risk score from 0 (clean) to 100 (maximum risk) |
-| `risk` | string | `clean`, `low`, `medium`, or `high` |
+| `score` | int | Aggregate risk score from 0 to 100 |
+| `risk` | string | `none` (0), `low` (1–20), `medium` (21–50), `high` (51–80), or `critical` (81–100) |
 | `providers` | array | Per-provider results |
 
 Each provider:

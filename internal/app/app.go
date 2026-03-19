@@ -119,6 +119,9 @@ func Run(logger *zap.Logger, version string) error {
 		alerter = &notifications.NoopRecorder{}
 		logger.Info("pushover notifications disabled (no credentials configured)")
 	}
+	if a, ok := alerter.(*notifications.Alerter); ok {
+		defer a.Close()
+	}
 
 	// Services
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")

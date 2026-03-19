@@ -22,6 +22,12 @@ func openDB(ctx context.Context, cfg *viper.Viper) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	db.SetMaxOpenConns(cfg.GetInt("postgres.max_open_conns"))
+	db.SetMaxIdleConns(cfg.GetInt("postgres.max_idle_conns"))
+	db.SetConnMaxLifetime(cfg.GetDuration("postgres.conn_max_lifetime"))
+	db.SetConnMaxIdleTime(cfg.GetDuration("postgres.conn_max_idle_time"))
+
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, err

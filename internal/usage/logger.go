@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -19,6 +20,7 @@ type UsageLogger struct {
 	logger        *zap.Logger
 	wg            sync.WaitGroup
 	stopCh        chan struct{}
+	dropped       atomic.Int64
 }
 
 // NewUsageLogger creates a UsageLogger that flushes to db on a timer or when
@@ -37,14 +39,22 @@ func NewUsageLogger(db *sql.DB, bufferSize int, flushInterval time.Duration, log
 	return ul
 }
 
-// Record enqueues an entry for batch insertion. Non-blocking: drops silently if
-// the channel is full.
+// Record enqueues an entry for batch insertion. Non-blocking: drops if the
+// channel is full and increments the dropped counter.
 func (ul *UsageLogger) Record(entry UsageEntry) {
 	select {
 	case ul.ch <- entry:
 	default:
-		ul.logger.Warn("usage log buffer full, dropping entry")
+		ul.dropped.Add(1)
+		ul.logger.Warn("usage log buffer full, dropping entry",
+			zap.Int64("total_dropped", ul.dropped.Load()),
+		)
 	}
+}
+
+// Dropped returns the total number of entries dropped since startup.
+func (ul *UsageLogger) Dropped() int64 {
+	return ul.dropped.Load()
 }
 
 // Stop drains remaining entries and waits for the background goroutine to exit.

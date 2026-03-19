@@ -20,7 +20,7 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 | `pro` | All basic capabilities + page screenshots + reputation checks + threat intelligence, up to 20 domains per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
-The plan is stored in the `customers` table. New customers default to `basic`.
+The plan is stored in the `customers` table. New customers provisioned via Stripe checkout receive the plan they purchased (basic or pro).
 
 Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Basic plan requests for pro-only options (screenshot, reputation, threat_intel) receive `403 Forbidden`. The `/v1/hello` health check requires no authentication.
 
@@ -325,7 +325,7 @@ Queries multiple threat intelligence providers to assess whether a domain is ass
 
 | Field | What it means |
 |-------|---------------|
-| `risk_level` | Composite risk level: `clean`, `low`, `medium`, `high`, `critical` |
+| `risk_level` | Composite risk level: `none`, `low`, `medium`, `high`, `critical` |
 | `score` | Composite risk score from 0 (clean) to 100 (maximum risk) |
 | `categories` | Aggregated threat categories across all providers (e.g. `malware`, `phishing`, `c2`) |
 | `providers` | Array of per-provider results |
@@ -348,7 +348,7 @@ Each provider entry contains:
 | `urlhaus` | URLhaus (Abuse.ch) | Database of malicious URLs used for malware distribution |
 | `alienvault_otx` | AlienVault OTX | Open threat exchange with community-contributed threat pulses |
 
-**Scoring:** Each provider contributes to the composite score based on detection severity. Multiple detections across providers stack. The score is capped at 100. The `risk_level` maps from the composite score: `clean` (0), `low` (1-29), `medium` (30-59), `high` (60-79), `critical` (80-100).
+**Scoring:** Each provider contributes to the composite score based on detection severity. Multiple detections across providers stack. The score is capped at 100. The `risk_level` maps from the composite score: `none` (0), `low` (1–20), `medium` (21–50), `high` (51–80), `critical` (81–100).
 
 ### `email_security` — Email Security (All Plans)
 
@@ -570,6 +570,10 @@ Config values:
 | `postgres.password` | `intelligence` | PostgreSQL password |
 | `postgres.dbname` | `intelligence_api` | PostgreSQL database name |
 | `postgres.sslmode` | `require` | PostgreSQL SSL mode (`disable` for local dev) |
+| `postgres.max_open_conns` | `25` | Maximum open database connections |
+| `postgres.max_idle_conns` | `5` | Maximum idle database connections |
+| `postgres.conn_max_lifetime` | `5m` | Maximum connection lifetime |
+| `postgres.conn_max_idle_time` | `2m` | Maximum idle time before connection is closed |
 | `pushover.api_token` | `""` | Pushover application API token (enables alerting) |
 | `pushover.user_key` | `""` | Pushover user key (enables alerting) |
 | `alerts.throttle_threshold` | `5` | Per-lookup failures to trigger throttle alert |
@@ -600,6 +604,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column (`free`/`basic`/`pro`/`admin`)
 - `007_billing.sql` — adds `email`, `stripe_customer_id` to customers; `last_used_at` to api_keys; creates `provisioned_keys` table
 - `008_request_log.sql` — creates the `request_log` table for usage tracking (indexed on `created_at`, `customer_id`, `api_key_id`)
+- `009_request_log_threat_intel.sql` — adds `threat_intel` column to the `request_log` table
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:

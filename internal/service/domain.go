@@ -188,8 +188,13 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	// Respect any tighter deadline from the parent (e.g. HTTP server write timeout).
+	const lookupTimeout = 30 * time.Second
+	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > lookupTimeout {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, lookupTimeout)
+		defer cancel()
+	}
 
 	resp := &domain.DomainResponse{
 		Domain: domainName,

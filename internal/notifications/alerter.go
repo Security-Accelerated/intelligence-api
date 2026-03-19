@@ -37,6 +37,11 @@ type Alerter struct {
 
 	// now is a function that returns the current time. Overridable for testing.
 	now func() time.Time
+
+	// sem limits concurrent notification goroutines.
+	sem chan struct{}
+	// wg tracks in-flight notification goroutines for graceful shutdown.
+	wg sync.WaitGroup
 }
 
 // NewAlerter creates an alerter with the given notifier and config.
@@ -48,7 +53,13 @@ func NewAlerter(notifier Notifier, cfg AlerterConfig) *Alerter {
 		globalErrors: &errorWindow{},
 		lastAlert:    make(map[string]time.Time),
 		now:          time.Now,
+		sem:          make(chan struct{}, 5),
 	}
+}
+
+// Close waits for all in-flight notification goroutines to finish.
+func (a *Alerter) Close() {
+	a.wg.Wait()
 }
 
 // RecordLookupError records a lookup failure and checks alert thresholds.
@@ -100,9 +111,19 @@ func (a *Alerter) cooldownElapsed(key string, now time.Time) bool {
 }
 
 // sendAsync fires a notification in a background goroutine so it never blocks
-// the request path.
+// the request path. Concurrency is bounded by the semaphore; if all slots are
+// occupied the notification is dropped to avoid blocking callers.
 func (a *Alerter) sendAsync(title, message string, priority int) {
+	select {
+	case a.sem <- struct{}{}:
+	default:
+		logging.Logger().Warn("notification dropped, send queue full", zap.String("title", title))
+		return
+	}
+	a.wg.Add(1)
 	go func() {
+		defer a.wg.Done()
+		defer func() { <-a.sem }()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := a.notifier.Send(ctx, title, message, priority); err != nil {
@@ -115,11 +136,18 @@ func (a *Alerter) sendAsync(title, message string, priority int) {
 }
 
 // errorWindow tracks timestamps of errors for sliding window counting.
+// Capped at maxWindowSize entries to bound memory usage under sustained errors.
 type errorWindow struct {
 	timestamps []time.Time
 }
 
+const maxWindowSize = 1000
+
 func (w *errorWindow) record(now time.Time) {
+	if len(w.timestamps) >= maxWindowSize {
+		// Drop oldest entry to stay within cap.
+		w.timestamps = w.timestamps[1:]
+	}
 	w.timestamps = append(w.timestamps, now)
 }
 
@@ -130,8 +158,10 @@ func (w *errorWindow) count(window time.Duration, now time.Time) int {
 	for i < len(w.timestamps) && w.timestamps[i].Before(cutoff) {
 		i++
 	}
-	// Prune expired entries
-	w.timestamps = w.timestamps[i:]
+	// Prune expired entries — copy to release old backing array memory.
+	remaining := make([]time.Time, len(w.timestamps)-i)
+	copy(remaining, w.timestamps[i:])
+	w.timestamps = remaining
 	return len(w.timestamps)
 }
 
