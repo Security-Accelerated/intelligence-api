@@ -30,6 +30,7 @@ var IntContextKeys = []string{
 	"rate_limit_remaining",
 	"customer_id",
 	"domain_count",
+	"error_count",
 }
 
 // StringContextKeys lists string gin context keys logged per request.

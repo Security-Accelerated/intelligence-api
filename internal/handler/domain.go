@@ -125,13 +125,16 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 	close(ch)
 
 	anyCached := false
+	errorCount := 0
 	for ir := range ch {
 		results[ir.index] = ir.resp
 		if ir.resp.CacheHit {
 			anyCached = true
 		}
+		errorCount += len(ir.resp.Errors)
 	}
 	c.Set("cache_hit", anyCached)
+	c.Set("error_count", errorCount)
 
 	c.JSON(http.StatusOK, results)
 }
