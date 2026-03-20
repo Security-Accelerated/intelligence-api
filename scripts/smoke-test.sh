@@ -21,7 +21,7 @@ check() {
     local desc="$2"
     shift 2
     local status
-    status=$(curl -s -o /dev/null -w '%{http_code}' "$@")
+    status=$(curl -s -o /dev/null -w '%{http_code}' "$@") || true
     if [ "$status" = "$expect" ]; then
         printf "  \033[32m✓\033[0m %s → %s\n" "$desc" "$status"
         pass=$((pass + 1))
@@ -50,7 +50,7 @@ check_json() {
     local desc="$1" filter="$2"
     shift 2
     local body
-    body=$(curl -s "$@")
+    body=$(curl -s "$@") || true
     if echo "$body" | jq -e "$filter" > /dev/null 2>&1; then
         printf "  \033[32m✓\033[0m %s\n" "$desc"
         pass=$((pass + 1))
@@ -79,7 +79,7 @@ check_header() {
     local desc="$1" header="$2" expected="$3"
     shift 3
     local value
-    value=$(curl -s -D - -o /dev/null "$@" 2>&1 | grep -i "^$header:" | head -1 | sed "s/^[^:]*: //" | tr -d '\r')
+    value=$(curl -s -D - -o /dev/null "$@" 2>&1 | grep -i "^$header:" | head -1 | sed "s/^[^:]*: //" | tr -d '\r') || true
     if [ -z "$value" ]; then
         printf "  \033[31m✗\033[0m %s (header %s not found)\n" "$desc" "$header"
         fail=$((fail + 1))
@@ -285,7 +285,7 @@ echo "=== Client Request ID ==="
 rid_echo=$(curl -s -D - -o /dev/null -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -H "X-Client-Request-ID: smoke-test-456" \
-    -d "$DOMAIN" 2>&1 | grep -i "X-Client-Request-ID" | tr -d '\r')
+    -d "$DOMAIN" 2>&1 | grep -i "X-Client-Request-ID" | tr -d '\r') || true
 if echo "$rid_echo" | grep -q "smoke-test-456"; then
     printf "  \033[32m✓\033[0m X-Client-Request-ID echoed back\n"
     pass=$((pass + 1))
