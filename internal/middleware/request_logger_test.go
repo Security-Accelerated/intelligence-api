@@ -305,6 +305,56 @@ func TestRequestLogger_StringContextKeysAbsent(t *testing.T) {
 	}
 }
 
+func TestRequestLogger_ErrorLevelFor5xx(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/fail", func(c *gin.Context) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "boom"})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/fail", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 log entry, got %d", len(entries))
+	}
+	if entries[0].Level != zapcore.ErrorLevel {
+		t.Errorf("log level = %v, want %v", entries[0].Level, zapcore.ErrorLevel)
+	}
+}
+
+func TestRequestLogger_InfoLevelForNon5xx(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/ok", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	r.ServeHTTP(w, req)
+
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 log entry, got %d", len(entries))
+	}
+	if entries[0].Level != zapcore.InfoLevel {
+		t.Errorf("log level = %v, want %v", entries[0].Level, zapcore.InfoLevel)
+	}
+}
+
 func TestRequestLogger_ContextKeysAbsent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger, logs := newObserverLogger()

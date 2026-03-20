@@ -39,6 +39,7 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 		c.Set("ct_logs_requested", false)
 		c.Set("bgp_requested", false)
 		c.Set("fingerprint_requested", true)
+		c.Set("threat_intel_requested", true)
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -77,6 +78,9 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 	}
 	if !e.Fingerprint {
 		t.Error("Fingerprint = false, want true")
+	}
+	if !e.ThreatIntel {
+		t.Error("ThreatIntel = false, want true")
 	}
 	if e.StatusCode != 200 {
 		t.Errorf("StatusCode = %d, want 200", e.StatusCode)

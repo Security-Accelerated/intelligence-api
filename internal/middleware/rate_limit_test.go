@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -301,6 +303,45 @@ func TestRateLimit_UnknownPlan_GetsBasicLimit(t *testing.T) {
 	w := doRequest(r)
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("request 3: status = %d, want %d", w.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestRateLimit_PreviousBucketWeight(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	core, _ := observer.New(zapcore.WarnLevel)
+	logger := zap.New(core)
+
+	cfg := RateLimitConfig{Free: 3, Basic: 5, Pro: 10}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("api_key_id", 1)
+		c.Set("api_key_plan", "basic")
+		c.Next()
+	})
+	r.Use(RateLimitWithLogger(client, cfg, logger))
+	r.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Pre-populate the previous minute's bucket with 1000 requests.
+	// The weighted sliding window formula: ceil(current + previous * (1 - elapsed/60))
+	// Even at the worst case (59s into the current minute):
+	//   ceil(1 + 1000 * (1/60)) = ceil(17.67) = 18 > limit of 5
+	now := time.Now()
+	prevBucket := now.Unix()/60 - 1
+	mr.Set(fmt.Sprintf("ratelimit:1:%d", prevBucket), "1000")
+
+	// The first request should be rate-limited because the weighted
+	// previous bucket count alone exceeds the limit.
+	w := doRequest(r)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want %d; previous bucket weight should cause rate limiting", w.Code, http.StatusTooManyRequests)
+	}
+	if got := w.Header().Get("Retry-After"); got == "" {
+		t.Error("missing Retry-After header")
 	}
 }
 

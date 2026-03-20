@@ -1343,6 +1343,114 @@ func TestLookup_ThreatIntel_SeparateCacheKey(t *testing.T) {
 	}
 }
 
+// --- Context timeout tests ---
+
+func TestLookup_AppliesLookupTimeout(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupTimeout = 100 * time.Millisecond
+
+	var hadDeadline bool
+	svc.lookupWhois = func(ctx context.Context, _ string) (*domain.WhoisInfo, error) {
+		_, hadDeadline = ctx.Deadline()
+		return &domain.WhoisInfo{DomainName: "example.com"}, nil
+	}
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	if !hadDeadline {
+		t.Error("expected context to have a deadline from lookupTimeout")
+	}
+}
+
+func TestLookup_RespectsParentDeadline(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupTimeout = 30 * time.Second
+
+	var capturedDeadline time.Time
+	svc.lookupWhois = func(ctx context.Context, _ string) (*domain.WhoisInfo, error) {
+		capturedDeadline, _ = ctx.Deadline()
+		return &domain.WhoisInfo{DomainName: "example.com"}, nil
+	}
+
+	// Set a tighter parent deadline (500ms << 30s)
+	tightDeadline := time.Now().Add(500 * time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), tightDeadline)
+	defer cancel()
+
+	svc.Lookup(ctx, "example.com", noOpts())
+	// The captured deadline should be close to the tight deadline, not 30s from now
+	if capturedDeadline.After(tightDeadline.Add(50 * time.Millisecond)) {
+		t.Errorf("deadline = %v, want close to %v (parent's tighter deadline should be respected)", capturedDeadline, tightDeadline)
+	}
+}
+
+// --- Parameter passing tests ---
+
+func TestLookup_SubdomainMaxResults_Passed(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.subdomainMaxResults = 42
+
+	var capturedOpts domain.SubdomainOptions
+	svc.SetSubdomainLookup(func(_ context.Context, _ string, opts domain.SubdomainOptions) (*domain.SubdomainInfo, error) {
+		capturedOpts = opts
+		return &domain.SubdomainInfo{}, nil
+	})
+
+	svc.Lookup(context.Background(), "example.com", subdomainsOpts())
+	if capturedOpts.MaxResults != 42 {
+		t.Errorf("SubdomainOptions.MaxResults = %d, want 42", capturedOpts.MaxResults)
+	}
+}
+
+func TestLookup_CTLogsMaxEntries_Passed(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.ctLogsMaxEntries = 77
+
+	var capturedMax int
+	svc.SetCTLogsLookup(func(_ context.Context, _ string, maxEntries int) (*domain.CTLogsInfo, error) {
+		capturedMax = maxEntries
+		return &domain.CTLogsInfo{}, nil
+	})
+
+	svc.Lookup(context.Background(), "example.com", ctLogsOpts())
+	if capturedMax != 77 {
+		t.Errorf("maxEntries = %d, want 77", capturedMax)
+	}
+}
+
+func TestLookup_ScreenshotTimeout_Passed(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.screenshotTimeout = 42 * time.Second
+
+	var capturedTimeout time.Duration
+	svc.lookupScreenshot = func(_ context.Context, _ string, timeout time.Duration) (*domain.ScreenshotInfo, error) {
+		capturedTimeout = timeout
+		return &domain.ScreenshotInfo{StatusCode: 200}, nil
+	}
+
+	svc.Lookup(context.Background(), "example.com", screenshotOpts())
+	if capturedTimeout != 42*time.Second {
+		t.Errorf("timeout = %v, want 42s", capturedTimeout)
+	}
+}
+
+func TestNewDomainService_Defaults(t *testing.T) {
+	svc := NewDomainService(newMockCache(), 5*time.Minute, 0, 15*time.Second, 0, 0, nil, &notifications.NoopRecorder{}, nil)
+	if svc.lookupTimeout != 30*time.Second {
+		t.Errorf("lookupTimeout = %v, want 30s", svc.lookupTimeout)
+	}
+	if svc.subdomainMaxResults != 500 {
+		t.Errorf("subdomainMaxResults = %d, want 500", svc.subdomainMaxResults)
+	}
+	if svc.ctLogsMaxEntries != 100 {
+		t.Errorf("ctLogsMaxEntries = %d, want 100", svc.ctLogsMaxEntries)
+	}
+}
+
 func TestLookup_SetThreatIntelLookup(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)

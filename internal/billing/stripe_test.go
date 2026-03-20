@@ -2,9 +2,13 @@ package billing
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
+
+	stripe "github.com/stripe/stripe-go/v84"
+	"go.uber.org/zap"
 )
 
 type mockNotifier struct {
@@ -69,6 +73,284 @@ func TestStripeService_NotifyMultiple(t *testing.T) {
 	calls := n.getCalls()
 	if len(calls) != 2 {
 		t.Fatalf("got %d notify calls, want 2", len(calls))
+	}
+}
+
+// --- Mock types for webhook handler tests ---
+
+type mockBillingRepo struct {
+	updatePlanCalls []struct{ customerID, plan string }
+	downgradeCalls  []string
+	updatePlanErr   error
+	downgradeErr    error
+}
+
+func (m *mockBillingRepo) CustomerExistsByStripeID(context.Context, string) (bool, error) {
+	return false, nil
+}
+func (m *mockBillingRepo) CreateCustomerWithKey(context.Context, string, string, string, string, string) (int, error) {
+	return 0, nil
+}
+func (m *mockBillingRepo) StoreProvisionedKey(context.Context, string, int, string) error { return nil }
+func (m *mockBillingRepo) RetrieveProvisionedKey(context.Context, string) (string, error) {
+	return "", nil
+}
+func (m *mockBillingRepo) UpdatePlan(_ context.Context, customerID, plan string) error {
+	m.updatePlanCalls = append(m.updatePlanCalls, struct{ customerID, plan string }{customerID, plan})
+	return m.updatePlanErr
+}
+func (m *mockBillingRepo) DowngradeToFree(_ context.Context, customerID string) error {
+	m.downgradeCalls = append(m.downgradeCalls, customerID)
+	return m.downgradeErr
+}
+
+type mockAuthCache struct {
+	invalidated bool
+}
+
+func (m *mockAuthCache) InvalidateAll() {
+	m.invalidated = true
+}
+
+func newTestStripeService(repo *mockBillingRepo, authCache *mockAuthCache, notifier *mockNotifier) *StripeService {
+	return &StripeService{
+		priceToplan: map[string]string{"price_basic": "basic", "price_pro": "pro"},
+		repo:        repo,
+		authCache:   authCache,
+		notifier:    notifier,
+	}
+}
+
+// --- Webhook handler tests ---
+
+func TestHandleSubscriptionUpdated_HappyPath(t *testing.T) {
+	repo := &mockBillingRepo{}
+	authCache := &mockAuthCache{}
+	notifier := &mockNotifier{}
+	svc := newTestStripeService(repo, authCache, notifier)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{
+				"customer": "cus_123",
+				"items": map[string]interface{}{
+					"data": []interface{}{
+						map[string]interface{}{
+							"price": map[string]interface{}{
+								"id": "price_pro",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := svc.handleSubscriptionUpdated(context.Background(), event, zap.NewNop())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(repo.updatePlanCalls) != 1 {
+		t.Fatalf("expected 1 UpdatePlan call, got %d", len(repo.updatePlanCalls))
+	}
+	if repo.updatePlanCalls[0].customerID != "cus_123" || repo.updatePlanCalls[0].plan != "pro" {
+		t.Errorf("UpdatePlan(%q, %q), want (%q, %q)", repo.updatePlanCalls[0].customerID, repo.updatePlanCalls[0].plan, "cus_123", "pro")
+	}
+	if !authCache.invalidated {
+		t.Error("expected auth cache to be invalidated")
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	calls := notifier.getCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 notify call, got %d", len(calls))
+	}
+	if calls[0].title != "Plan Change" {
+		t.Errorf("notify title = %q, want %q", calls[0].title, "Plan Change")
+	}
+}
+
+func TestHandleSubscriptionUpdated_MissingCustomerID(t *testing.T) {
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{},
+		},
+	}
+
+	err := svc.handleSubscriptionUpdated(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error for missing customer ID")
+	}
+}
+
+func TestHandleSubscriptionUpdated_UnknownPriceSkips(t *testing.T) {
+	repo := &mockBillingRepo{}
+	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{
+				"customer": "cus_123",
+				"items": map[string]interface{}{
+					"data": []interface{}{
+						map[string]interface{}{
+							"price": map[string]interface{}{
+								"id": "price_unknown",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := svc.handleSubscriptionUpdated(context.Background(), event, zap.NewNop())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(repo.updatePlanCalls) != 0 {
+		t.Error("expected no UpdatePlan calls for unknown price ID")
+	}
+}
+
+func TestHandleSubscriptionUpdated_RepoError(t *testing.T) {
+	repo := &mockBillingRepo{updatePlanErr: errors.New("db down")}
+	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{
+				"customer": "cus_123",
+				"items": map[string]interface{}{
+					"data": []interface{}{
+						map[string]interface{}{
+							"price": map[string]interface{}{
+								"id": "price_basic",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := svc.handleSubscriptionUpdated(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error from repo failure")
+	}
+}
+
+func TestHandleSubscriptionDeleted_HappyPath(t *testing.T) {
+	repo := &mockBillingRepo{}
+	authCache := &mockAuthCache{}
+	notifier := &mockNotifier{}
+	svc := newTestStripeService(repo, authCache, notifier)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{
+				"customer": "cus_456",
+			},
+		},
+	}
+
+	err := svc.handleSubscriptionDeleted(context.Background(), event, zap.NewNop())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(repo.downgradeCalls) != 1 || repo.downgradeCalls[0] != "cus_456" {
+		t.Errorf("DowngradeToFree calls = %v, want [cus_456]", repo.downgradeCalls)
+	}
+	if !authCache.invalidated {
+		t.Error("expected auth cache to be invalidated")
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	calls := notifier.getCalls()
+	if len(calls) != 1 || calls[0].title != "Subscription Cancelled" {
+		t.Errorf("notify = %v, want title %q", calls, "Subscription Cancelled")
+	}
+}
+
+func TestHandleSubscriptionDeleted_MissingCustomerID(t *testing.T) {
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{},
+		},
+	}
+
+	err := svc.handleSubscriptionDeleted(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error for missing customer ID")
+	}
+}
+
+func TestHandlePaymentFailed_HappyPath(t *testing.T) {
+	repo := &mockBillingRepo{}
+	authCache := &mockAuthCache{}
+	notifier := &mockNotifier{}
+	svc := newTestStripeService(repo, authCache, notifier)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{
+				"customer": "cus_789",
+			},
+		},
+	}
+
+	err := svc.handlePaymentFailed(context.Background(), event, zap.NewNop())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(repo.downgradeCalls) != 1 || repo.downgradeCalls[0] != "cus_789" {
+		t.Errorf("DowngradeToFree calls = %v, want [cus_789]", repo.downgradeCalls)
+	}
+	if !authCache.invalidated {
+		t.Error("expected auth cache to be invalidated")
+	}
+
+	time.Sleep(50 * time.Millisecond)
+	calls := notifier.getCalls()
+	if len(calls) != 1 || calls[0].title != "Payment Failed" {
+		t.Errorf("notify = %v, want title %q", calls, "Payment Failed")
+	}
+}
+
+func TestHandlePaymentFailed_MissingCustomerID(t *testing.T) {
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{},
+		},
+	}
+
+	err := svc.handlePaymentFailed(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error for missing customer ID")
+	}
+}
+
+func TestHandlePaymentFailed_RepoError(t *testing.T) {
+	repo := &mockBillingRepo{downgradeErr: errors.New("db down")}
+	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]interface{}{
+				"customer": "cus_789",
+			},
+		},
+	}
+
+	err := svc.handlePaymentFailed(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error from repo failure")
 	}
 }
 

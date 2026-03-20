@@ -70,6 +70,30 @@ get() {
     fi
 }
 
+# check_header — verifies a response header is present and optionally matches a value.
+#   $1  description
+#   $2  header name
+#   $3  expected value (empty string = just check presence)
+#   $@  remaining args are passed to curl
+check_header() {
+    local desc="$1" header="$2" expected="$3"
+    shift 3
+    local value
+    value=$(curl -s -D - -o /dev/null "$@" 2>&1 | grep -i "^$header:" | head -1 | sed "s/^[^:]*: //" | tr -d '\r')
+    if [ -z "$value" ]; then
+        printf "  \033[31m✗\033[0m %s (header %s not found)\n" "$desc" "$header"
+        fail=$((fail + 1))
+        errors+=("$desc: header $header not found")
+    elif [ -n "$expected" ] && [ "$value" != "$expected" ]; then
+        printf "  \033[31m✗\033[0m %s (%s = %s, expected %s)\n" "$desc" "$header" "$value" "$expected"
+        fail=$((fail + 1))
+        errors+=("$desc: $header = $value, expected $expected")
+    else
+        printf "  \033[32m✓\033[0m %s (%s: %s)\n" "$desc" "$header" "$value"
+        pass=$((pass + 1))
+    fi
+}
+
 # Keys (override via .env or env vars for production)
 ADMIN="${SMOKE_ADMIN_KEY:-test-admin-key}"
 BASIC="${SMOKE_BASIC_KEY:-test-basic-key}"
@@ -181,6 +205,67 @@ check_json "lookup response is JSON array with domain field" \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
+
+check_json "lookup response has whois populated" \
+    '.[0].whois.domain_name' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+check_json "lookup response has dns populated" \
+    '.[0].dns' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+check_json "lookup response has ssl populated" \
+    '.[0].ssl.subject' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+check_json "lookup response has headers populated" \
+    '.[0].headers.status_code' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+echo ""
+echo "=== Multi-Domain Batch ==="
+post 200 "basic 3 domains" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com","example.org","example.net"]}'
+check_json "basic batch returns 3 results" \
+    'length == 3' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $BASIC" \
+    -d '{"domains":["example.com","example.org","example.net"]}'
+post 200 "pro 3 domains" "/v1/domain/lookup" "$PRO" '{"domains":["example.com","example.org","example.net"]}'
+
+echo ""
+echo "=== All Features Combined ==="
+check_json "all features return populated fields" \
+    '.[0].email_security and .[0].subdomains and .[0].bgp and .[0].fingerprint and .[0].ct_logs' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["example.com"],"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true}'
+
+echo ""
+echo "=== Security Headers ==="
+check_header "X-Content-Type-Options present" "X-Content-Type-Options" "nosniff" "$HOST/v1/hello"
+check_header "X-Frame-Options present"        "X-Frame-Options"        "DENY"    "$HOST/v1/hello"
+check_header "Cache-Control: no-store"         "Cache-Control"          "no-store" "$HOST/v1/hello"
+
+echo ""
+echo "=== X-Request-ID ==="
+check_header "X-Request-ID on unauthenticated request" "X-Request-ID" "" "$HOST/v1/hello"
+check_header "X-Request-ID on authenticated request"   "X-Request-ID" "" \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+echo ""
+echo "=== Rate Limit Headers ==="
+check_header "X-RateLimit-Limit on basic request"     "X-RateLimit-Limit"     "" "$HOST/v1/domain/lookup" -X POST -H "Content-Type: application/json" -H "X-API-Key: $BASIC" -d "$DOMAIN"
+check_header "X-RateLimit-Remaining on basic request" "X-RateLimit-Remaining" "" "$HOST/v1/domain/lookup" -X POST -H "Content-Type: application/json" -H "X-API-Key: $BASIC" -d "$DOMAIN"
 
 echo ""
 echo "=== Body Size Limit ==="

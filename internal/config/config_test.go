@@ -102,6 +102,30 @@ func TestConfig_EnvironmentInfo(t *testing.T) {
 	}
 }
 
+func TestConfig_EnvVarOverride(t *testing.T) {
+	cfg := Config()
+
+	// Viper's AutomaticEnv + SetEnvKeyReplacer means APPLICATION_PORT → application.port
+	t.Setenv("APPLICATION_PORT", "9090")
+
+	got := cfg.GetInt("application.port")
+	if got != 9090 {
+		t.Errorf("application.port = %d, want 9090 (overridden by APPLICATION_PORT env var)", got)
+	}
+}
+
+func TestConfig_EnvVarOverride_Nested(t *testing.T) {
+	cfg := Config()
+
+	// Nested config key: REDIS_CACHE_TTL → redis.cache_ttl
+	t.Setenv("REDIS_CACHE_TTL", "120m")
+
+	got := cfg.GetString("redis.cache_ttl")
+	if got != "120m" {
+		t.Errorf("redis.cache_ttl = %q, want %q (overridden by REDIS_CACHE_TTL)", got, "120m")
+	}
+}
+
 func TestCharsToString(t *testing.T) {
 	tests := []struct {
 		name  string
