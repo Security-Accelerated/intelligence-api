@@ -55,6 +55,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
 | POST | `/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
 | GET | `/v1/admin/usage` | `admin` | Aggregated API usage statistics |
+| GET | `/v1/admin/changelog` | `admin` | Full changelog with audience tags |
 
 ### POST /v1/domain/lookup
 
@@ -511,6 +512,12 @@ Returns application configuration, service status, and live runtime metrics. The
 | `services` | Notifications (enabled + alert config), billing (enabled + config), threat intel (provider names), fingerprint (source + rule count), usage (buffer config) |
 | `runtime` | Goroutines, heap alloc/inuse (MB), sys memory (MB), GC count |
 | `postgres_pool` | Connection pool: open, in use, idle, wait count, wait duration |
+
+### `GET /v1/admin/changelog` — Changelog (Admin Only)
+
+Returns the full changelog with audience tags. Each entry includes `version`, `date`, and `changes` (array of `{text, audience}`). The public API docs page at `GET /` automatically shows only `public` entries in a "What's New" section.
+
+The changelog is maintained in `changelog.yaml` at the project root (symlink to `internal/handler/changelog.yaml`). Update it with every release.
 
 ## Caching
 

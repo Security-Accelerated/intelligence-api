@@ -448,6 +448,7 @@
     <a href="#caching">Caching</a>
     <a href="#error-handling">Error Handling</a>
     <a href="#request-correlation">Request Correlation</a>
+    <a href="#whats-new">What's New</a>
   </div>
 </nav>
 
@@ -1296,6 +1297,19 @@ results = resp.json()
       <tr><td><code>X-Request-ID</code></td><td>Response</td><td>Server-generated UUID for every request. Reference this when contacting support.</td></tr>
     </tbody>
   </table>
+
+  <h2 id="whats-new">What's New</h2>
+  {{if .Changelog}}
+  {{range .Changelog}}
+  <h3>{{.Version}} <span style="font-weight:normal;color:var(--sidebar-text);font-size:0.85em">— {{.Date}}</span></h3>
+  <ul>
+    {{range .Changes}}<li>{{.}}</li>
+    {{end}}
+  </ul>
+  {{end}}
+  {{else}}
+  <p>No changelog entries available.</p>
+  {{end}}
 </main>
 
 <script>

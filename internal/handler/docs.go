@@ -18,6 +18,13 @@ type docsData struct {
 	ProPaymentLink   string
 	PortalLink       string
 	Version          string
+	Changelog        []docsChangelogVersion
+}
+
+type docsChangelogVersion struct {
+	Version string
+	Date    string
+	Changes []string
 }
 
 func (h *Handler) Docs(c *gin.Context) {
@@ -30,6 +37,23 @@ func (h *Handler) Docs(c *gin.Context) {
 		data.BasicPaymentLink = h.cfg.GetString("stripe.payment_link.basic")
 		data.ProPaymentLink = h.cfg.GetString("stripe.payment_link.pro")
 		data.PortalLink = h.cfg.GetString("stripe.portal_link")
+	}
+
+	// Filter changelog to public entries only.
+	for _, v := range h.changelog {
+		var publicChanges []string
+		for _, ch := range v.Changes {
+			if ch.Audience == "public" {
+				publicChanges = append(publicChanges, ch.Text)
+			}
+		}
+		if len(publicChanges) > 0 {
+			data.Changelog = append(data.Changelog, docsChangelogVersion{
+				Version: v.Version,
+				Date:    v.Date,
+				Changes: publicChanges,
+			})
+		}
 	}
 
 	c.Header("Content-Type", "text/html; charset=utf-8")

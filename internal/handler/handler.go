@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,30 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/usage"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
+
+//go:embed changelog.yaml
+var changelogYAML []byte
+
+// ChangelogVersion represents a single version entry in the changelog.
+type ChangelogVersion struct {
+	Version string            `json:"version" yaml:"version"`
+	Date    string            `json:"date" yaml:"date"`
+	Changes []ChangelogChange `json:"changes" yaml:"changes"`
+}
+
+// ChangelogChange is a single change entry with audience tagging.
+type ChangelogChange struct {
+	Text     string `json:"text" yaml:"text"`
+	Audience string `json:"audience" yaml:"audience"`
+}
+
+func parseChangelog() []ChangelogVersion {
+	var entries []ChangelogVersion
+	yaml.Unmarshal(changelogYAML, &entries)
+	return entries
+}
 
 // FingerprintAdminService provides admin access to fingerprint rules.
 type FingerprintAdminService interface {
@@ -40,6 +64,7 @@ type Handler struct {
 	authCacheStats     AuthCacheStats
 	db                 *sql.DB
 	status             *config.StatusSnapshot
+	changelog          []ChangelogVersion
 }
 
 func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
@@ -53,6 +78,7 @@ func New(domainService DomainLookupService, fingerprintService FingerprintAdminS
 		authCacheStats:     authCacheStats,
 		db:                 db,
 		status:             status,
+		changelog:          parseChangelog(),
 	}
 }
 
@@ -82,5 +108,6 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin
 	v1 := router.Group("/v1")
 	v1.Use(middlewares...)
 	v1.GET("/info", middleware.RequireAdmin(), h.Info)
+	v1.GET("/admin/changelog", middleware.RequireAdmin(), h.Changelog)
 	v1.POST("/domain/lookup", h.DomainLookup)
 }

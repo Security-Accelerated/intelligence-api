@@ -1,0 +1,156 @@
+# Changelog — Intelligence API
+# audience: public (shown on docs page), internal (admin/ops only)
+
+- version: v0.39.0
+  date: 2026-03-23
+  changes:
+    - text: "/v1/info now returns runtime stats (goroutines, heap), DB pool metrics, and Redis ping latency"
+      audience: internal
+    - text: "Startup logging and /v1/info share a single StatusSnapshot — new config fields surface in both automatically"
+      audience: internal
+
+- version: v0.38.0
+  date: 2026-03-22
+  changes:
+    - text: "Partial lookup failures now include error_count in the response for better client-side observability"
+      audience: public
+    - text: "Added info.sh script for pretty-printing admin status endpoint"
+      audience: internal
+    - text: "Decoupled test targets from dependency upgrades to prevent build breakage"
+      audience: internal
+
+- version: v0.37.0
+  date: 2026-03-21
+  changes:
+    - text: "All configurable values now logged at startup and visible in /v1/info"
+      audience: internal
+    - text: "Environment variable overrides documented for all config keys"
+      audience: internal
+
+- version: v0.36.0
+  date: 2026-03-19
+  changes:
+    - text: "Added usage tracking — per-request metadata recorded for admin analytics"
+      audience: internal
+    - text: "Added GET /v1/admin/usage endpoint for aggregated API usage statistics"
+      audience: internal
+    - text: "VirusTotal provider is now best-effort when rate-limited instead of failing the whole lookup"
+      audience: public
+    - text: "Added threat intelligence section to API docs"
+      audience: public
+
+- version: v0.35.0
+  date: 2026-03-18
+  changes:
+    - text: "Expanded /v1/info with full system status, Redis stats, and auth cache metrics"
+      audience: internal
+
+- version: v0.34.0
+  date: 2026-03-17
+  changes:
+    - text: "Added Stripe billing integration with webhook handling and API key provisioning"
+      audience: public
+    - text: "New /billing/success page for post-checkout key retrieval"
+      audience: public
+    - text: "Customer Portal link for subscription management"
+      audience: public
+    - text: "Pushover notifications on billing events (signup, plan change, cancellation, payment failure)"
+      audience: internal
+
+- version: v0.33.0
+  date: 2026-03-16
+  changes:
+    - text: "Added threat intelligence lookups — VirusTotal, URLhaus, and AlienVault OTX with weighted scoring"
+      audience: public
+    - text: "Threat intel available for pro and admin plans via threat_intel option"
+      audience: public
+
+- version: v0.32.0
+  date: 2026-03-15
+  changes:
+    - text: "Added BGP/ASN lookups with origin AS, prefix, and RIR information"
+      audience: public
+    - text: "BGP data available for all plans via bgp option"
+      audience: public
+
+- version: v0.31.0
+  date: 2026-03-14
+  changes:
+    - text: "Added certificate transparency log lookups via crt.sh"
+      audience: public
+    - text: "CT log data available for all plans via ct_logs option"
+      audience: public
+
+- version: v0.30.0
+  date: 2026-03-13
+  changes:
+    - text: "Added technology fingerprinting — detects web servers, frameworks, CDNs, and more from HTTP headers"
+      audience: public
+    - text: "~90 built-in detection rules, hot-reloadable via admin endpoint"
+      audience: public
+
+- version: v0.19.0
+  date: 2026-03-05
+  changes:
+    - text: "Added subdomain enumeration via certificate transparency data"
+      audience: public
+    - text: "Subdomain results included in domain lookup response via subdomains option"
+      audience: public
+
+- version: v0.18.0
+  date: 2026-03-04
+  changes:
+    - text: "Added X-Client-Request-ID header support for client-supplied request correlation"
+      audience: public
+
+- version: v0.16.0
+  date: 2026-03-02
+  changes:
+    - text: "Added email security analysis — SPF, DKIM, and DMARC record validation"
+      audience: public
+    - text: "Email security available for all plans via email_security option"
+      audience: public
+
+- version: v0.15.0
+  date: 2026-02-28
+  changes:
+    - text: "Plan-based limits on domains per request — free: 1, basic: 5, pro: 20"
+      audience: public
+
+- version: v0.13.0
+  date: 2026-02-26
+  changes:
+    - text: "Added per-plan rate limiting — free: 5/min, basic: 30/min, pro: 120/min"
+      audience: public
+    - text: "SSRF prevention hardened — blocks connections to private/reserved IP ranges"
+      audience: internal
+
+- version: v0.9.0
+  date: 2026-02-20
+  changes:
+    - text: "Added domain reputation lookups with multi-provider scoring (Spamhaus, Google Safe Browsing, PhishTank)"
+      audience: public
+    - text: "Reputation available for pro and admin plans via reputation option"
+      audience: public
+
+- version: v0.6.0
+  date: 2026-02-15
+  changes:
+    - text: "Added page screenshot capture via headless Chrome"
+      audience: public
+    - text: "Screenshots available for pro and admin plans via screenshot option"
+      audience: public
+
+- version: v0.3.0
+  date: 2026-02-10
+  changes:
+    - text: "Support for multiple domains per request via domains array"
+      audience: public
+
+- version: v0.1.0
+  date: 2026-02-05
+  changes:
+    - text: "Initial release — WHOIS, DNS, SSL, and HTTP header lookups with Redis caching"
+      audience: public
+    - text: "API key authentication with plan-based access control"
+      audience: public
