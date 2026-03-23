@@ -702,9 +702,9 @@ make run    # builds and starts the server
 |--------|-------------|
 | `make` | Run unit tests, then build |
 | `make build` | Compile the binary to `bin/` |
-| `make deps` | Update dependencies and tidy go.mod |
-| `make test` | Update deps, then run unit tests with race detector |
-| `make test-integration` | Update deps, then run integration tests |
+| `make deps` | Update all dependencies (`go get -u`) and tidy go.mod |
+| `make test` | Run unit tests with race detector |
+| `make test-integration` | Run integration tests |
 | `make run` | Build and run the server |
 | `make clean` | Remove build artifacts |
 | `make release V=v0.1.0` | Tag and push a release |
@@ -712,6 +712,7 @@ make run    # builds and starts the server
 | `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
 | `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080` |
 | `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
+| `./scripts/info.sh [host]` | Pretty-print the `/v1/info` admin endpoint. Defaults to production |
 
 ## Production Deployment
 
@@ -765,7 +766,7 @@ git push origin main:release      # trigger Fly deploy
 
 ### Scripts
 
-Both `smoke-test.sh` and `status.sh` load API keys from a `.env` file in the project root (gitignored). Copy `.env.example` to `.env` and fill in your keys:
+The scripts `smoke-test.sh`, `status.sh`, and `info.sh` load API keys from a `.env` file in the project root (gitignored). Copy `.env.example` to `.env` and fill in your keys:
 
 ```sh
 cp .env.example .env
@@ -781,6 +782,13 @@ Check deployment health:
 
 ```sh
 ./scripts/status.sh
+```
+
+Pretty-print the admin info endpoint:
+
+```sh
+./scripts/info.sh
+./scripts/info.sh http://localhost:8080  # local
 ```
 
 ## Alerting

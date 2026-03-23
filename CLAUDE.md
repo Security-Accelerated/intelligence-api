@@ -88,9 +88,10 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 - `make test-integration` — integration tests using miniredis + stub auth
 - `make docker-reset` — **dev only**, wipes volumes and rebuilds everything
 - `./scripts/smoke-test.sh` — **dev only**, hits every endpoint with every key/plan combo
+- `./scripts/info.sh` — **dev only**, pretty-prints `/v1/info` admin endpoint (reads `SMOKE_ADMIN_KEY` from `.env`)
 - `make deploy` — deploys to Fly.io with git version baked in
 - `make release V=v0.X.Y` — tags and pushes a release
-- `make deps` — runs `go get -u ./...` and `go mod tidy` (also run automatically by `make test`)
+- `make deps` — runs `go get -u ./...` and `go mod tidy` (run explicitly to upgrade dependencies)
 
 ### Commit conventions
 - Commit directly to main or short-lived branches that merge immediately
