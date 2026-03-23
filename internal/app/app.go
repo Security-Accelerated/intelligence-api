@@ -21,13 +21,13 @@ import (
 	"go.uber.org/zap"
 )
 
-
 // Run wires up all dependencies and runs the server until shutdown.
 func Run(logger *zap.Logger, version string) error {
 	logger = logger.With(zap.String("version", version))
 	cfg := config.Config()
 
-	port := cfg.GetInt("application.port")
+	status := config.NewStatusSnapshot(version)
+
 	rlCfg := middleware.RateLimitConfig{
 		Free:  cfg.GetInt("rate_limit.free"),
 		Basic: cfg.GetInt("rate_limit.basic"),
@@ -35,46 +35,8 @@ func Run(logger *zap.Logger, version string) error {
 	}
 
 	logger.Info("initializing application",
-		zap.String("start_time", cfg.GetString("application.start.time")),
-		zap.String("application_name", cfg.GetString("application.name")),
-		zap.String("session_id", cfg.GetString("application.session.id")),
-		zap.String("environment", cfg.GetString("application.mode")),
-		zap.Int("port", port),
-		zap.String("host", cfg.GetString("environment.host")),
-		zap.String("golang_version", cfg.GetString("environment.golang.version")),
-		zap.String("architecture", cfg.GetString("environment.architecture")),
-		zap.String("os", cfg.GetString("environment.os")),
-		zap.String("version", version),
-		zap.Duration("server_read_timeout", cfg.GetDuration("server.read_timeout")),
-		zap.Duration("server_write_timeout", cfg.GetDuration("server.write_timeout")),
-		zap.Duration("server_idle_timeout", cfg.GetDuration("server.idle_timeout")),
-		zap.Duration("server_shutdown_timeout", cfg.GetDuration("server.shutdown_timeout")),
-		zap.Int("server_body_limit", cfg.GetInt("server.body_limit")),
-		zap.Duration("lookup_timeout", cfg.GetDuration("domain.lookup_timeout")),
-		zap.Duration("cache_ttl", cfg.GetDuration("redis.cache_ttl")),
-		zap.Duration("auth_cache_ttl", cfg.GetDuration("auth.cache_ttl")),
-		zap.Duration("screenshot_timeout", cfg.GetDuration("screenshot.timeout")),
-		zap.Int("screenshot_max_png_bytes", cfg.GetInt("screenshot.max_png_bytes")),
-		zap.Int("domain_max_domains_free", cfg.GetInt("domain.max_domains.free")),
-		zap.Int("domain_max_domains_basic", cfg.GetInt("domain.max_domains.basic")),
-		zap.Int("domain_max_domains_pro", cfg.GetInt("domain.max_domains.pro")),
-		zap.Int("subdomain_max_results", cfg.GetInt("subdomain.max_results")),
-		zap.Int("subdomain_max_response_bytes", cfg.GetInt("subdomain.max_response_bytes")),
-		zap.Int("ct_logs_max_entries", cfg.GetInt("ct_logs.max_entries")),
-		zap.Int("rate_limit_free", rlCfg.Free),
-		zap.Int("rate_limit_basic", rlCfg.Basic),
-		zap.Int("rate_limit_pro", rlCfg.Pro),
-		zap.String("redis_addr", cfg.GetString("redis.addr")),
-		zap.Int("redis_db", cfg.GetInt("redis.db")),
-		zap.String("postgres_host", cfg.GetString("postgres.host")),
-		zap.Int("postgres_port", cfg.GetInt("postgres.port")),
-		zap.String("postgres_dbname", cfg.GetString("postgres.dbname")),
-		zap.String("postgres_sslmode", cfg.GetString("postgres.sslmode")),
-		zap.Int("postgres_max_open_conns", cfg.GetInt("postgres.max_open_conns")),
-		zap.Int("postgres_max_idle_conns", cfg.GetInt("postgres.max_idle_conns")),
-		zap.Duration("postgres_conn_max_lifetime", cfg.GetDuration("postgres.conn_max_lifetime")),
-		zap.Duration("postgres_conn_max_idle_time", cfg.GetDuration("postgres.conn_max_idle_time")),
-		zap.String("gin_mode", cfg.GetString("gin.mode")),
+		zap.Any("system", status.System),
+		zap.Any("lookups", status.Lookups),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -86,7 +48,7 @@ func Run(logger *zap.Logger, version string) error {
 		return fmt.Errorf("connect to postgres: %w", err)
 	}
 	defer db.Close()
-	logger.Info("connected to postgres")
+	logger.Info("connected to postgres", zap.Any("config", status.Database))
 
 	// Auth
 	authRepo := auth.NewPostgresRepository(db)
@@ -103,7 +65,7 @@ func Run(logger *zap.Logger, version string) error {
 	if err := redisCache.Ping(ctx); err != nil {
 		return fmt.Errorf("connect to redis: %w", err)
 	}
-	logger.Info("connected to redis")
+	logger.Info("connected to redis", zap.Any("config", status.Cache))
 
 	// Notifications
 	var alerter notifications.ErrorRecorder
@@ -121,13 +83,17 @@ func Run(logger *zap.Logger, version string) error {
 			MaxConcurrentSends: cfg.GetInt("alerts.max_concurrent_sends"),
 			MaxWindowSize:      cfg.GetInt("alerts.max_window_size"),
 		})
-		logger.Info("pushover notifications enabled",
-			zap.Int("throttle_threshold", cfg.GetInt("alerts.throttle_threshold")),
-			zap.Duration("throttle_window", cfg.GetDuration("alerts.throttle_window")),
-			zap.Int("spike_threshold", cfg.GetInt("alerts.spike_threshold")),
-			zap.Duration("spike_window", cfg.GetDuration("alerts.spike_window")),
-			zap.Duration("cooldown", cfg.GetDuration("alerts.cooldown")),
-		)
+		status.Services.Notifications = config.NotificationsStatus{
+			Enabled:            true,
+			ThrottleThreshold:  cfg.GetInt("alerts.throttle_threshold"),
+			ThrottleWindow:     cfg.GetDuration("alerts.throttle_window").String(),
+			SpikeThreshold:     cfg.GetInt("alerts.spike_threshold"),
+			SpikeWindow:        cfg.GetDuration("alerts.spike_window").String(),
+			Cooldown:           cfg.GetDuration("alerts.cooldown").String(),
+			MaxConcurrentSends: cfg.GetInt("alerts.max_concurrent_sends"),
+			MaxWindowSize:      cfg.GetInt("alerts.max_window_size"),
+		}
+		logger.Info("pushover notifications enabled", zap.Any("config", status.Services.Notifications))
 	} else {
 		notifier = &notifications.NoopNotifier{}
 		alerter = &notifications.NoopRecorder{}
@@ -141,14 +107,20 @@ func Run(logger *zap.Logger, version string) error {
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")
 
 	fpService := service.NewFingerprintService(db)
+	fpSource := "database"
 	if err := fpService.LoadFromDB(ctx); err != nil {
 		logger.Warn("failed to load fingerprint rules from DB, using embedded defaults", zap.Error(err))
+		fpSource = "embedded"
 		defaults, defErr := domain.DefaultRules()
 		if defErr == nil {
 			fpService.Engine().LoadRules(defaults)
 		}
 	}
-	logger.Info("fingerprint engine loaded", zap.Int("rule_count", fpService.Engine().RuleCount()))
+	status.Services.Fingerprint = config.FingerprintStatus{
+		Source:    fpSource,
+		RuleCount: fpService.Engine().RuleCount(),
+	}
+	logger.Info("fingerprint engine loaded", zap.Any("config", status.Services.Fingerprint))
 
 	// Threat intelligence providers — built based on config.
 	var tiProviders []domain.ThreatIntelProvider
@@ -159,7 +131,15 @@ func Run(logger *zap.Logger, version string) error {
 	if otxKey := cfg.GetString("threat_intel.alienvault_api_key"); otxKey != "" {
 		tiProviders = append(tiProviders, domain.NewAlienVaultProvider(otxKey))
 	}
-	logger.Info("threat intelligence providers loaded", zap.Int("provider_count", len(tiProviders)))
+	tiNames := make([]string, len(tiProviders))
+	for i, p := range tiProviders {
+		tiNames[i] = p.Name()
+	}
+	status.Services.ThreatIntel = config.ThreatIntelStatus{
+		ProviderCount: len(tiProviders),
+		Providers:     tiNames,
+	}
+	logger.Info("threat intelligence providers loaded", zap.Any("config", status.Services.ThreatIntel))
 
 	// Set configurable limits on domain package vars before constructing the service.
 	if v := cfg.GetInt("screenshot.max_png_bytes"); v > 0 {
@@ -185,11 +165,12 @@ func Run(logger *zap.Logger, version string) error {
 		}
 		billingRepo := billing.NewRepository(db)
 		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo, notifier)
-		logger.Info("stripe billing enabled",
-			zap.Int("price_mappings", len(priceMap)),
-			zap.Bool("portal_link_configured", cfg.GetString("stripe.portal_link") != ""),
-			zap.Int("stale_key_days", cfg.GetInt("billing.stale_key_days")),
-		)
+		status.Services.Billing = config.BillingStatus{
+			Enabled:              true,
+			PortalLinkConfigured: cfg.GetString("stripe.portal_link") != "",
+			StaleKeyDays:         cfg.GetInt("billing.stale_key_days"),
+		}
+		logger.Info("stripe billing enabled", zap.Any("config", status.Services.Billing))
 	} else {
 		billingSvc = &billing.NoopService{}
 		logger.Info("stripe billing disabled (no credentials configured)")
@@ -204,16 +185,17 @@ func Run(logger *zap.Logger, version string) error {
 	)
 	defer usageLogger.Stop()
 	usageQuerySvc := usage.NewQueryService(db)
-	logger.Info("usage tracking enabled",
-		zap.Int("buffer_size", cfg.GetInt("usage.buffer_size")),
-		zap.Duration("flush_interval", cfg.GetDuration("usage.flush_interval")),
-	)
+	status.Services.Usage = config.UsageStatus{
+		BufferSize:    cfg.GetInt("usage.buffer_size"),
+		FlushInterval: cfg.GetDuration("usage.flush_interval").String(),
+	}
+	logger.Info("usage tracking enabled", zap.Any("config", status.Services.Usage))
 
 	// HTTP
-	h := handler.New(domainService, fpService, billingSvc, usageQuerySvc, version, cfg, redisCache, cachedRepo)
+	h := handler.New(domainService, fpService, billingSvc, usageQuerySvc, cfg, redisCache, cachedRepo, db, status)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
 	serverCfg := httpapi.ServerConfig{
-		Port:            port,
+		Port:            status.System.Port,
 		ReadTimeout:     cfg.GetDuration("server.read_timeout"),
 		WriteTimeout:    cfg.GetDuration("server.write_timeout"),
 		IdleTimeout:     cfg.GetDuration("server.idle_timeout"),

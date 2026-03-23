@@ -2,11 +2,13 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/billing"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
+	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/usage"
@@ -33,22 +35,24 @@ type Handler struct {
 	fingerprintService FingerprintAdminService
 	billingService     billing.Service
 	usageService       usage.Queryer
-	version            string
 	cfg                *viper.Viper
 	redisCache         *cache.RedisCache
 	authCacheStats     AuthCacheStats
+	db                 *sql.DB
+	status             *config.StatusSnapshot
 }
 
-func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, version string, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats) *Handler {
+func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
 	return &Handler{
 		domainService:      domainService,
 		fingerprintService: fingerprintService,
 		billingService:     billingService,
 		usageService:       usageService,
-		version:            version,
 		cfg:                cfg,
 		redisCache:         redisCache,
 		authCacheStats:     authCacheStats,
+		db:                 db,
+		status:             status,
 	}
 }
 

@@ -566,8 +566,8 @@ Config values:
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
-| `subdomain.timeout` | `30s` | Timeout for subdomain enumeration |
-| `subdomain.concurrency` | `20` | Max concurrent subdomain lookups |
+| `subdomain.timeout` | `30s` | Timeout for subdomain enumeration (reserved, not yet wired) |
+| `subdomain.concurrency` | `20` | Max concurrent subdomain lookups (reserved, not yet wired) |
 | `subdomain.max_domains.free` | `1` | Maximum domains per request for free plan (subdomains) |
 | `subdomain.max_domains.basic` | `3` | Maximum domains per request for basic plan (subdomains) |
 | `subdomain.max_domains.pro` | `5` | Maximum domains per request for pro plan (subdomains) |
@@ -705,6 +705,7 @@ make run    # builds and starts the server
 | `make deps` | Update all dependencies (`go get -u`) and tidy go.mod |
 | `make test` | Run unit tests with race detector |
 | `make test-integration` | Run integration tests |
+| `make test-all` | Run unit + integration tests with pass/fail summary |
 | `make run` | Build and run the server |
 | `make clean` | Remove build artifacts |
 | `make release V=v0.1.0` | Tag and push a release |

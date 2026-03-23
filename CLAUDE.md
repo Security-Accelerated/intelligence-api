@@ -86,6 +86,7 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 
 - `make test` — unit tests with race detector (always run before presenting work as done)
 - `make test-integration` — integration tests using miniredis + stub auth
+- `make test-all` — runs both unit and integration tests with pass/fail summary
 - `make docker-reset` — **dev only**, wipes volumes and rebuilds everything
 - `./scripts/smoke-test.sh` — **dev only**, hits every endpoint with every key/plan combo
 - `./scripts/info.sh` — **dev only**, pretty-prints `/v1/info` admin endpoint (reads `SMOKE_ADMIN_KEY` from `.env`)
@@ -145,7 +146,7 @@ Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, las
 2. Add the result type to `internal/domain/model.go`
 3. Add a function field to `DomainService` in `internal/service/domain.go`
 4. Wire it in `NewDomainService()` constructor
-5. Add a goroutine in `service.Lookup()` following the existing pattern (wg.Add, go func, mu.Lock)
+5. Add a goroutine in `service.Lookup()` following the existing pattern (wg.Go, mu.Lock)
 6. If opt-in, add a bool to `DomainRequest`, `LookupOptions`, and the cache key builder
 7. Update handler to pass the option through
 8. Add a setter method for tests (`SetThingLookup`)

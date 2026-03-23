@@ -3,81 +3,123 @@ package handler
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
+// systemWithUptime embeds SystemStatus and adds the computed uptime field.
+type systemWithUptime struct {
+	Name            string    `json:"name"`
+	Version         string    `json:"version"`
+	Mode            string    `json:"mode"`
+	SessionID       string    `json:"session_id"`
+	StartTime       time.Time `json:"start_time"`
+	Uptime          string    `json:"uptime"`
+	Host            string    `json:"host"`
+	OS              string    `json:"os"`
+	Kernel          string    `json:"kernel"`
+	Architecture    string    `json:"architecture"`
+	GoVersion       string    `json:"golang_version"`
+	GinMode         string    `json:"gin_mode"`
+	Port            int       `json:"port"`
+	ReadTimeout     string    `json:"read_timeout"`
+	WriteTimeout    string    `json:"write_timeout"`
+	IdleTimeout     string    `json:"idle_timeout"`
+	ShutdownTimeout string    `json:"shutdown_timeout"`
+	BodyLimit       int       `json:"body_limit"`
+}
+
+type runtimeStats struct {
+	Goroutines  int     `json:"goroutines"`
+	HeapAllocMB float64 `json:"heap_alloc_mb"`
+	HeapInuseMB float64 `json:"heap_inuse_mb"`
+	SysMB       float64 `json:"sys_mb"`
+	NumGC       uint32  `json:"num_gc"`
+}
+
+type poolStats struct {
+	OpenConnections int    `json:"open_connections"`
+	InUse           int    `json:"in_use"`
+	Idle            int    `json:"idle"`
+	WaitCount       int64  `json:"wait_count"`
+	WaitDuration    string `json:"wait_duration"`
+}
+
+type cacheStats struct {
+	Addr           string   `json:"addr"`
+	DB             int      `json:"db"`
+	CacheTTL       string   `json:"cache_ttl"`
+	AuthCacheTTL   string   `json:"auth_cache_ttl"`
+	PingMs         *float64 `json:"ping_ms,omitempty"`
+	KeyCount       *int64   `json:"key_count,omitempty"`
+	MemoryUsed     string   `json:"memory_used,omitempty"`
+	AuthCacheSize  *int     `json:"auth_cache_size,omitempty"`
+}
+
 func (h *Handler) Info(c *gin.Context) {
-	resp := gin.H{
-		"application": gin.H{
-			"name":       h.cfg.GetString("application.name"),
-			"version":    h.version,
-			"mode":       h.cfg.GetString("application.mode"),
-			"start_time": h.cfg.GetTime("application.start.time"),
-			"uptime":     time.Since(h.cfg.GetTime("application.start.time")).Truncate(time.Second).String(),
-			"session_id": h.cfg.GetString("application.session.id"),
-		},
-		"environment": gin.H{
-			"host":           h.cfg.GetString("environment.host"),
-			"os":             h.cfg.GetString("environment.os"),
-			"kernel":         h.cfg.GetString("environment.kernel"),
-			"architecture":   h.cfg.GetString("environment.architecture"),
-			"golang_version": h.cfg.GetString("environment.golang.version"),
-		},
-		"server": gin.H{
-			"read_timeout":     h.cfg.GetDuration("server.read_timeout").String(),
-			"write_timeout":    h.cfg.GetDuration("server.write_timeout").String(),
-			"idle_timeout":     h.cfg.GetDuration("server.idle_timeout").String(),
-			"shutdown_timeout": h.cfg.GetDuration("server.shutdown_timeout").String(),
-			"body_limit":       h.cfg.GetInt("server.body_limit"),
-		},
-		"config": gin.H{
-			"cache_ttl":               h.cfg.GetDuration("redis.cache_ttl").String(),
-			"auth_cache_ttl":          h.cfg.GetDuration("auth.cache_ttl").String(),
-			"lookup_timeout":          h.cfg.GetDuration("domain.lookup_timeout").String(),
-			"screenshot_timeout":      h.cfg.GetDuration("screenshot.timeout").String(),
-			"screenshot_max_png":      h.cfg.GetInt("screenshot.max_png_bytes"),
-			"rate_limit_free":         h.cfg.GetInt("rate_limit.free"),
-			"rate_limit_basic":        h.cfg.GetInt("rate_limit.basic"),
-			"rate_limit_pro":          h.cfg.GetInt("rate_limit.pro"),
-			"max_domains_free":        h.cfg.GetInt("domain.max_domains.free"),
-			"max_domains_basic":       h.cfg.GetInt("domain.max_domains.basic"),
-			"max_domains_pro":         h.cfg.GetInt("domain.max_domains.pro"),
-			"subdomain_max_results":   h.cfg.GetInt("subdomain.max_results"),
-			"subdomain_max_response":  h.cfg.GetInt("subdomain.max_response_bytes"),
-			"ct_logs_max_entries":     h.cfg.GetInt("ct_logs.max_entries"),
-			"postgres_host":           h.cfg.GetString("postgres.host"),
-			"postgres_port":           h.cfg.GetInt("postgres.port"),
-			"postgres_dbname":         h.cfg.GetString("postgres.dbname"),
-			"postgres_sslmode":        h.cfg.GetString("postgres.sslmode"),
-			"postgres_max_open_conns": h.cfg.GetInt("postgres.max_open_conns"),
-			"postgres_max_idle_conns": h.cfg.GetInt("postgres.max_idle_conns"),
-			"postgres_conn_max_lifetime": h.cfg.GetDuration("postgres.conn_max_lifetime").String(),
-			"postgres_conn_max_idle_time": h.cfg.GetDuration("postgres.conn_max_idle_time").String(),
-		},
-		"notifications": gin.H{
-			"pushover_enabled":      h.cfg.GetString("pushover.api_token") != "",
-			"throttle_threshold":    h.cfg.GetInt("alerts.throttle_threshold"),
-			"throttle_window":       h.cfg.GetDuration("alerts.throttle_window").String(),
-			"spike_threshold":       h.cfg.GetInt("alerts.spike_threshold"),
-			"spike_window":          h.cfg.GetDuration("alerts.spike_window").String(),
-			"cooldown":              h.cfg.GetDuration("alerts.cooldown").String(),
-			"max_concurrent_sends":  h.cfg.GetInt("alerts.max_concurrent_sends"),
-			"max_window_size":       h.cfg.GetInt("alerts.max_window_size"),
-		},
-		"billing": gin.H{
-			"stripe_enabled":         h.cfg.GetString("stripe.secret_key") != "",
-			"portal_link_configured": h.cfg.GetString("stripe.portal_link") != "",
-			"stale_key_days":         h.cfg.GetInt("billing.stale_key_days"),
-		},
+	s := h.status
+
+	// System — static snapshot + computed uptime
+	sys := systemWithUptime{
+		Name:            s.System.Name,
+		Version:         s.System.Version,
+		Mode:            s.System.Mode,
+		SessionID:       s.System.SessionID,
+		StartTime:       s.System.StartTime,
+		Uptime:          time.Since(s.System.StartTime).Truncate(time.Second).String(),
+		Host:            s.System.Host,
+		OS:              s.System.OS,
+		Kernel:          s.System.Kernel,
+		Architecture:    s.System.Architecture,
+		GoVersion:       s.System.GoVersion,
+		GinMode:         s.System.GinMode,
+		Port:            s.System.Port,
+		ReadTimeout:     s.System.ReadTimeout,
+		WriteTimeout:    s.System.WriteTimeout,
+		IdleTimeout:     s.System.IdleTimeout,
+		ShutdownTimeout: s.System.ShutdownTimeout,
+		BodyLimit:       s.System.BodyLimit,
 	}
 
-	if h.fingerprintService != nil {
-		resp["fingerprint"] = gin.H{
-			"rule_count": len(h.fingerprintService.GetRules()),
+	resp := gin.H{
+		"system":   sys,
+		"database": s.Database,
+		"lookups":  s.Lookups,
+		"services": s.Services,
+	}
+
+	// Runtime stats
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	resp["runtime"] = runtimeStats{
+		Goroutines:  runtime.NumGoroutine(),
+		HeapAllocMB: float64(mem.HeapAlloc) / 1024 / 1024,
+		HeapInuseMB: float64(mem.HeapInuse) / 1024 / 1024,
+		SysMB:       float64(mem.Sys) / 1024 / 1024,
+		NumGC:       mem.NumGC,
+	}
+
+	// Database pool stats
+	if h.db != nil {
+		dbStats := h.db.Stats()
+		resp["postgres_pool"] = poolStats{
+			OpenConnections: dbStats.OpenConnections,
+			InUse:           dbStats.InUse,
+			Idle:            dbStats.Idle,
+			WaitCount:       dbStats.WaitCount,
+			WaitDuration:    dbStats.WaitDuration.String(),
 		}
+	}
+
+	// Cache — static config + live data
+	cs := cacheStats{
+		Addr:         s.Cache.Addr,
+		DB:           s.Cache.DB,
+		CacheTTL:     s.Cache.CacheTTL,
+		AuthCacheTTL: s.Cache.AuthCacheTTL,
 	}
 
 	if h.redisCache != nil {
@@ -85,33 +127,33 @@ func (h *Handler) Info(c *gin.Context) {
 		defer cancel()
 
 		client := h.redisCache.Client()
-		redisInfo := gin.H{
-			"addr": h.cfg.GetString("redis.addr"),
-			"db":   h.cfg.GetInt("redis.db"),
+
+		pingStart := time.Now()
+		if err := client.Ping(ctx).Err(); err == nil {
+			ms := float64(time.Since(pingStart).Microseconds()) / 1000.0
+			cs.PingMs = &ms
 		}
 
 		if keyCount, err := client.DBSize(ctx).Result(); err == nil {
-			redisInfo["key_count"] = keyCount
+			cs.KeyCount = &keyCount
 		}
 
 		if info, err := client.Info(ctx, "memory").Result(); err == nil {
 			for _, line := range strings.Split(info, "\r\n") {
-				if strings.HasPrefix(line, "used_memory_human:") {
-					redisInfo["memory_used"] = strings.TrimPrefix(line, "used_memory_human:")
+				if v, ok := strings.CutPrefix(line, "used_memory_human:"); ok {
+					cs.MemoryUsed = v
 					break
 				}
 			}
 		}
-
-		resp["redis"] = redisInfo
 	}
 
 	if h.authCacheStats != nil {
-		resp["auth_cache"] = gin.H{
-			"ttl":  h.cfg.GetDuration("auth.cache_ttl").String(),
-			"size": h.authCacheStats.Size(),
-		}
+		size := h.authCacheStats.Size()
+		cs.AuthCacheSize = &size
 	}
+
+	resp["cache"] = cs
 
 	c.JSON(http.StatusOK, resp)
 }

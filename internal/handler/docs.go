@@ -21,7 +21,11 @@ type docsData struct {
 }
 
 func (h *Handler) Docs(c *gin.Context) {
-	data := docsData{Version: h.version}
+	version := ""
+	if h.status != nil {
+		version = h.status.System.Version
+	}
+	data := docsData{Version: version}
 	if h.cfg != nil {
 		data.BasicPaymentLink = h.cfg.GetString("stripe.payment_link.basic")
 		data.ProPaymentLink = h.cfg.GetString("stripe.payment_link.pro")

@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
-	"github.com/spf13/viper"
+	"github.com/security-accelerated/intelligence-api/internal/config"
 )
 
 // stubRepo implements auth.Repository for seeding the CachedRepository.
@@ -24,10 +24,27 @@ func (s *stubRepo) GetByKey(_ context.Context, _ string) (*auth.Customer, error)
 	return s.customer, nil
 }
 
-func newInfoRouter(version string, cfg *viper.Viper, rc *cache.RedisCache, cr AuthCacheStats) *gin.Engine {
+func testStatus(version string) *config.StatusSnapshot {
+	return &config.StatusSnapshot{
+		System: config.SystemStatus{
+			Name:    "test-api",
+			Version: version,
+			Mode:    "test",
+		},
+		Cache: config.CacheConfig{
+			AuthCacheTTL: "5m",
+		},
+	}
+}
+
+func newInfoRouter(version string, rc *cache.RedisCache, cr AuthCacheStats) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, version, cfg, rc, cr)
+	status := testStatus(version)
+	if rc != nil {
+		status.Cache.Addr = rc.Client().Options().Addr
+	}
+	h := New(nil, nil, nil, nil, nil, rc, cr, nil, status)
 	// Simulate admin auth so RequireAdmin passes
 	r.GET("/v1/info", func(c *gin.Context) {
 		c.Set("api_key_plan", "admin")
@@ -53,11 +70,7 @@ func parseInfoResponse(t *testing.T, w *httptest.ResponseRecorder) map[string]an
 }
 
 func TestInfo_NilRedisAndNilCachedRepo(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("application.name", "test-api")
-	cfg.Set("application.mode", "test")
-
-	r := newInfoRouter("1.0.0", cfg, nil, nil)
+	r := newInfoRouter("1.0.0", nil, nil)
 	w := doInfoRequest(r)
 
 	if w.Code != http.StatusOK {
@@ -66,20 +79,34 @@ func TestInfo_NilRedisAndNilCachedRepo(t *testing.T) {
 
 	resp := parseInfoResponse(t, w)
 
-	if _, ok := resp["application"]; !ok {
-		t.Error("missing 'application' key")
+	if _, ok := resp["system"]; !ok {
+		t.Error("missing 'system' key")
 	}
-	if _, ok := resp["environment"]; !ok {
-		t.Error("missing 'environment' key")
+	if _, ok := resp["database"]; !ok {
+		t.Error("missing 'database' key")
 	}
-	if _, ok := resp["config"]; !ok {
-		t.Error("missing 'config' key")
+	if _, ok := resp["lookups"]; !ok {
+		t.Error("missing 'lookups' key")
 	}
-	if _, ok := resp["redis"]; ok {
-		t.Error("'redis' key should be absent when redisCache is nil")
+	if _, ok := resp["services"]; !ok {
+		t.Error("missing 'services' key")
 	}
-	if _, ok := resp["auth_cache"]; ok {
-		t.Error("'auth_cache' key should be absent when authCacheStats is nil")
+	if _, ok := resp["runtime"]; !ok {
+		t.Error("missing 'runtime' key")
+	}
+
+	// cache section should still be present (with static config) even without redis
+	cacheSection, ok := resp["cache"].(map[string]any)
+	if !ok {
+		t.Fatal("missing or malformed 'cache' section")
+	}
+	// ping_ms should be absent when redisCache is nil
+	if _, ok := cacheSection["ping_ms"]; ok {
+		t.Error("'cache.ping_ms' should be absent when redisCache is nil")
+	}
+	// auth_cache_size should be absent when authCacheStats is nil
+	if _, ok := cacheSection["auth_cache_size"]; ok {
+		t.Error("'cache.auth_cache_size' should be absent when authCacheStats is nil")
 	}
 }
 
@@ -88,13 +115,9 @@ func TestInfo_WithRedisCache(t *testing.T) {
 	mr.Set("intel:example.com", "data")
 	mr.Set("intel:other.com", "data2")
 
-	cfg := viper.New()
-	cfg.Set("redis.addr", mr.Addr())
-	cfg.Set("redis.db", 0)
-
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
 
-	r := newInfoRouter("1.0.0", cfg, rc, nil)
+	r := newInfoRouter("1.0.0", rc, nil)
 	w := doInfoRequest(r)
 
 	if w.Code != http.StatusOK {
@@ -102,28 +125,27 @@ func TestInfo_WithRedisCache(t *testing.T) {
 	}
 
 	resp := parseInfoResponse(t, w)
-	redisSection, ok := resp["redis"].(map[string]any)
+	cacheSection, ok := resp["cache"].(map[string]any)
 	if !ok {
-		t.Fatal("missing or malformed 'redis' section")
+		t.Fatal("missing or malformed 'cache' section")
 	}
 
-	if redisSection["addr"] != mr.Addr() {
-		t.Errorf("redis.addr = %v, want %v", redisSection["addr"], mr.Addr())
+	if cacheSection["addr"] != mr.Addr() {
+		t.Errorf("cache.addr = %v, want %v", cacheSection["addr"], mr.Addr())
 	}
 
-	keyCount, ok := redisSection["key_count"].(float64)
+	keyCount, ok := cacheSection["key_count"].(float64)
 	if !ok {
-		t.Fatal("missing redis.key_count")
+		t.Fatal("missing cache.key_count")
 	}
 	if int(keyCount) != 2 {
-		t.Errorf("redis.key_count = %v, want 2", keyCount)
+		t.Errorf("cache.key_count = %v, want 2", keyCount)
 	}
 
 	// memory_used may be absent with miniredis (no INFO memory support).
-	// Just verify the field is either present with a string value or absent.
-	if v, ok := redisSection["memory_used"]; ok {
+	if v, ok := cacheSection["memory_used"]; ok {
 		if _, isStr := v.(string); !isStr {
-			t.Errorf("redis.memory_used = %T, want string", v)
+			t.Errorf("cache.memory_used = %T, want string", v)
 		}
 	}
 }
@@ -136,10 +158,7 @@ func TestInfo_WithCachedRepo(t *testing.T) {
 	cr.GetByKey(context.Background(), "key-a")
 	cr.GetByKey(context.Background(), "key-b")
 
-	cfg := viper.New()
-	cfg.Set("auth.cache_ttl", 5*time.Minute)
-
-	r := newInfoRouter("1.0.0", cfg, nil, cr)
+	r := newInfoRouter("1.0.0", nil, cr)
 	w := doInfoRequest(r)
 
 	if w.Code != http.StatusOK {
@@ -147,23 +166,22 @@ func TestInfo_WithCachedRepo(t *testing.T) {
 	}
 
 	resp := parseInfoResponse(t, w)
-	authCache, ok := resp["auth_cache"].(map[string]any)
+	cacheSection, ok := resp["cache"].(map[string]any)
 	if !ok {
-		t.Fatal("missing or malformed 'auth_cache' section")
+		t.Fatal("missing or malformed 'cache' section")
 	}
 
-	size, ok := authCache["size"].(float64)
+	size, ok := cacheSection["auth_cache_size"].(float64)
 	if !ok {
-		t.Fatal("missing auth_cache.size")
+		t.Fatal("missing cache.auth_cache_size")
 	}
 	if int(size) != 2 {
-		t.Errorf("auth_cache.size = %v, want 2", size)
+		t.Errorf("cache.auth_cache_size = %v, want 2", size)
 	}
 }
 
 func TestInfo_VersionField(t *testing.T) {
-	cfg := viper.New()
-	r := newInfoRouter("2.5.3", cfg, nil, nil)
+	r := newInfoRouter("2.5.3", nil, nil)
 	w := doInfoRequest(r)
 
 	if w.Code != http.StatusOK {
@@ -171,11 +189,11 @@ func TestInfo_VersionField(t *testing.T) {
 	}
 
 	resp := parseInfoResponse(t, w)
-	app, ok := resp["application"].(map[string]any)
+	sys, ok := resp["system"].(map[string]any)
 	if !ok {
-		t.Fatal("missing or malformed 'application' section")
+		t.Fatal("missing or malformed 'system' section")
 	}
-	if app["version"] != "2.5.3" {
-		t.Errorf("application.version = %v, want %q", app["version"], "2.5.3")
+	if sys["version"] != "2.5.3" {
+		t.Errorf("system.version = %v, want %q", sys["version"], "2.5.3")
 	}
 }

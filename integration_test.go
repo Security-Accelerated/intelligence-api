@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
+	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
@@ -235,7 +236,9 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	usageQ := &stubUsageQueryer{}
 	usageRec := usage.NoopRecorder{}
 
-	h := handler.New(svc, fpSvc, nil, usageQ, "test", cfg, rc, cachedRepo)
+	h := handler.New(svc, fpSvc, nil, usageQ, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
+		System: config.SystemStatus{Version: "test"},
+	})
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, authMW, rateLimitMW, middleware.UsageLog(usageRec))
 

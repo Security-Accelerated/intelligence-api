@@ -24,7 +24,7 @@ func (m *mockUsageQueryer) QueryUsage(customerID, apiKeyID int, since, until tim
 func newUsageRouter(uq usage.Queryer) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, uq, "test", nil, nil, nil)
+	h := New(nil, nil, nil, uq, nil, nil, nil, nil, nil)
 	admin := r.Group("/v1/admin")
 	admin.Use(func(c *gin.Context) {
 		c.Set("api_key_plan", "admin")

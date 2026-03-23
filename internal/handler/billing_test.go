@@ -35,7 +35,7 @@ func (m *mockBillingService) GetProvisionedKey(_ context.Context, sessionID stri
 func newBillingTestRouter(billingSvc *mockBillingService, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, billingSvc, nil, "test", cfg, nil, nil)
+	h := New(nil, nil, billingSvc, nil, cfg, nil, nil, nil, nil)
 	h.RegisterRoutes(r)
 	return r
 }

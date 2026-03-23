@@ -75,38 +75,44 @@ if [ -n "$ADMIN_KEY" ]; then
     if [ -n "$info" ]; then
         check "Admin endpoint accessible" true
 
-        version=$(echo "$info" | jq -r '.application.version // "unknown"')
-        mode=$(echo "$info" | jq -r '.application.mode // "unknown"')
-        uptime=$(echo "$info" | jq -r '.application.uptime // "unknown"')
-        start_time=$(echo "$info" | jq -r '.application.start_time // "unknown"')
-        session_id=$(echo "$info" | jq -r '.application.session_id // "unknown"')
+        version=$(echo "$info" | jq -r '.system.version // "unknown"')
+        mode=$(echo "$info" | jq -r '.system.mode // "unknown"')
+        uptime=$(echo "$info" | jq -r '.system.uptime // "unknown"')
+        start_time=$(echo "$info" | jq -r '.system.start_time // "unknown"')
+        session_id=$(echo "$info" | jq -r '.system.session_id // "unknown"')
+        go_ver=$(echo "$info" | jq -r '.system.golang_version // "unknown"')
+        host=$(echo "$info" | jq -r '.system.host // "unknown"')
+        arch=$(echo "$info" | jq -r '.system.architecture // "unknown"')
+        os=$(echo "$info" | jq -r '.system.os // "unknown"')
+        kernel=$(echo "$info" | jq -r '.system.kernel // "unknown"')
 
-        go_ver=$(echo "$info" | jq -r '.environment.golang_version // "unknown"')
-        host=$(echo "$info" | jq -r '.environment.host // "unknown"')
-        arch=$(echo "$info" | jq -r '.environment.architecture // "unknown"')
-        os=$(echo "$info" | jq -r '.environment.os // "unknown"')
-        kernel=$(echo "$info" | jq -r '.environment.kernel // "unknown"')
+        pg_host=$(echo "$info" | jq -r '.database.host // "unknown"')
+        pg_db=$(echo "$info" | jq -r '.database.dbname // "unknown"')
+        pg_ssl=$(echo "$info" | jq -r '.database.sslmode // "unknown"')
+        pg_pool_open=$(echo "$info" | jq -r '.postgres_pool.open_connections // "?"')
+        pg_pool_inuse=$(echo "$info" | jq -r '.postgres_pool.in_use // "?"')
+        pg_pool_idle=$(echo "$info" | jq -r '.postgres_pool.idle // "?"')
 
-        pg_host=$(echo "$info" | jq -r '.config.postgres_host // "unknown"')
-        pg_db=$(echo "$info" | jq -r '.config.postgres_dbname // "unknown"')
-        pg_ssl=$(echo "$info" | jq -r '.config.postgres_sslmode // "unknown"')
+        redis_addr=$(echo "$info" | jq -r '.cache.addr // "unknown"')
+        redis_keys=$(echo "$info" | jq -r '.cache.key_count // "unknown"')
+        redis_mem=$(echo "$info" | jq -r '.cache.memory_used // "unknown"')
+        redis_ping=$(echo "$info" | jq -r '.cache.ping_ms // "?"')
+        cache_ttl=$(echo "$info" | jq -r '.cache.cache_ttl // "unknown"')
+        auth_ttl=$(echo "$info" | jq -r '.cache.auth_cache_ttl // "unknown"')
+        auth_size=$(echo "$info" | jq -r '.cache.auth_cache_size // "unknown"')
 
-        redis_addr=$(echo "$info" | jq -r '.redis.addr // "unknown"')
-        redis_keys=$(echo "$info" | jq -r '.redis.key_count // "unknown"')
-        redis_mem=$(echo "$info" | jq -r '.redis.memory_used // "unknown"')
+        rl_free=$(echo "$info" | jq -r '.lookups.rate_limit_free // "?"')
+        rl_basic=$(echo "$info" | jq -r '.lookups.rate_limit_basic // "?"')
+        rl_pro=$(echo "$info" | jq -r '.lookups.rate_limit_pro // "?"')
 
-        cache_ttl=$(echo "$info" | jq -r '.config.cache_ttl // "unknown"')
-        auth_ttl=$(echo "$info" | jq -r '.config.auth_cache_ttl // "unknown"')
-        auth_size=$(echo "$info" | jq -r '.auth_cache.size // "unknown"')
+        fp_rules=$(echo "$info" | jq -r '.services.fingerprint.rule_count // "n/a"')
+        fp_source=$(echo "$info" | jq -r '.services.fingerprint.source // "unknown"')
+        pushover=$(echo "$info" | jq -r '.services.notifications.enabled // false')
+        stripe=$(echo "$info" | jq -r '.services.billing.enabled // false')
+        ti_providers=$(echo "$info" | jq -r '.services.threat_intel.providers // [] | join(", ")')
 
-        rl_free=$(echo "$info" | jq -r '.config.rate_limit_free // "?"')
-        rl_basic=$(echo "$info" | jq -r '.config.rate_limit_basic // "?"')
-        rl_pro=$(echo "$info" | jq -r '.config.rate_limit_pro // "?"')
-
-        fp_rules=$(echo "$info" | jq -r '.fingerprint.rule_count // "n/a"')
-
-        pushover=$(echo "$info" | jq -r '.notifications.pushover_enabled // false')
-        stripe=$(echo "$info" | jq -r '.billing.stripe_enabled // false')
+        goroutines=$(echo "$info" | jq -r '.runtime.goroutines // "?"')
+        heap_mb=$(echo "$info" | jq -r '.runtime.heap_alloc_mb // "?" | if type == "number" then (. * 10 | round / 10 | tostring) else . end')
 
         echo ""
         printf "  %-16s %s\n" "Version:" "$version"
@@ -118,16 +124,19 @@ if [ -n "$ADMIN_KEY" ]; then
         echo ""
         printf "  %-16s %s (%s/%s, %s)\n" "Host:" "$host" "$os" "$arch" "$kernel"
         printf "  %-16s %s\n" "Go:" "$go_ver"
+        printf "  %-16s %s goroutines, %s MB heap\n" "Runtime:" "$goroutines" "$heap_mb"
 
         echo ""
         printf "  %-16s %s (db: %s, ssl: %s)\n" "Postgres:" "$pg_host" "$pg_db" "$pg_ssl"
-        printf "  %-16s %s (%s keys, %s memory)\n" "Redis:" "$redis_addr" "$redis_keys" "$redis_mem"
+        printf "  %-16s open=%s, in_use=%s, idle=%s\n" "  Pool:" "$pg_pool_open" "$pg_pool_inuse" "$pg_pool_idle"
+        printf "  %-16s %s (%s keys, %s memory, %sms ping)\n" "Redis:" "$redis_addr" "$redis_keys" "$redis_mem" "$redis_ping"
         printf "  %-16s %s (TTL: %s)\n" "Cache:" "$cache_ttl" "$cache_ttl"
         printf "  %-16s %s entries (TTL: %s)\n" "Auth cache:" "$auth_size" "$auth_ttl"
 
         echo ""
         printf "  %-16s free=%s, basic=%s, pro=%s req/min\n" "Rate limits:" "$rl_free" "$rl_basic" "$rl_pro"
-        printf "  %-16s %s rules\n" "Fingerprints:" "$fp_rules"
+        printf "  %-16s %s rules (%s)\n" "Fingerprints:" "$fp_rules" "$fp_source"
+        printf "  %-16s %s\n" "Threat intel:" "$ti_providers"
         printf "  %-16s %s\n" "Pushover:" "$pushover"
         printf "  %-16s %s\n" "Stripe:" "$stripe"
     else
