@@ -496,6 +496,22 @@ Returns aggregated API usage statistics for a configurable time window.
 }
 ```
 
+### `GET /v1/info` — Application Status (Admin Only)
+
+Returns application configuration, service status, and live runtime metrics. The response is built from a `StatusSnapshot` populated at startup (static config) plus live data computed per-request.
+
+**Response sections:**
+
+| Section | Description |
+|---------|-------------|
+| `system` | App name, version, mode, session ID, start time, uptime, host, OS, kernel, arch, Go version, server timeouts |
+| `database` | PostgreSQL host, port, dbname, sslmode, connection pool settings |
+| `cache` | Redis addr/db, cache TTL, auth cache TTL, plus live: key count, memory used, ping latency (ms), auth cache size |
+| `lookups` | Lookup timeout, screenshot config, subdomain/CT log limits, rate limits and max domains per plan |
+| `services` | Notifications (enabled + alert config), billing (enabled + config), threat intel (provider names), fingerprint (source + rule count), usage (buffer config) |
+| `runtime` | Goroutines, heap alloc/inuse (MB), sys memory (MB), GC count |
+| `postgres_pool` | Connection pool: open, in use, idle, wait count, wait duration |
+
 ## Caching
 
 Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
@@ -536,7 +552,7 @@ Copy the sample config to your preferred location:
 sudo cp internal/config/sample-config.yml /etc/security-accelerated/intelligence-api.yaml
 ```
 
-Every config key can be overridden by an environment variable: replace dots with underscores and uppercase (e.g. `server.write_timeout` → `SERVER_WRITE_TIMEOUT`). Environment variables take precedence over the YAML file. All active config values are visible at `GET /v1/info` (admin only).
+Every config key can be overridden by an environment variable: replace dots with underscores and uppercase (e.g. `server.write_timeout` → `SERVER_WRITE_TIMEOUT`). Environment variables take precedence over the YAML file. All active config values plus live runtime metrics are visible at `GET /v1/info` (admin only) — see the [Application Status](#get-v1info--application-status-admin-only) section for the full response structure.
 
 Config values:
 

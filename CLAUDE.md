@@ -23,9 +23,9 @@ internal/usage/                → Usage tracking (buffered async INSERT, admin 
 internal/notifications/        → Pushover alerting (upstream throttle + error spike detection)
 internal/safenet/             → SSRF prevention (blocks private/reserved IPs at dial time)
 internal/logging/             → Zap logger init (ECS format in production, pretty in dev)
-internal/config/              → Viper config with YAML files + env var overrides
+internal/config/              → Viper config, YAML files + env var overrides, StatusSnapshot structs
 migrations/                   → PostgreSQL schema (applied via Docker initdb on first start only)
-scripts/                      → docker-reset.sh (dev), smoke-test.sh (dev)
+scripts/                      → docker-reset.sh, smoke-test.sh, status.sh, info.sh (all dev)
 docs/                         → Sales slick; live API docs served via embedded HTML in handler
 ```
 
@@ -66,6 +66,9 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 
 ### Usage tracking
 `internal/usage/` follows the notifications/billing pattern (interface + real impl + noop). `Recorder` interface accepts `UsageEntry` values; `Queryer` interface returns aggregated `UsageSummary`. `UsageLogger` buffers entries on a channel and batch-inserts to PostgreSQL's `request_log` table on a timer (default 5s) or when the batch hits 50 entries. Channel full = silent drop with warning log. `NoopRecorder` discards entries when usage tracking isn't needed (tests). `QueryService` runs aggregation SQL for the admin endpoint. Middleware `UsageLog()` collects request metadata after `c.Next()` and calls `recorder.Record()`. Admin endpoint: `GET /v1/admin/usage?days=30&customer_id=X&api_key_id=Y`. Config: `USAGE_BUFFER_SIZE`, `USAGE_FLUSH_INTERVAL`.
+
+### StatusSnapshot for unified status
+`internal/config/status.go` defines typed structs (`SystemStatus`, `DatabaseConfig`, `CacheConfig`, `LookupConfig`, `ServicesStatus` with sub-structs) held in a `StatusSnapshot`. Built once at startup via `NewStatusSnapshot(version)`, then progressively populated as services initialize in `app.go`. Used for both structured startup logging (`zap.Any("config", section)`) and the `/v1/info` admin endpoint response — adding a field to any struct automatically surfaces it in both places. Live data (runtime stats, DB pool, Redis ping, auth cache size) is computed at request time in the info handler and merged with the static snapshot. JSON response groups: `system`, `database`, `cache` (static config + live stats), `lookups`, `services`, `runtime`, `postgres_pool`.
 
 ### Notifications
 `internal/notifications/` provides interface-driven alerting. `Notifier` interface abstracts the delivery channel (currently Pushover); `ErrorRecorder` interface abstracts error tracking (currently `Alerter`). The `Alerter` uses sliding-window counters behind a mutex to detect per-lookup throttling (default: 5 failures in 5m) and global error spikes (default: 15 errors in 5m). Alerts fire asynchronously with a 15-minute cooldown to prevent alert fatigue. `DomainService` depends on `ErrorRecorder`; when Pushover credentials are absent, a `NoopRecorder` is wired in. Config: `PUSHOVER_API_TOKEN`, `PUSHOVER_USER_KEY`, `ALERTS_THROTTLE_THRESHOLD`, `ALERTS_THROTTLE_WINDOW`, `ALERTS_SPIKE_THRESHOLD`, `ALERTS_SPIKE_WINDOW`, `ALERTS_COOLDOWN`.
