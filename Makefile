@@ -26,7 +26,17 @@ test-integration:
 	go mod tidy
 	go test -race -count=1 -tags=integration -v .
 
-test-all: test test-integration
+test-all:
+	@failed=0; \
+	$(MAKE) test || failed=1; \
+	$(MAKE) test-integration || failed=1; \
+	echo ""; \
+	if [ $$failed -eq 0 ]; then \
+		printf "\033[32m✓ All tests passed.\033[0m\n"; \
+	else \
+		printf "\033[31m✗ Some tests failed.\033[0m\n"; \
+		exit 1; \
+	fi
 
 run: build
 	./$(BUILD_DIR)/$(APP_NAME)
