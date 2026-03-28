@@ -104,7 +104,10 @@ func (r *Repository) classifyRetrievalError(ctx context.Context, sessionID strin
 		sessionID,
 	).Scan(&retrieved, &expiresAt)
 	if err != nil {
-		return ErrKeyNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrKeyNotFound
+		}
+		return fmt.Errorf("classify retrieval error: %w", err)
 	}
 	if retrieved {
 		return ErrKeyRetrieved

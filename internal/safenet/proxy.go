@@ -15,12 +15,17 @@ import (
 // The returned server's Addr field contains the listener address (including the
 // assigned port when using ":0"). Call Close() to shut down.
 func NewSafeProxy() (*http.Server, net.Listener, error) {
+	return newProxy(SafeDialer(10 * time.Second))
+}
+
+// newProxy creates a proxy server with the given dialer. Extracted for testability:
+// tests can pass a plain net.Dialer to verify forwarding logic against localhost
+// targets, while NewSafeProxy wires in SafeDialer for SSRF protection.
+func newProxy(dialer *net.Dialer) (*http.Server, net.Listener, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, nil, err
 	}
-
-	dialer := SafeDialer(10 * time.Second)
 
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

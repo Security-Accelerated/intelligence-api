@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+// minBufferSize is the minimum allowed buffer size to prevent misconfiguration
+// from silently dropping most touches and causing false stale-account deactivations.
+const minBufferSize = 64
 
 // LastUsedBatcher collects API key IDs and batch-updates their last_used_at
 // timestamps on a timer. This replaces per-request fire-and-forget goroutines
@@ -21,12 +26,20 @@ type LastUsedBatcher struct {
 	logger        *zap.Logger
 	wg            sync.WaitGroup
 	stopCh        chan struct{}
+	dropped       atomic.Int64
 }
 
 // NewLastUsedBatcher creates and starts a batcher that flushes accumulated key
 // IDs to the database every flushInterval. bufferSize controls the channel
-// capacity; sends are dropped when full.
+// capacity; it is clamped to a minimum of 64 to prevent misconfiguration.
 func NewLastUsedBatcher(db *sql.DB, bufferSize int, flushInterval time.Duration, logger *zap.Logger) *LastUsedBatcher {
+	if bufferSize < minBufferSize {
+		logger.Warn("auth.last_used_buffer_size too small, clamping to minimum",
+			zap.Int("configured", bufferSize),
+			zap.Int("minimum", minBufferSize),
+		)
+		bufferSize = minBufferSize
+	}
 	b := &LastUsedBatcher{
 		db:            db,
 		ch:            make(chan int, bufferSize),
@@ -40,11 +53,16 @@ func NewLastUsedBatcher(db *sql.DB, bufferSize int, flushInterval time.Duration,
 }
 
 // Touch enqueues an API key ID for a batched last_used_at update.
-// Non-blocking: silently drops if the channel is full.
+// Non-blocking: logs a warning and increments a drop counter if the channel is full.
 func (b *LastUsedBatcher) Touch(apiKeyID int) {
 	select {
 	case b.ch <- apiKeyID:
 	default:
+		total := b.dropped.Add(1)
+		b.logger.Warn("last_used_at touch dropped (buffer full), risk of false stale-account deactivation",
+			zap.Int("api_key_id", apiKeyID),
+			zap.Int64("total_dropped", total),
+		)
 	}
 }
 

@@ -64,13 +64,10 @@ func TestLastUsedBatcher_DropsWhenFull(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Buffer of 2, long flush interval — channel will fill up
-	b := NewLastUsedBatcher(db, 2, 1*time.Hour, zap.NewNop())
+	// Minimum buffer (64), long flush interval — send many more than buffer to trigger drops
+	b := NewLastUsedBatcher(db, minBufferSize, 1*time.Hour, zap.NewNop())
 
-	// Fill the buffer without the goroutine draining
-	// We can't guarantee exactly when the goroutine reads, but
-	// sending many more than the buffer should cause drops
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 500; i++ {
 		b.Touch(i)
 	}
 
@@ -79,7 +76,26 @@ func TestLastUsedBatcher_DropsWhenFull(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	b.Stop()
-	// No panic or deadlock = success
+
+	if b.dropped.Load() == 0 {
+		t.Error("expected some touches to be dropped, but none were")
+	}
+}
+
+func TestLastUsedBatcher_ClampsSmallBuffer(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Request a tiny buffer — should be clamped to minBufferSize
+	b := NewLastUsedBatcher(db, 2, 1*time.Hour, zap.NewNop())
+	defer b.Stop()
+
+	if cap(b.ch) != minBufferSize {
+		t.Errorf("buffer capacity = %d, want %d (should be clamped)", cap(b.ch), minBufferSize)
+	}
 }
 
 func TestLastUsedBatcher_NoFlushWhenEmpty(t *testing.T) {

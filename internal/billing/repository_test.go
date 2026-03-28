@@ -310,6 +310,38 @@ func TestRetrieveProvisionedKey_QueryError(t *testing.T) {
 	}
 }
 
+func TestRetrieveProvisionedKey_ClassificationDBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Atomic UPDATE returns no rows
+	mock.ExpectQuery("UPDATE provisioned_keys").
+		WithArgs("sess_abc").
+		WillReturnError(sql.ErrNoRows)
+	// Classification query hits a real DB error — should propagate, not mask as ErrKeyNotFound
+	mock.ExpectQuery("SELECT retrieved, expires_at FROM provisioned_keys").
+		WithArgs("sess_abc").
+		WillReturnError(errors.New("connection reset"))
+
+	repo := NewRepository(db)
+	_, err = repo.RetrieveProvisionedKey(context.Background(), "sess_abc")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if errors.Is(err, ErrKeyNotFound) {
+		t.Fatal("DB error was incorrectly mapped to ErrKeyNotFound")
+	}
+	if errors.Is(err, ErrKeyRetrieved) {
+		t.Fatal("DB error was incorrectly mapped to ErrKeyRetrieved")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
 // --- UpdatePlan ---
 
 func TestUpdatePlan_HappyPath(t *testing.T) {

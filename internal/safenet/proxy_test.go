@@ -1,11 +1,90 @@
 package safenet
 
 import (
+	"crypto/tls"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 )
+
+// --- Success-path tests (plain dialer, proves forwarding logic) ---
+
+func TestProxy_ForwardsHTTPSuccessfully(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Test", "proxied")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("hello from target"))
+	}))
+	defer target.Close()
+
+	// Use a plain dialer so we can reach the localhost test server
+	proxy, ln, err := newProxy(&net.Dialer{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	proxyURL, _ := url.Parse("http://" + ln.Addr().String())
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+
+	resp, err := client.Get(target.URL)
+	if err != nil {
+		t.Fatalf("request through proxy failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("X-Test"); got != "proxied" {
+		t.Errorf("X-Test header = %q, want %q", got, "proxied")
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "hello from target" {
+		t.Errorf("body = %q, want %q", body, "hello from target")
+	}
+}
+
+func TestProxy_ForwardsCONNECTSuccessfully(t *testing.T) {
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("hello via TLS"))
+	}))
+	defer target.Close()
+
+	// Use a plain dialer so we can reach the localhost TLS test server
+	proxy, ln, err := newProxy(&net.Dialer{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	proxyURL, _ := url.Parse("http://" + ln.Addr().String())
+	client := &http.Client{Transport: &http.Transport{
+		Proxy:           http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}}
+
+	resp, err := client.Get(target.URL)
+	if err != nil {
+		t.Fatalf("CONNECT tunnel through proxy failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "hello via TLS" {
+		t.Errorf("body = %q, want %q", body, "hello via TLS")
+	}
+}
+
+// --- Block tests (SafeDialer, proves SSRF protection) ---
 
 func TestSafeProxy_BlocksLocalhostHTTP(t *testing.T) {
 	proxy, ln, err := NewSafeProxy()
@@ -14,7 +93,6 @@ func TestSafeProxy_BlocksLocalhostHTTP(t *testing.T) {
 	}
 	defer proxy.Close()
 
-	// Start a target on localhost — the proxy should block the connection
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	}))
@@ -74,7 +152,6 @@ func TestSafeProxy_BlocksCONNECTToPrivate(t *testing.T) {
 	proxyURL, _ := url.Parse("http://" + ln.Addr().String())
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 
-	// HTTPS triggers CONNECT; private IPs should be blocked at dial time
 	_, err = client.Get("https://10.0.0.1/")
 	if err == nil {
 		t.Fatal("expected CONNECT to private IP to fail, but request succeeded")
