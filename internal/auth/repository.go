@@ -10,11 +10,12 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	db *sql.DB
+	db      *sql.DB
+	batcher *LastUsedBatcher
 }
 
-func NewPostgresRepository(db *sql.DB) *PostgresRepository {
-	return &PostgresRepository{db: db}
+func NewPostgresRepository(db *sql.DB, batcher *LastUsedBatcher) *PostgresRepository {
+	return &PostgresRepository{db: db, batcher: batcher}
 }
 
 func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Customer, error) {
@@ -31,10 +32,9 @@ func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Custome
 		return nil, err
 	}
 
-	// Update last_used_at in background (fire-and-forget)
-	go func() {
-		_, _ = r.db.Exec(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, c.APIKeyID)
-	}()
+	if r.batcher != nil {
+		r.batcher.Touch(c.APIKeyID)
+	}
 
 	return &c, nil
 }

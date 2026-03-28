@@ -72,48 +72,47 @@ func (r *Repository) StoreProvisionedKey(ctx context.Context, sessionID string, 
 	return nil
 }
 
-// RetrieveProvisionedKey retrieves a provisioned key by session ID, marks it as retrieved,
-// and returns the raw key. Returns an error if the key has already been retrieved or has expired.
+// RetrieveProvisionedKey atomically marks a provisioned key as retrieved and returns it.
+// Returns an error if the key has already been retrieved, has expired, or does not exist.
 func (r *Repository) RetrieveProvisionedKey(ctx context.Context, sessionID string) (string, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", fmt.Errorf("begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
 	var rawKey string
-	var retrieved bool
-	var expiresAt time.Time
-	err = tx.QueryRowContext(ctx,
-		`SELECT raw_key, retrieved, expires_at FROM provisioned_keys WHERE session_id = $1`,
+	err := r.db.QueryRowContext(ctx,
+		`UPDATE provisioned_keys
+		    SET retrieved = true
+		  WHERE session_id = $1
+		    AND retrieved = false
+		    AND expires_at > now()
+		  RETURNING raw_key`,
 		sessionID,
-	).Scan(&rawKey, &retrieved, &expiresAt)
+	).Scan(&rawKey)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrKeyNotFound
+			return "", r.classifyRetrievalError(ctx, sessionID)
 		}
-		return "", fmt.Errorf("query provisioned key: %w", err)
-	}
-
-	if retrieved {
-		return "", ErrKeyRetrieved
-	}
-	if time.Now().After(expiresAt) {
-		return "", ErrKeyExpired
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`UPDATE provisioned_keys SET retrieved = true WHERE session_id = $1`,
-		sessionID,
-	)
-	if err != nil {
-		return "", fmt.Errorf("mark retrieved: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return "", fmt.Errorf("commit: %w", err)
+		return "", fmt.Errorf("retrieve provisioned key: %w", err)
 	}
 	return rawKey, nil
+}
+
+// classifyRetrievalError checks why the atomic UPDATE matched no rows and returns
+// the appropriate sentinel error.
+func (r *Repository) classifyRetrievalError(ctx context.Context, sessionID string) error {
+	var retrieved bool
+	var expiresAt time.Time
+	err := r.db.QueryRowContext(ctx,
+		`SELECT retrieved, expires_at FROM provisioned_keys WHERE session_id = $1`,
+		sessionID,
+	).Scan(&retrieved, &expiresAt)
+	if err != nil {
+		return ErrKeyNotFound
+	}
+	if retrieved {
+		return ErrKeyRetrieved
+	}
+	if time.Now().After(expiresAt) {
+		return ErrKeyExpired
+	}
+	return ErrKeyNotFound
 }
 
 // UpdatePlan updates a customer's plan by their Stripe customer ID.

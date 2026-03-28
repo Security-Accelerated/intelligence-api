@@ -51,7 +51,14 @@ func Run(logger *zap.Logger, version string) error {
 	logger.Info("connected to postgres", zap.Any("config", status.Database))
 
 	// Auth
-	authRepo := auth.NewPostgresRepository(db)
+	lastUsedBatcher := auth.NewLastUsedBatcher(
+		db,
+		cfg.GetInt("auth.last_used_buffer_size"),
+		cfg.GetDuration("auth.last_used_flush_interval"),
+		logger,
+	)
+	defer lastUsedBatcher.Stop()
+	authRepo := auth.NewPostgresRepository(db, lastUsedBatcher)
 	cachedRepo := auth.NewCachedRepository(authRepo, cfg.GetDuration("auth.cache_ttl"))
 
 	// Cache

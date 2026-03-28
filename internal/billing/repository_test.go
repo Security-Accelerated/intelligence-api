@@ -188,17 +188,9 @@ func TestRetrieveProvisionedKey_HappyPath(t *testing.T) {
 	}
 	defer db.Close()
 
-	futureTime := time.Now().Add(1 * time.Hour)
-
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT raw_key, retrieved, expires_at FROM provisioned_keys").
+	mock.ExpectQuery("UPDATE provisioned_keys").
 		WithArgs("sess_abc").
-		WillReturnRows(sqlmock.NewRows([]string{"raw_key", "retrieved", "expires_at"}).
-			AddRow("rawkey123", false, futureTime))
-	mock.ExpectExec("UPDATE provisioned_keys SET retrieved = true").
-		WithArgs("sess_abc").
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit()
+		WillReturnRows(sqlmock.NewRows([]string{"raw_key"}).AddRow("rawkey123"))
 
 	repo := NewRepository(db)
 	key, err := repo.RetrieveProvisionedKey(context.Background(), "sess_abc")
@@ -220,11 +212,14 @@ func TestRetrieveProvisionedKey_NotFound(t *testing.T) {
 	}
 	defer db.Close()
 
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT raw_key, retrieved, expires_at FROM provisioned_keys").
+	// Atomic UPDATE returns no rows
+	mock.ExpectQuery("UPDATE provisioned_keys").
 		WithArgs("sess_missing").
 		WillReturnError(sql.ErrNoRows)
-	mock.ExpectRollback()
+	// Classification query also finds nothing
+	mock.ExpectQuery("SELECT retrieved, expires_at FROM provisioned_keys").
+		WithArgs("sess_missing").
+		WillReturnError(sql.ErrNoRows)
 
 	repo := NewRepository(db)
 	_, err = repo.RetrieveProvisionedKey(context.Background(), "sess_missing")
@@ -245,12 +240,15 @@ func TestRetrieveProvisionedKey_AlreadyRetrieved(t *testing.T) {
 
 	futureTime := time.Now().Add(1 * time.Hour)
 
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT raw_key, retrieved, expires_at FROM provisioned_keys").
+	// Atomic UPDATE returns no rows (already retrieved)
+	mock.ExpectQuery("UPDATE provisioned_keys").
 		WithArgs("sess_abc").
-		WillReturnRows(sqlmock.NewRows([]string{"raw_key", "retrieved", "expires_at"}).
-			AddRow("rawkey123", true, futureTime))
-	mock.ExpectRollback()
+		WillReturnError(sql.ErrNoRows)
+	// Classification query reveals it was already retrieved
+	mock.ExpectQuery("SELECT retrieved, expires_at FROM provisioned_keys").
+		WithArgs("sess_abc").
+		WillReturnRows(sqlmock.NewRows([]string{"retrieved", "expires_at"}).
+			AddRow(true, futureTime))
 
 	repo := NewRepository(db)
 	_, err = repo.RetrieveProvisionedKey(context.Background(), "sess_abc")
@@ -271,12 +269,15 @@ func TestRetrieveProvisionedKey_Expired(t *testing.T) {
 
 	pastTime := time.Now().Add(-1 * time.Hour)
 
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT raw_key, retrieved, expires_at FROM provisioned_keys").
+	// Atomic UPDATE returns no rows (expired)
+	mock.ExpectQuery("UPDATE provisioned_keys").
 		WithArgs("sess_abc").
-		WillReturnRows(sqlmock.NewRows([]string{"raw_key", "retrieved", "expires_at"}).
-			AddRow("rawkey123", false, pastTime))
-	mock.ExpectRollback()
+		WillReturnError(sql.ErrNoRows)
+	// Classification query reveals it expired
+	mock.ExpectQuery("SELECT retrieved, expires_at FROM provisioned_keys").
+		WithArgs("sess_abc").
+		WillReturnRows(sqlmock.NewRows([]string{"retrieved", "expires_at"}).
+			AddRow(false, pastTime))
 
 	repo := NewRepository(db)
 	_, err = repo.RetrieveProvisionedKey(context.Background(), "sess_abc")
@@ -288,43 +289,16 @@ func TestRetrieveProvisionedKey_Expired(t *testing.T) {
 	}
 }
 
-func TestRetrieveProvisionedKey_BeginTxError(t *testing.T) {
+func TestRetrieveProvisionedKey_QueryError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
-	mock.ExpectBegin().WillReturnError(errors.New("connection refused"))
-
-	repo := NewRepository(db)
-	_, err = repo.RetrieveProvisionedKey(context.Background(), "sess_abc")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
-
-func TestRetrieveProvisionedKey_CommitError(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	futureTime := time.Now().Add(1 * time.Hour)
-
-	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT raw_key, retrieved, expires_at FROM provisioned_keys").
+	mock.ExpectQuery("UPDATE provisioned_keys").
 		WithArgs("sess_abc").
-		WillReturnRows(sqlmock.NewRows([]string{"raw_key", "retrieved", "expires_at"}).
-			AddRow("rawkey123", false, futureTime))
-	mock.ExpectExec("UPDATE provisioned_keys SET retrieved = true").
-		WithArgs("sess_abc").
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+		WillReturnError(errors.New("connection refused"))
 
 	repo := NewRepository(db)
 	_, err = repo.RetrieveProvisionedKey(context.Background(), "sess_abc")

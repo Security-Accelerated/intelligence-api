@@ -33,6 +33,8 @@ func TestConfig_Defaults(t *testing.T) {
 		{"subdomain.max_domains.pro", 5},
 		{"rate_limit.basic", 30},
 		{"rate_limit.pro", 120},
+		{"auth.last_used_buffer_size", 256},
+		{"auth.last_used_flush_interval", "10s"},
 		// postgres.sslmode default is "require" but local config files may override it
 	}
 

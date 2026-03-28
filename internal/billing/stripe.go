@@ -84,32 +84,8 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 		return nil
 	}
 
-	// Determine plan from the subscription's price
+	// Determine plan from the checkout session's line items
 	plan := "basic" // default
-	if sess.Subscription != nil {
-		subscriptionID := sess.Subscription.ID
-		// Get the price from the line items
-		params := &stripe.CheckoutSessionParams{
-			Params: stripe.Params{Context: ctx},
-		}
-		params.AddExpand("line_items")
-		sessExpanded, err := session.Get(subscriptionID, params)
-		if err == nil && sessExpanded != nil {
-			// Actually, re-fetch the session with line_items expanded
-			_ = sessExpanded
-		}
-		// Use the session line items if available
-		if sess.Subscription != nil {
-			// Try to match price from subscription metadata or use line items
-			for priceID, planName := range s.priceToplan {
-				_ = priceID
-				_ = planName
-			}
-		}
-		_ = subscriptionID
-	}
-
-	// Re-fetch session with line_items expanded to get the price ID
 	expandedParams := &stripe.CheckoutSessionParams{
 		Params: stripe.Params{Context: ctx},
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 // DefaultMaxPNGBytes is the default maximum size for a screenshot PNG (5 MB).
@@ -48,9 +49,9 @@ func LookupScreenshot(ctx context.Context, domain string, timeout time.Duration,
 
 // probeURL checks HTTPS then HTTP and returns the working URL and status code.
 func probeURL(ctx context.Context, domain string) (string, int, error) {
-	// probeURL validates the resolved IP before Chrome navigates. Chrome does its
-	// own DNS resolution so there is a narrow theoretical DNS-rebinding window,
-	// but this is best-effort defence-in-depth for the screenshot path.
+	// probeURL validates the resolved IP before Chrome navigates. Chrome traffic
+	// is also routed through a safe proxy (see captureScreenshot), so this serves
+	// as an early rejection to avoid launching Chrome for obviously-blocked targets.
 	client := &http.Client{
 		Timeout:   10 * time.Second,
 		Transport: safeTransport,
@@ -77,13 +78,22 @@ func probeURL(ctx context.Context, domain string) (string, int, error) {
 	return "", 0, fmt.Errorf("domain unreachable via HTTPS and HTTP")
 }
 
-// captureScreenshot launches headless Chrome and takes a full-page screenshot.
+// captureScreenshot launches headless Chrome behind a local SSRF-safe proxy
+// and takes a full-page screenshot. All Chrome network traffic is routed through
+// the proxy, which blocks connections to private/reserved IP ranges.
 func captureScreenshot(ctx context.Context, url string) ([]byte, error) {
+	proxy, ln, err := safenet.NewSafeProxy()
+	if err != nil {
+		return nil, fmt.Errorf("start safe proxy: %w", err)
+	}
+	defer proxy.Close()
+
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.WindowSize(1280, 720),
 		chromedp.Flag("ignore-certificate-errors", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-gpu", true),
+		chromedp.ProxyServer("http://"+ln.Addr().String()),
 	)
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)

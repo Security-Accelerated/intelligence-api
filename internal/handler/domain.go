@@ -16,6 +16,14 @@ func normalizeDomain(raw string) (string, bool) {
 	d = strings.TrimPrefix(d, "http://")
 	d = strings.TrimPrefix(d, "https://")
 	d = strings.TrimRight(d, "/")
+
+	// Reject anything that still looks like a URL (paths, query strings, fragments, ports).
+	if strings.ContainsAny(d, "/:?#@") {
+		return d, false
+	}
+
+	d = strings.ToLower(d)
+
 	if d == "" || !strings.Contains(d, ".") {
 		return d, false
 	}

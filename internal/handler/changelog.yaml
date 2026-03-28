@@ -1,6 +1,24 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.40.0
+  date: 2026-03-28
+  changes:
+    - text: "API key retrieval after checkout is now atomic — eliminates a race condition under concurrent requests"
+      audience: internal
+    - text: "Removed unique constraint on customer name to allow multiple customers with the same name"
+      audience: internal
+    - text: "Domain input validation now rejects ports, paths, query strings, fragments, and userinfo"
+      audience: public
+    - text: "Domain names are lowercased during normalization for consistent caching"
+      audience: internal
+    - text: "Removed dead code in Stripe checkout handler"
+      audience: internal
+    - text: "Screenshot capture now routes all Chrome traffic through a local SSRF-safe proxy"
+      audience: internal
+    - text: "Replaced per-request last_used_at goroutines with a batched writer (configurable via auth.last_used_buffer_size and auth.last_used_flush_interval)"
+      audience: internal
+
 - version: v0.39.0
   date: 2026-03-23
   changes:
