@@ -42,6 +42,13 @@ type LastUsedBatcher struct {
 // IDs to the database every flushInterval. bufferSize controls the channel
 // capacity; it is clamped to a minimum of 64 to prevent misconfiguration.
 func NewLastUsedBatcher(db *sql.DB, bufferSize int, flushInterval time.Duration, logger *zap.Logger) *LastUsedBatcher {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	if db == nil {
+		logger.Error("NewLastUsedBatcher called with nil db, last_used_at updates will be disabled")
+		return nil
+	}
 	if bufferSize < minBufferSize {
 		logger.Warn("auth.last_used_buffer_size too small, clamping to minimum",
 			zap.Int("configured", bufferSize),

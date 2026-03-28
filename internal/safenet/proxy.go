@@ -57,13 +57,13 @@ func handleConnect(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
 		targetConn.Close()
 		return
 	}
+
+	clientConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 
 	go transfer(targetConn, clientConn)
 	go transfer(clientConn, targetConn)
