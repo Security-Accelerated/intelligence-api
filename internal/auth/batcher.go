@@ -12,9 +12,18 @@ import (
 	"go.uber.org/zap"
 )
 
-// minBufferSize is the minimum allowed buffer size to prevent misconfiguration
-// from silently dropping most touches and causing false stale-account deactivations.
-const minBufferSize = 64
+const (
+	// minBufferSize is the minimum allowed buffer size to prevent misconfiguration
+	// from silently dropping most touches and causing false stale-account deactivations.
+	minBufferSize = 64
+
+	// minFlushInterval prevents a zero/negative duration from panicking time.NewTicker.
+	minFlushInterval = 1 * time.Second
+
+	// dropLogInterval controls how often drop warnings are logged. Only every Nth
+	// drop emits a log line to avoid a log storm when the service is already under pressure.
+	dropLogInterval = 100
+)
 
 // LastUsedBatcher collects API key IDs and batch-updates their last_used_at
 // timestamps on a timer. This replaces per-request fire-and-forget goroutines
@@ -40,6 +49,13 @@ func NewLastUsedBatcher(db *sql.DB, bufferSize int, flushInterval time.Duration,
 		)
 		bufferSize = minBufferSize
 	}
+	if flushInterval < minFlushInterval {
+		logger.Warn("auth.last_used_flush_interval too small, clamping to minimum",
+			zap.Duration("configured", flushInterval),
+			zap.Duration("minimum", minFlushInterval),
+		)
+		flushInterval = minFlushInterval
+	}
 	b := &LastUsedBatcher{
 		db:            db,
 		ch:            make(chan int, bufferSize),
@@ -53,16 +69,18 @@ func NewLastUsedBatcher(db *sql.DB, bufferSize int, flushInterval time.Duration,
 }
 
 // Touch enqueues an API key ID for a batched last_used_at update.
-// Non-blocking: logs a warning and increments a drop counter if the channel is full.
+// Non-blocking: increments a drop counter if the channel is full and logs a
+// warning every dropLogInterval drops to avoid log storms under pressure.
 func (b *LastUsedBatcher) Touch(apiKeyID int) {
 	select {
 	case b.ch <- apiKeyID:
 	default:
 		total := b.dropped.Add(1)
-		b.logger.Warn("last_used_at touch dropped (buffer full), risk of false stale-account deactivation",
-			zap.Int("api_key_id", apiKeyID),
-			zap.Int64("total_dropped", total),
-		)
+		if total == 1 || total%dropLogInterval == 0 {
+			b.logger.Warn("last_used_at touches dropped (buffer full), risk of false stale-account deactivation",
+				zap.Int64("total_dropped", total),
+			)
+		}
 	}
 }
 

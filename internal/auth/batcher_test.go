@@ -89,12 +89,42 @@ func TestLastUsedBatcher_ClampsSmallBuffer(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Request a tiny buffer — should be clamped to minBufferSize
 	b := NewLastUsedBatcher(db, 2, 1*time.Hour, zap.NewNop())
 	defer b.Stop()
 
 	if cap(b.ch) != minBufferSize {
 		t.Errorf("buffer capacity = %d, want %d (should be clamped)", cap(b.ch), minBufferSize)
+	}
+}
+
+func TestLastUsedBatcher_ClampsZeroFlushInterval(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Zero duration would panic time.NewTicker — should be clamped
+	b := NewLastUsedBatcher(db, 64, 0, zap.NewNop())
+	defer b.Stop()
+
+	if b.flushInterval != minFlushInterval {
+		t.Errorf("flushInterval = %v, want %v (should be clamped)", b.flushInterval, minFlushInterval)
+	}
+}
+
+func TestLastUsedBatcher_ClampsNegativeFlushInterval(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	b := NewLastUsedBatcher(db, 64, -5*time.Second, zap.NewNop())
+	defer b.Stop()
+
+	if b.flushInterval != minFlushInterval {
+		t.Errorf("flushInterval = %v, want %v (should be clamped)", b.flushInterval, minFlushInterval)
 	}
 }
 
