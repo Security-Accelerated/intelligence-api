@@ -63,7 +63,11 @@ func handleConnect(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 		return
 	}
 
-	clientConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+	if _, err := clientConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n")); err != nil {
+		clientConn.Close()
+		targetConn.Close()
+		return
+	}
 
 	go transfer(targetConn, clientConn)
 	go transfer(clientConn, targetConn)
