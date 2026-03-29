@@ -64,16 +64,16 @@ func TestLastUsedBatcher_DropsWhenFull(t *testing.T) {
 	}
 	defer db.Close()
 
+	// Set expectation before starting batcher to avoid race with early flush
+	mock.ExpectExec("UPDATE api_keys SET last_used_at").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
 	// Minimum buffer (64), long flush interval — send many more than buffer to trigger drops
 	b := NewLastUsedBatcher(db, minBufferSize, 1*time.Hour, zap.NewNop())
 
 	for i := 0; i < 500; i++ {
 		b.Touch(i)
 	}
-
-	// Expect at least one flush on stop (whatever made it into the channel)
-	mock.ExpectExec("UPDATE api_keys SET last_used_at").
-		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	b.Stop()
 
