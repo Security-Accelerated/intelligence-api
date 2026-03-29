@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -44,6 +45,11 @@ func normalizeDomain(raw string) (string, bool) {
 func (h *Handler) DomainLookup(c *gin.Context) {
 	var req domain.DomainRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: domains field is required and must be a non-empty array"})
 		return
 	}

@@ -917,3 +917,33 @@ func TestDomainLookup_ThreatIntel_BasicForbidden(t *testing.T) {
 		t.Errorf("error = %q, want %q", body["error"], "threat_intel requires a pro plan")
 	}
 }
+
+// --- Body limit 413 ---
+
+func TestDomainLookup_OversizedBody_Returns413(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.BodyLimit(128)) // small limit for testing
+	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_plan", "pro")
+		c.Next()
+	})
+
+	w := httptest.NewRecorder()
+	oversized := `{"domains":["` + strings.Repeat("example.com,", 50) + `example.com"]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(oversized))
+	req.Header.Set("Content-Type", "application/json")
+	// Remove Content-Length to force the MaxBytesReader path (not the early reject)
+	req.ContentLength = -1
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
+	}
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "request body too large" {
+		t.Errorf("error = %q, want %q", body["error"], "request body too large")
+	}
+}
