@@ -509,12 +509,12 @@
       </tr>
       <tr>
         <td><strong>Basic</strong></td>
-        <td>30 req/min, 5 domains/request, all lookups</td>
+        <td>30 req/min, 5 domains/request, core lookups + email security, subdomains, CT logs, BGP, fingerprint</td>
         <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" style="background:var(--accent);color:#fff;padding:6px 16px;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Subscribe</a>{{else}}Contact us{{end}}</td>
       </tr>
       <tr>
         <td><strong>Pro</strong></td>
-        <td>120 req/min, 20 domains/request, all lookups + screenshot + reputation + threat intel</td>
+        <td>120 req/min, 20 domains/request, all lookups including screenshot, reputation, and threat intel</td>
         <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" style="background:var(--accent);color:#fff;padding:6px 16px;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Subscribe</a>{{else}}Contact us{{end}}</td>
       </tr>
     </tbody>
@@ -652,9 +652,12 @@ resp = requests.post(
     },
 )
 
-results = resp.json()
-<span class="kw">for</span> result <span class="kw">in</span> results:
-    print(result[<span class="str">"domain"</span>], result[<span class="str">"dns"</span>][<span class="str">"a"</span>])</code></pre>
+<span class="kw">if</span> resp.status_code != <span class="num">200</span>:
+    print(<span class="str">"Error:"</span>, resp.json()[<span class="str">"error"</span>])
+<span class="kw">else</span>:
+    results = resp.json()
+    <span class="kw">for</span> result <span class="kw">in</span> results:
+        print(result[<span class="str">"domain"</span>], result[<span class="str">"dns"</span>][<span class="str">"a"</span>])</code></pre>
   </div>
   <div id="tab-go" class="lang-panel">
   <pre><code><span class="kw">package</span> main
@@ -685,6 +688,13 @@ results = resp.json()
         panic(err)
     }
     <span class="kw">defer</span> resp.Body.Close()
+
+    <span class="kw">if</span> resp.StatusCode != http.StatusOK {
+        <span class="kw">var</span> apiErr <span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">string</span>
+        json.NewDecoder(resp.Body).Decode(&apiErr)
+        fmt.Println(<span class="str">"Error:"</span>, apiErr[<span class="str">"error"</span>])
+        <span class="kw">return</span>
+    }
 
     <span class="kw">var</span> results []<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>
     json.NewDecoder(resp.Body).Decode(&results)
@@ -1273,6 +1283,7 @@ results = resp.json()
       <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>domains</code> field, or invalid domain name</td></tr>
       <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
       <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint or feature</td></tr>
+      <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
       <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
       <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
     </tbody>
