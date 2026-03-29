@@ -72,7 +72,8 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 	stripeCustomerID := sess.Customer.ID
 	email := sess.CustomerDetails.Email
 
-	// Idempotency: check if customer already exists
+	// Idempotency: customer creation, api_key, and provisioned_key are all in one
+	// transaction (ProvisionCustomer), so if the customer exists, everything succeeded.
 	exists, err := s.repo.CustomerExistsByStripeID(ctx, stripeCustomerID)
 	if err != nil {
 		return fmt.Errorf("check existing customer: %w", err)
@@ -118,20 +119,17 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 	}
 	keyHash := auth.HashKey(rawKey)
 
-	// Create customer with key
-	name := email // use email as name if no name provided
+	// Use email as name if no name provided
+	name := email
 	if sess.CustomerDetails.Name != "" {
 		name = sess.CustomerDetails.Name
 	}
 
-	customerID, err := s.repo.CreateCustomerWithKey(ctx, name, email, plan, stripeCustomerID, keyHash)
+	// Atomically create customer, api_key, and provisioned_key in one transaction.
+	// This prevents partial failures that would leave a customer without a retrievable key.
+	customerID, err := s.repo.ProvisionCustomer(ctx, name, email, plan, stripeCustomerID, keyHash, sess.ID, rawKey)
 	if err != nil {
-		return fmt.Errorf("create customer: %w", err)
-	}
-
-	// Store provisioned key for one-time retrieval
-	if err := s.repo.StoreProvisionedKey(ctx, sess.ID, customerID, rawKey); err != nil {
-		return fmt.Errorf("store provisioned key: %w", err)
+		return fmt.Errorf("provision customer: %w", err)
 	}
 
 	logger.Info("new customer provisioned via checkout",

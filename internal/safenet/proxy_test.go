@@ -87,17 +87,24 @@ func TestProxy_ForwardsCONNECTSuccessfully(t *testing.T) {
 
 func TestProxy_StripsHopByHopHeaders(t *testing.T) {
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify proxy headers were stripped before reaching origin
+		// Verify standard proxy headers were stripped
 		if got := r.Header.Get("Proxy-Connection"); got != "" {
 			t.Errorf("origin received Proxy-Connection = %q, want empty", got)
 		}
 		if got := r.Header.Get("Proxy-Authorization"); got != "" {
 			t.Errorf("origin received Proxy-Authorization = %q, want empty", got)
 		}
+		// Verify Connection-named headers were also stripped (RFC 7230 §6.1)
+		if got := r.Header.Get("X-Secret-Hop"); got != "" {
+			t.Errorf("origin received X-Secret-Hop = %q, want empty (named by Connection header)", got)
+		}
 		// Non-hop-by-hop headers should pass through
 		if got := r.Header.Get("X-Custom"); got != "keep-me" {
 			t.Errorf("origin X-Custom = %q, want %q", got, "keep-me")
 		}
+		// Response with Connection-named header to verify response stripping
+		w.Header().Set("Connection", "X-Internal")
+		w.Header().Set("X-Internal", "should-be-stripped")
 		w.Header().Set("Proxy-Connection", "should-be-stripped")
 		w.Header().Set("X-Origin", "preserved")
 		w.WriteHeader(http.StatusOK)
@@ -116,6 +123,8 @@ func TestProxy_StripsHopByHopHeaders(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, target.URL, nil)
 	req.Header.Set("Proxy-Connection", "keep-alive")
 	req.Header.Set("Proxy-Authorization", "Basic secret")
+	req.Header.Set("Connection", "X-Secret-Hop")
+	req.Header.Set("X-Secret-Hop", "attacker-controlled")
 	req.Header.Set("X-Custom", "keep-me")
 
 	resp, err := transport.RoundTrip(req)
@@ -127,6 +136,10 @@ func TestProxy_StripsHopByHopHeaders(t *testing.T) {
 	// Verify hop-by-hop headers are stripped from response
 	if got := resp.Header.Get("Proxy-Connection"); got != "" {
 		t.Errorf("client received Proxy-Connection = %q, want empty", got)
+	}
+	// Verify Connection-named response headers are stripped
+	if got := resp.Header.Get("X-Internal"); got != "" {
+		t.Errorf("client received X-Internal = %q, want empty (named by Connection header)", got)
 	}
 	// Non-hop-by-hop response headers should pass through
 	if got := resp.Header.Get("X-Origin"); got != "preserved" {

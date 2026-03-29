@@ -11,8 +11,7 @@ type Service interface {
 // BillingRepository abstracts the database operations needed by the billing service.
 type BillingRepository interface {
 	CustomerExistsByStripeID(ctx context.Context, stripeCustomerID string) (bool, error)
-	CreateCustomerWithKey(ctx context.Context, name, email, plan, stripeCustomerID, keyHash string) (int, error)
-	StoreProvisionedKey(ctx context.Context, sessionID string, customerID int, rawKey string) error
+	ProvisionCustomer(ctx context.Context, name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string) (int, error)
 	RetrieveProvisionedKey(ctx context.Context, sessionID string) (string, error)
 	UpdatePlan(ctx context.Context, stripeCustomerID, plan string) error
 	DowngradeToFree(ctx context.Context, stripeCustomerID string) error

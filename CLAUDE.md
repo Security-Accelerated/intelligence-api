@@ -129,7 +129,7 @@ Sample config: `internal/config/sample-config.yml`
 
 ## Database
 
-PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration.
+PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration. For production (Neon), apply new migrations via `psql "$NEON_CONNECTION_STRING" -c "..."` using the connection string from `.env`.
 
 Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout), `request_log` (usage tracking — per-request metadata for admin analytics).
 

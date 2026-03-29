@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -89,10 +90,7 @@ var hopByHopHeaders = []string{
 
 // handleHTTP handles plain HTTP requests by forwarding them through the safe dialer.
 func handleHTTP(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
-	// Strip hop-by-hop headers before forwarding to the origin server.
-	for _, h := range hopByHopHeaders {
-		r.Header.Del(h)
-	}
+	removeHopByHop(r.Header)
 
 	transport := &http.Transport{
 		DialContext: dialer.DialContext,
@@ -105,10 +103,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 	}
 	defer resp.Body.Close()
 
-	// Strip hop-by-hop headers from the response as well.
-	for _, h := range hopByHopHeaders {
-		resp.Header.Del(h)
-	}
+	removeHopByHop(resp.Header)
 
 	for k, vv := range resp.Header {
 		for _, v := range vv {
@@ -117,6 +112,22 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 	}
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+}
+
+// removeHopByHop strips standard hop-by-hop headers and any additional headers
+// named by the Connection header (per RFC 7230 §6.1).
+func removeHopByHop(h http.Header) {
+	// Parse Connection header for additional hop-by-hop header names before deleting it.
+	for _, v := range h["Connection"] {
+		for _, name := range strings.Split(v, ",") {
+			if trimmed := strings.TrimSpace(name); trimmed != "" {
+				h.Del(trimmed)
+			}
+		}
+	}
+	for _, name := range hopByHopHeaders {
+		h.Del(name)
+	}
 }
 
 func transfer(dst io.WriteCloser, src io.ReadCloser) {

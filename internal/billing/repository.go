@@ -24,9 +24,11 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
-// CreateCustomerWithKey creates a customer and an API key in a single transaction.
+// ProvisionCustomer creates a customer, API key, and provisioned key in a single
+// transaction. This ensures all three records exist atomically — a partial failure
+// cannot leave a customer without a retrievable API key.
 // Returns the new customer ID.
-func (r *Repository) CreateCustomerWithKey(ctx context.Context, name, email, plan, stripeCustomerID, keyHash string) (int, error) {
+func (r *Repository) ProvisionCustomer(ctx context.Context, name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string) (int, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin tx: %w", err)
@@ -53,23 +55,19 @@ func (r *Repository) CreateCustomerWithKey(ctx context.Context, name, email, pla
 		return 0, fmt.Errorf("insert api key: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return customerID, nil
-}
-
-// StoreProvisionedKey stores a raw API key for one-time retrieval after checkout.
-func (r *Repository) StoreProvisionedKey(ctx context.Context, sessionID string, customerID int, rawKey string) error {
-	_, err := r.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO provisioned_keys (session_id, customer_id, raw_key, created_at, expires_at)
 		 VALUES ($1, $2, $3, now(), now() + INTERVAL '1 hour')`,
 		sessionID, customerID, rawKey,
 	)
 	if err != nil {
-		return fmt.Errorf("store provisioned key: %w", err)
+		return 0, fmt.Errorf("insert provisioned key: %w", err)
 	}
-	return nil
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit: %w", err)
+	}
+	return customerID, nil
 }
 
 // RetrieveProvisionedKey atomically marks a provisioned key as retrieved and returns it.
@@ -184,3 +182,4 @@ func (r *Repository) CustomerExistsByStripeID(ctx context.Context, stripeCustome
 	}
 	return exists, nil
 }
+

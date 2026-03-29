@@ -10,9 +10,9 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
-// --- CreateCustomerWithKey ---
+// --- ProvisionCustomer ---
 
-func TestCreateCustomerWithKey_HappyPath(t *testing.T) {
+func TestProvisionCustomer_HappyPath(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -26,10 +26,13 @@ func TestCreateCustomerWithKey_HappyPath(t *testing.T) {
 	mock.ExpectExec("INSERT INTO api_keys").
 		WithArgs(42, "hashvalue").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO provisioned_keys").
+		WithArgs("sess_abc", 42, "rawkey123").
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
 	repo := NewRepository(db)
-	id, err := repo.CreateCustomerWithKey(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue")
+	id, err := repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,7 +44,7 @@ func TestCreateCustomerWithKey_HappyPath(t *testing.T) {
 	}
 }
 
-func TestCreateCustomerWithKey_BeginTxError(t *testing.T) {
+func TestProvisionCustomer_BeginTxError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +54,7 @@ func TestCreateCustomerWithKey_BeginTxError(t *testing.T) {
 	mock.ExpectBegin().WillReturnError(errors.New("connection refused"))
 
 	repo := NewRepository(db)
-	_, err = repo.CreateCustomerWithKey(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -60,7 +63,7 @@ func TestCreateCustomerWithKey_BeginTxError(t *testing.T) {
 	}
 }
 
-func TestCreateCustomerWithKey_InsertCustomerError(t *testing.T) {
+func TestProvisionCustomer_InsertCustomerError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +77,7 @@ func TestCreateCustomerWithKey_InsertCustomerError(t *testing.T) {
 	mock.ExpectRollback()
 
 	repo := NewRepository(db)
-	_, err = repo.CreateCustomerWithKey(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -83,7 +86,7 @@ func TestCreateCustomerWithKey_InsertCustomerError(t *testing.T) {
 	}
 }
 
-func TestCreateCustomerWithKey_InsertKeyError(t *testing.T) {
+func TestProvisionCustomer_InsertKeyError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +103,7 @@ func TestCreateCustomerWithKey_InsertKeyError(t *testing.T) {
 	mock.ExpectRollback()
 
 	repo := NewRepository(db)
-	_, err = repo.CreateCustomerWithKey(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -109,7 +112,7 @@ func TestCreateCustomerWithKey_InsertKeyError(t *testing.T) {
 	}
 }
 
-func TestCreateCustomerWithKey_CommitError(t *testing.T) {
+func TestProvisionCustomer_InsertProvisionedKeyError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -123,10 +126,13 @@ func TestCreateCustomerWithKey_CommitError(t *testing.T) {
 	mock.ExpectExec("INSERT INTO api_keys").
 		WithArgs(42, "hashvalue").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+	mock.ExpectExec("INSERT INTO provisioned_keys").
+		WithArgs("sess_abc", 42, "rawkey123").
+		WillReturnError(errors.New("session conflict"))
+	mock.ExpectRollback()
 
 	repo := NewRepository(db)
-	_, err = repo.CreateCustomerWithKey(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -135,42 +141,27 @@ func TestCreateCustomerWithKey_CommitError(t *testing.T) {
 	}
 }
 
-// --- StoreProvisionedKey ---
-
-func TestStoreProvisionedKey_HappyPath(t *testing.T) {
+func TestProvisionCustomer_CommitError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO customers").
+		WithArgs("acme", "acme@example.com", "cus_123", "basic").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
+	mock.ExpectExec("INSERT INTO api_keys").
+		WithArgs(42, "hashvalue").
+		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO provisioned_keys").
 		WithArgs("sess_abc", 42, "rawkey123").
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 
 	repo := NewRepository(db)
-	err = repo.StoreProvisionedKey(context.Background(), "sess_abc", 42, "rawkey123")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
-
-func TestStoreProvisionedKey_ExecError(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	mock.ExpectExec("INSERT INTO provisioned_keys").
-		WithArgs("sess_abc", 42, "rawkey123").
-		WillReturnError(errors.New("db error"))
-
-	repo := NewRepository(db)
-	err = repo.StoreProvisionedKey(context.Background(), "sess_abc", 42, "rawkey123")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

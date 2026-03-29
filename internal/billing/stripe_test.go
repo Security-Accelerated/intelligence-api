@@ -88,10 +88,9 @@ type mockBillingRepo struct {
 func (m *mockBillingRepo) CustomerExistsByStripeID(context.Context, string) (bool, error) {
 	return false, nil
 }
-func (m *mockBillingRepo) CreateCustomerWithKey(context.Context, string, string, string, string, string) (int, error) {
+func (m *mockBillingRepo) ProvisionCustomer(context.Context, string, string, string, string, string, string, string) (int, error) {
 	return 0, nil
 }
-func (m *mockBillingRepo) StoreProvisionedKey(context.Context, string, int, string) error { return nil }
 func (m *mockBillingRepo) RetrieveProvisionedKey(context.Context, string) (string, error) {
 	return "", nil
 }

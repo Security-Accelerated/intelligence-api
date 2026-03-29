@@ -629,7 +629,7 @@ Config values:
 
 ### Database Setup
 
-The `migrations/` directory contains SQL files that are automatically applied when using Docker Compose (mounted to `/docker-entrypoint-initdb.d/`).
+The `migrations/` directory contains SQL files that are automatically applied when using Docker Compose (mounted to `/docker-entrypoint-initdb.d/`). **Note:** PostgreSQL's `initdb` only runs these scripts on first volume creation. For existing databases (including production on Neon), new migrations must be applied manually via `psql`.
 
 - `001_create_api_keys.sql` — creates the `customers`, `api_keys`, and `customer_roles` tables
 - `002_add_customer_tier.sql` — adds the `tier` column to `customers`
@@ -640,6 +640,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `007_billing.sql` — adds `email`, `stripe_customer_id` to customers; `last_used_at` to api_keys; creates `provisioned_keys` table
 - `008_request_log.sql` — creates the `request_log` table for usage tracking (indexed on `created_at`, `customer_id`, `api_key_id`)
 - `009_request_log_threat_intel.sql` — adds `threat_intel` column to the `request_log` table
+- `010_drop_name_unique.sql` — drops the unique constraint on `customers.name` (allows same-name Stripe signups)
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
