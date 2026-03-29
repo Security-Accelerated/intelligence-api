@@ -273,7 +273,7 @@ echo "=== Body Size Limit ==="
 # Written to a temp file because the shell can't pass >1MB as a CLI argument.
 big_body_file=$(mktemp)
 python3 -c "print('{\"domains\":[\"' + 'x'*1048577 + '\"]}')" > "$big_body_file"
-check 400 "oversized body (>1MB) rejected" \
+check 413 "oversized body (>1MB) rejected" \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d @"$big_body_file"
