@@ -589,8 +589,6 @@ Config values:
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
-| `subdomain.timeout` | `30s` | Timeout for subdomain enumeration (reserved, not yet wired) |
-| `subdomain.concurrency` | `20` | Max concurrent subdomain lookups (reserved, not yet wired) |
 | `subdomain.max_domains.free` | `1` | Maximum domains per request for free plan (subdomains) |
 | `subdomain.max_domains.basic` | `3` | Maximum domains per request for basic plan (subdomains) |
 | `subdomain.max_domains.pro` | `5` | Maximum domains per request for pro plan (subdomains) |
