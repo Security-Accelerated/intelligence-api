@@ -617,7 +617,7 @@
   </table>
 
   <h4>Domain Normalization</h4>
-  <p>Domain names are normalized automatically: <code>http://</code> and <code>https://</code> prefixes are stripped, and trailing slashes are removed. Raw IP addresses are rejected.</p>
+  <p>Domain names are normalized automatically: <code>http://</code> and <code>https://</code> prefixes are stripped, trailing slashes are removed, and names are lowercased. Inputs containing ports, paths, query strings, fragments, or userinfo (e.g. <code>example.com:8080</code>, <code>example.com/path</code>, <code>user@example.com</code>) are rejected. Raw IP addresses are also rejected &mdash; provide a domain name instead.</p>
 
   <h3 id="example-request">Example</h3>
   <div class="lang-tabs">
