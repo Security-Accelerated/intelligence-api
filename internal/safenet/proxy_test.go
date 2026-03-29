@@ -2,6 +2,7 @@ package safenet
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -81,6 +82,55 @@ func TestProxy_ForwardsCONNECTSuccessfully(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "hello via TLS" {
 		t.Errorf("body = %q, want %q", body, "hello via TLS")
+	}
+}
+
+// --- Edge case tests ---
+
+func TestProxy_CONNECTWriteFailure_CleansUp(t *testing.T) {
+	// Start a TLS target that we can successfully dial
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	defer target.Close()
+
+	proxy, ln, err := newProxy(&net.Dialer{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	// Manually send a CONNECT request and close the client connection immediately
+	// before the proxy can write the 200 response, exercising the write-failure cleanup.
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	targetAddr := target.Listener.Addr().String()
+	fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", targetAddr, targetAddr)
+
+	// Close immediately to trigger write failure on the proxy side
+	conn.Close()
+
+	// Give the proxy a moment to process and clean up
+	time.Sleep(50 * time.Millisecond)
+
+	// No panic, no goroutine leak = success.
+	// Verify the proxy still works by making a normal request.
+	proxyURL, _ := url.Parse("http://" + ln.Addr().String())
+	client := &http.Client{Transport: &http.Transport{
+		Proxy:           http.ProxyURL(proxyURL),
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}}
+
+	resp, err := client.Get(target.URL)
+	if err != nil {
+		t.Fatalf("proxy unusable after write failure: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 }
 

@@ -128,6 +128,39 @@ func TestLastUsedBatcher_ClampsNegativeFlushInterval(t *testing.T) {
 	}
 }
 
+func TestLastUsedBatcher_NilDB_ReturnsNil(t *testing.T) {
+	b := NewLastUsedBatcher(nil, 64, 10*time.Second, zap.NewNop())
+	if b != nil {
+		b.Stop()
+		t.Fatal("expected nil batcher when db is nil")
+	}
+}
+
+func TestLastUsedBatcher_NilLogger_UsesNop(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Should not panic despite nil logger
+	b := NewLastUsedBatcher(db, 64, 10*time.Second, nil)
+	if b == nil {
+		t.Fatal("expected non-nil batcher")
+	}
+	b.Touch(1) // exercises logger in drop path if it were nil
+	b.Stop()
+}
+
+func TestLastUsedBatcher_NilDB_NilLogger(t *testing.T) {
+	// Both nil — should not panic, logger defaults to nop, then returns nil for nil db
+	b := NewLastUsedBatcher(nil, 64, 10*time.Second, nil)
+	if b != nil {
+		b.Stop()
+		t.Fatal("expected nil batcher when db is nil")
+	}
+}
+
 func TestLastUsedBatcher_NoFlushWhenEmpty(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
