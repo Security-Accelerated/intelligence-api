@@ -73,8 +73,27 @@ func handleConnect(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 	go transfer(clientConn, targetConn)
 }
 
+// hopByHopHeaders are HTTP headers that are meaningful only for a single
+// transport-level connection and must not be forwarded by proxies.
+var hopByHopHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Proxy-Connection",
+	"Te",
+	"Trailer",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
 // handleHTTP handles plain HTTP requests by forwarding them through the safe dialer.
 func handleHTTP(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
+	// Strip hop-by-hop headers before forwarding to the origin server.
+	for _, h := range hopByHopHeaders {
+		r.Header.Del(h)
+	}
+
 	transport := &http.Transport{
 		DialContext: dialer.DialContext,
 	}
@@ -85,6 +104,11 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 		return
 	}
 	defer resp.Body.Close()
+
+	// Strip hop-by-hop headers from the response as well.
+	for _, h := range hopByHopHeaders {
+		resp.Header.Del(h)
+	}
 
 	for k, vv := range resp.Header {
 		for _, v := range vv {

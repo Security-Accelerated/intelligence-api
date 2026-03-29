@@ -18,6 +18,10 @@
       audience: internal
     - text: "Replaced per-request last_used_at goroutines with a batched writer (configurable via auth.last_used_buffer_size and auth.last_used_flush_interval)"
       audience: internal
+    - text: "Checkout webhook now fails on plan determination errors so Stripe retries instead of silently defaulting to basic"
+      audience: internal
+    - text: "Screenshot proxy now strips hop-by-hop headers (Proxy-Connection, etc.) before forwarding to origin servers"
+      audience: internal
 
 - version: v0.39.0
   date: 2026-03-23

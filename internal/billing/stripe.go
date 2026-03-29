@@ -84,14 +84,20 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 		return nil
 	}
 
-	// Determine plan from the checkout session's line items
-	plan := "basic" // default
+	// Determine plan from the checkout session's line items.
+	// This fetch must succeed — a failure here would silently default a paid
+	// customer to the wrong plan. Returning an error causes Stripe to retry.
 	expandedParams := &stripe.CheckoutSessionParams{
 		Params: stripe.Params{Context: ctx},
 	}
 	expandedParams.AddExpand("line_items")
 	expandedSess, err := session.Get(sess.ID, expandedParams)
-	if err == nil && expandedSess.LineItems != nil {
+	if err != nil {
+		return fmt.Errorf("retrieve checkout line items: %w", err)
+	}
+
+	var plan string
+	if expandedSess.LineItems != nil {
 		for _, item := range expandedSess.LineItems.Data {
 			if item.Price != nil {
 				if p, ok := s.priceToplan[item.Price.ID]; ok {
@@ -100,6 +106,9 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 				}
 			}
 		}
+	}
+	if plan == "" {
+		return fmt.Errorf("could not determine plan from checkout session %s: no matching price ID", sess.ID)
 	}
 
 	// Generate API key

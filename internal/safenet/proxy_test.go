@@ -85,6 +85,55 @@ func TestProxy_ForwardsCONNECTSuccessfully(t *testing.T) {
 	}
 }
 
+func TestProxy_StripsHopByHopHeaders(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify proxy headers were stripped before reaching origin
+		if got := r.Header.Get("Proxy-Connection"); got != "" {
+			t.Errorf("origin received Proxy-Connection = %q, want empty", got)
+		}
+		if got := r.Header.Get("Proxy-Authorization"); got != "" {
+			t.Errorf("origin received Proxy-Authorization = %q, want empty", got)
+		}
+		// Non-hop-by-hop headers should pass through
+		if got := r.Header.Get("X-Custom"); got != "keep-me" {
+			t.Errorf("origin X-Custom = %q, want %q", got, "keep-me")
+		}
+		w.Header().Set("Proxy-Connection", "should-be-stripped")
+		w.Header().Set("X-Origin", "preserved")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	proxy, ln, err := newProxy(&net.Dialer{Timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+
+	proxyURL, _ := url.Parse("http://" + ln.Addr().String())
+	transport := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
+
+	req, _ := http.NewRequest(http.MethodGet, target.URL, nil)
+	req.Header.Set("Proxy-Connection", "keep-alive")
+	req.Header.Set("Proxy-Authorization", "Basic secret")
+	req.Header.Set("X-Custom", "keep-me")
+
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("request through proxy failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Verify hop-by-hop headers are stripped from response
+	if got := resp.Header.Get("Proxy-Connection"); got != "" {
+		t.Errorf("client received Proxy-Connection = %q, want empty", got)
+	}
+	// Non-hop-by-hop response headers should pass through
+	if got := resp.Header.Get("X-Origin"); got != "preserved" {
+		t.Errorf("client X-Origin = %q, want %q", got, "preserved")
+	}
+}
+
 // --- Edge case tests ---
 
 func TestProxy_CONNECTWriteFailure_CleansUp(t *testing.T) {
