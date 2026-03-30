@@ -83,6 +83,19 @@ usage:
   buffer_size: 256
   flush_interval: 5s
 
+ip:
+  lookup_timeout: 30s
+  max_ips:
+    free: 1
+    basic: 5
+    pro: 20
+
+maxmind:
+  license_key: ""
+  db_path: "/data/maxmind"
+  city_db: "GeoLite2-City.mmdb"
+  asn_db: "GeoLite2-ASN.mmdb"
+
 threat_intel:
   virustotal_api_key: ""
   alienvault_api_key: ""

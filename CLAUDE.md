@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Domain intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
+Domain and IP intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for domains. IP lookups provide GeoIP, ASN, reverse DNS, abuse contact (RDAP), and threat intelligence. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
 
 **Module:** `github.com/security-accelerated/intelligence-api`
 
@@ -77,6 +77,9 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 ### Notifications
 `internal/notifications/` provides interface-driven alerting. `Notifier` interface abstracts the delivery channel (currently Pushover); `ErrorRecorder` interface abstracts error tracking (currently `Alerter`). The `Alerter` uses sliding-window counters behind a mutex to detect per-lookup throttling (default: 5 failures in 5m) and global error spikes (default: 15 errors in 5m). Alerts fire asynchronously with a 15-minute cooldown to prevent alert fatigue. `DomainService` depends on `ErrorRecorder`; when Pushover credentials are absent, a `NoopRecorder` is wired in. Config: `PUSHOVER_API_TOKEN`, `PUSHOVER_USER_KEY`, `ALERTS_THROTTLE_THRESHOLD`, `ALERTS_THROTTLE_WINDOW`, `ALERTS_SPIKE_THRESHOLD`, `ALERTS_SPIKE_WINDOW`, `ALERTS_COOLDOWN`.
 
+### IP intelligence
+`internal/domain/geoip.go` provides `GeoIPReader` — holds MaxMind GeoLite2 City and ASN databases behind `sync.RWMutex` for concurrent reads with atomic hot-reload via `Reload()`. `DownloadAndReload()` fetches latest databases from MaxMind using a license key, validates them, and swaps atomically. `internal/domain/ip_rdns.go` does PTR lookups via `net.DefaultResolver`. `internal/domain/ip_rdap.go` queries RDAP bootstrap (`rdap.org/ip/`) for abuse contacts — returns structured JSON, no WHOIS parsing needed. `internal/domain/ip_threatintel.go` defines `IPThreatIntelProvider` interface and adapter types (`VTIPProvider`, `URLhausIPProvider`, `OTXIPProvider`) that wrap existing domain providers, sharing their HTTP clients and rate limiters but hitting IP-specific API endpoints. `internal/service/ip.go` follows the same concurrent fan-out pattern as `service/domain.go` with function-based DI and `ip:` prefixed cache keys. `internal/handler/ip.go` validates IPs via `netip.ParseAddr`, rejects non-globally-routable addresses, and gates `threat_intel` to pro/admin. `internal/handler/geoip_admin.go` provides a bodyless admin endpoint for app-managed database refresh. Config: `MAXMIND_LICENSE_KEY`, `MAXMIND_DB_PATH`, `IP_LOOKUP_TIMEOUT`, `IP_MAX_IPS_FREE/BASIC/PRO`.
+
 ## Middleware Chain (order matters)
 
 1. `gin.Recovery()` — catches panics, returns 500
@@ -131,7 +134,7 @@ Sample config: `internal/config/sample-config.yml`
 
 PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration. For production (Neon), apply new migrations via `psql "$NEON_CONNECTION_STRING" -c "..."` using the connection string from `.env`.
 
-Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout), `request_log` (usage tracking — per-request metadata for admin analytics).
+Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout), `request_log` (usage tracking — per-request metadata for admin analytics, includes `domain_count` and `ip_count` for independent service analytics).
 
 ## Infrastructure
 

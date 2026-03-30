@@ -88,7 +88,7 @@ func (h *Handler) Info(c *gin.Context) {
 		"system":   sys,
 		"database": s.Database,
 		"lookups":  s.Lookups,
-		"services": s.Services,
+		"services": s.GetServices(),
 	}
 
 	// Runtime stats

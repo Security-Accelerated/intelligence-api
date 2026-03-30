@@ -1,6 +1,24 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.41.0
+  date: 2026-03-29
+  changes:
+    - text: "New endpoint: POST /v1/ip/lookup — GeoIP, ASN, reverse DNS, abuse contact, and threat intelligence for IP addresses"
+      audience: public
+    - text: "IP threat intelligence requires a pro plan (same as domain threat_intel)"
+      audience: public
+    - text: "GeoIP and ASN data powered by MaxMind GeoLite2 embedded databases"
+      audience: public
+    - text: "Admin endpoint POST /v1/admin/geoip/refresh for hot-reloading MaxMind databases"
+      audience: internal
+    - text: "Abuse contact lookup uses RDAP (structured JSON) instead of raw WHOIS parsing"
+      audience: internal
+    - text: "IP threat intel providers share rate limiters with domain providers"
+      audience: internal
+    - text: "Added ip_count to request_log for independent IP analytics"
+      audience: internal
+
 - version: v0.40.0
   date: 2026-03-28
   changes:

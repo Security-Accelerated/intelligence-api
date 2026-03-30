@@ -12,6 +12,7 @@ services:
       POSTGRES_SSLMODE: disable
     volumes:
       - /etc/security-accelerated/intelligence-api.yaml:/etc/security-accelerated/intelligence-api.yaml:ro
+      - ./data/maxmind:/data/maxmind
     depends_on:
       redis:
         condition: service_healthy

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/billing"
@@ -49,6 +50,15 @@ type DomainLookupService interface {
 	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool)
 }
 
+type IPLookupService interface {
+	Lookup(ctx context.Context, ip string, opts domain.IPLookupOptions) (*domain.IPResponse, bool)
+}
+
+// GeoIPRefresher downloads and hot-reloads MaxMind databases.
+type GeoIPRefresher interface {
+	DownloadAndReload(licenseKey, dbPath, cityFile, asnFile string) (*domain.RefreshResult, error)
+}
+
 // AuthCacheStats provides read-only access to auth cache metrics for the info endpoint.
 type AuthCacheStats interface {
 	Size() int
@@ -56,9 +66,11 @@ type AuthCacheStats interface {
 
 type Handler struct {
 	domainService      DomainLookupService
+	ipService          IPLookupService
 	fingerprintService FingerprintAdminService
 	billingService     billing.Service
 	usageService       usage.Queryer
+	geoRefresher       GeoIPRefresher
 	cfg                *viper.Viper
 	redisCache         *cache.RedisCache
 	authCacheStats     AuthCacheStats
@@ -67,12 +79,14 @@ type Handler struct {
 	changelog          []ChangelogVersion
 }
 
-func New(domainService DomainLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
+func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
 	return &Handler{
 		domainService:      domainService,
+		ipService:          ipService,
 		fingerprintService: fingerprintService,
 		billingService:     billingService,
 		usageService:       usageService,
+		geoRefresher:       geoRefresher,
 		cfg:                cfg,
 		redisCache:         redisCache,
 		authCacheStats:     authCacheStats,
@@ -91,9 +105,21 @@ func (h *Handler) maxDomains(prefix, plan string) int {
 	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, plan))
 }
 
+// maxIPs returns the configured maximum number of IPs per request for the given
+// plan. Returns 0 (no limit) if config is nil.
+func (h *Handler) maxIPs(plan string) int {
+	if h.cfg == nil {
+		return 0
+	}
+	return h.cfg.GetInt(fmt.Sprintf("ip.max_ips.%s", plan))
+}
+
 // RegisterRoutes registers unauthenticated routes only (health check, docs, billing).
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
-	router.GET("/", h.Docs)
+	router.GET("/", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/docs") })
+	router.GET("/docs", h.Docs)
+	router.GET("/docs/domain", h.DocsDomain)
+	router.GET("/docs/ip", h.DocsIP)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
 
@@ -109,5 +135,7 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin
 	v1.Use(middlewares...)
 	v1.GET("/info", middleware.RequireAdmin(), h.Info)
 	v1.GET("/admin/changelog", middleware.RequireAdmin(), h.Changelog)
+	v1.POST("/admin/geoip/refresh", middleware.RequireAdmin(), h.RefreshGeoIP)
 	v1.POST("/domain/lookup", h.DomainLookup)
+	v1.POST("/ip/lookup", h.IPLookup)
 }
