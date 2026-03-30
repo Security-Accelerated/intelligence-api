@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IP Intelligence - Intelligence API</title>
+<style>
+  :root {
+    --sidebar-bg: #1a1f36;
+    --sidebar-hover: #252b47;
+    --sidebar-text: #a3acb9;
+    --sidebar-active: #ffffff;
+    --sidebar-width: 260px;
+    --content-bg: #ffffff;
+    --content-text: #3c4257;
+    --heading-text: #1a1f36;
+    --accent: #635bff;
+    --accent-light: #7a73ff;
+    --border: #e3e8ee;
+    --code-bg: #f7f8fa;
+    --code-block-bg: #1e2235;
+    --code-block-text: #e3e8ee;
+    --tag-bg: #e8e6ff;
+    --tag-text: #635bff;
+    --pro-bg: #ffecd2;
+    --pro-text: #c76b00;
+    --green: #1ea672;
+    --red: #cd3d64;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+  body { font-family: var(--font-sans); font-size: 15px; line-height: 1.65; color: var(--content-text); background: var(--content-bg); }
+
+  .sidebar { position: fixed; top: 0; left: 0; width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); overflow-y: auto; z-index: 100; padding: 24px 0; }
+  .sidebar-brand { padding: 0 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 16px; }
+  .sidebar-brand h2 { color: #fff; font-size: 16px; font-weight: 600; }
+  .sidebar-brand span { color: var(--sidebar-text); font-size: 12px; display: block; margin-top: 2px; }
+  .sidebar-section { padding: 0 12px; margin-bottom: 8px; }
+  .sidebar-section-title { color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 8px 4px; }
+  .sidebar a { display: block; color: var(--sidebar-text); text-decoration: none; font-size: 13px; padding: 5px 8px; border-radius: 6px; transition: all 0.15s; }
+  .sidebar a:hover { color: var(--sidebar-active); background: var(--sidebar-hover); }
+  .sidebar a.indent { padding-left: 20px; font-size: 12.5px; }
+  .sidebar-toggle { display: none; position: fixed; top: 12px; left: 12px; z-index: 200; background: var(--sidebar-bg); color: #fff; border: none; border-radius: 6px; width: 40px; height: 40px; font-size: 20px; cursor: pointer; }
+
+  .main { margin-left: var(--sidebar-width); padding: 40px 48px 80px; max-width: 880px; }
+  .hero { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
+  .hero h1 { font-size: 32px; font-weight: 700; color: var(--heading-text); letter-spacing: -0.5px; }
+  .hero p { font-size: 17px; color: #697386; margin-top: 8px; line-height: 1.6; }
+  .hero .base-url { display: inline-block; margin-top: 16px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 14px; color: var(--accent); }
+
+  h2 { font-size: 22px; font-weight: 700; color: var(--heading-text); margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h2:first-of-type { margin-top: 0; }
+  h3 { font-size: 17px; font-weight: 600; color: var(--heading-text); margin: 32px 0 10px; }
+  h4 { font-size: 15px; font-weight: 600; color: var(--heading-text); margin: 24px 0 8px; }
+  p { margin-bottom: 12px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+  th { text-align: left; font-weight: 600; color: var(--heading-text); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 2px solid var(--border); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+
+  code { font-family: var(--font-mono); font-size: 13px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--accent); }
+  pre { background: var(--code-block-bg); border-radius: 8px; padding: 16px 20px; overflow-x: auto; margin: 12px 0 20px; line-height: 1.55; }
+  pre code { background: none; border: none; padding: 0; color: var(--code-block-text); font-size: 13px; }
+
+  .kw { color: #c792ea; } .str { color: #c3e88d; } .num { color: #f78c6c; } .cmt { color: #676e95; } .hdr { color: #89ddff; } .flag { color: #f07178; }
+
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.3px; vertical-align: middle; }
+  .tag-pro { background: var(--pro-bg); color: var(--pro-text); }
+  .tag-post { background: var(--tag-bg); color: var(--tag-text); }
+
+  .endpoint { display: flex; align-items: center; gap: 10px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin: 12px 0 20px; font-family: var(--font-mono); font-size: 15px; }
+  .endpoint .method { background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 4px; }
+  .endpoint .path { color: var(--heading-text); }
+
+  .note { background: #f0f4ff; border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; padding: 12px 16px; margin: 16px 0; font-size: 14px; }
+
+  .lang-tabs { display: flex; gap: 0; margin: 12px 0 0; border-bottom: 2px solid var(--border); }
+  .lang-tab { padding: 8px 16px; font-size: 13px; font-weight: 600; color: var(--sidebar-text); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; cursor: pointer; font-family: var(--font-sans); transition: all 0.15s; }
+  .lang-tab:hover { color: var(--heading-text); }
+  .lang-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .lang-panel { display: none; }
+  .lang-panel.active { display: block; }
+
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); transition: transform 0.25s ease; }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-toggle { display: block; }
+    .main { margin-left: 0; padding: 60px 20px 80px; }
+  }
+</style>
+</head>
+<body>
+
+<button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h2>Security Accelerated</h2>
+    <span>IP Intelligence</span>
+  </div>
+
+  <div class="sidebar-section">
+    <a href="/docs">&larr; All Services</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Endpoint</div>
+    <a href="#ip-lookup">IP Lookup</a>
+    <a href="#request-body" class="indent">Request Body</a>
+    <a href="#example-request" class="indent">Example</a>
+    <a href="#validation" class="indent">Validation</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Response Fields</div>
+    <a href="#geo" class="indent">geo</a>
+    <a href="#asn" class="indent">asn</a>
+    <a href="#reverse-dns" class="indent">reverse_dns</a>
+    <a href="#abuse-contact" class="indent">abuse_contact</a>
+    <a href="#threat-intel" class="indent">threat_intel</a>
+    <a href="#errors-field" class="indent">errors</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Reference</div>
+    <a href="#full-response-example">Full Response</a>
+    <a href="/docs#error-handling">Error Handling</a>
+    <a href="/docs#rate-limiting">Rate Limiting</a>
+  </div>
+</nav>
+
+<main class="main">
+
+  <section class="hero" id="top">
+    <p style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--accent);margin-bottom:4px;">Security Accelerated</p>
+    <h1>IP Intelligence</h1>
+    <p>Look up any public IP address for geographic location, ASN, reverse DNS, abuse contacts, and threat intelligence.</p>
+    <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span style="display:inline-block;background:rgba(99,91,255,0.1);color:var(--accent);font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle;">{{.Version}}</span>{{end}}</div>
+  </section>
+
+  <h2 id="ip-lookup">IP Lookup</h2>
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/v1/ip/lookup</span>
+  </div>
+  <p>Submit one or more IP addresses for concurrent intelligence gathering. Core lookups (geo, ASN, reverse DNS, abuse contact) are available on all plans. Threat intelligence requires a <span class="tag tag-pro">Pro</span> plan.</p>
+
+  <h3 id="request-body">Request Body</h3>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Plan</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>ips</code></td><td><code>string[]</code></td><td>All</td><td>Array of IPv4 or IPv6 addresses to look up (required)</td></tr>
+      <tr><td><code>threat_intel</code></td><td><code>bool</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query VirusTotal, URLhaus, and AlienVault OTX for threat data</td></tr>
+    </tbody>
+  </table>
+
+  <h4 id="validation">Input Validation</h4>
+  <p>IP addresses are validated and canonicalized using Go's <code>netip.ParseAddr</code>. The following are rejected with a <code>400</code> response:</p>
+  <ul style="margin: 8px 0 16px 20px; font-size: 14px;">
+    <li>Invalid IP addresses</li>
+    <li>Private/RFC 1918 addresses (10.x, 172.16-31.x, 192.168.x)</li>
+    <li>Loopback (127.0.0.1, ::1)</li>
+    <li>Link-local (169.254.x, fe80::)</li>
+    <li>Multicast, unspecified, and CGNAT (100.64.0.0/10)</li>
+  </ul>
+
+  <h3 id="example-request">Example</h3>
+  <div class="lang-tabs">
+    <button class="lang-tab active" onclick="switchTab(event, 'curl')">curl</button>
+    <button class="lang-tab" onclick="switchTab(event, 'python')">Python</button>
+    <button class="lang-tab" onclick="switchTab(event, 'go')">Go</button>
+  </div>
+  <div id="tab-curl" class="lang-panel active">
+  <pre><code>curl <span class="flag">-X POST</span> <span class="url">https://api.securityaccelerated.com/v1/ip/lookup</span> \
+  <span class="flag">-H</span> <span class="str">'Content-Type: application/json'</span> \
+  <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span> \
+  <span class="flag">-d</span> <span class="str">'{
+    "ips": ["8.8.8.8", "1.1.1.1"],
+    "threat_intel": true
+  }'</span></code></pre>
+  </div>
+  <div id="tab-python" class="lang-panel">
+  <pre><code><span class="kw">import</span> requests
+
+resp = requests.post(
+    <span class="str">"https://api.securityaccelerated.com/v1/ip/lookup"</span>,
+    headers={<span class="str">"X-API-Key"</span>: <span class="str">"your-api-key"</span>},
+    json={<span class="str">"ips"</span>: [<span class="str">"8.8.8.8"</span>]},
+)
+
+<span class="kw">if</span> resp.status_code != <span class="num">200</span>:
+    print(<span class="str">"Error:"</span>, resp.json()[<span class="str">"error"</span>])
+<span class="kw">else</span>:
+    results = resp.json()
+    <span class="kw">for</span> r <span class="kw">in</span> results:
+        print(r[<span class="str">"ip"</span>], r[<span class="str">"geo"</span>][<span class="str">"country"</span>], r[<span class="str">"asn"</span>][<span class="str">"organization"</span>])</code></pre>
+  </div>
+  <div id="tab-go" class="lang-panel">
+  <pre><code><span class="kw">package</span> main
+
+<span class="kw">import</span> (
+    <span class="str">"bytes"</span>
+    <span class="str">"encoding/json"</span>
+    <span class="str">"fmt"</span>
+    <span class="str">"net/http"</span>
+)
+
+<span class="kw">func</span> main() {
+    body, _ := json.Marshal(<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>{
+        <span class="str">"ips"</span>: []<span class="kw">string</span>{<span class="str">"8.8.8.8"</span>},
+    })
+
+    req, _ := http.NewRequest(<span class="str">"POST"</span>,
+        <span class="str">"https://api.securityaccelerated.com/v1/ip/lookup"</span>,
+        bytes.NewReader(body))
+    req.Header.Set(<span class="str">"Content-Type"</span>, <span class="str">"application/json"</span>)
+    req.Header.Set(<span class="str">"X-API-Key"</span>, <span class="str">"your-api-key"</span>)
+
+    resp, err := http.DefaultClient.Do(req)
+    <span class="kw">if</span> err != <span class="kw">nil</span> { panic(err) }
+    <span class="kw">defer</span> resp.Body.Close()
+
+    <span class="kw">if</span> resp.StatusCode != http.StatusOK {
+        <span class="kw">var</span> apiErr <span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">string</span>
+        json.NewDecoder(resp.Body).Decode(&apiErr)
+        fmt.Println(<span class="str">"Error:"</span>, apiErr[<span class="str">"error"</span>])
+        <span class="kw">return</span>
+    }
+
+    <span class="kw">var</span> results []<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>
+    json.NewDecoder(resp.Body).Decode(&results)
+    fmt.Println(results[<span class="num">0</span>][<span class="str">"ip"</span>], results[<span class="num">0</span>][<span class="str">"geo"</span>])
+}</code></pre>
+  </div>
+
+  <h2 id="response-fields">Response Fields</h2>
+  <p>The response is always a JSON array, even for single-IP requests.</p>
+
+  <h3 id="geo">geo -- Geographic Location</h3>
+  <p>Location data from MaxMind GeoLite2. Available on all plans.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>continent</code> / <code>continent_code</code></td><td>Continent name and two-letter code</td></tr>
+      <tr><td><code>country</code> / <code>country_code</code></td><td>Country name and ISO 3166-1 alpha-2 code</td></tr>
+      <tr><td><code>region</code> / <code>region_code</code></td><td>First-level subdivision (state/province)</td></tr>
+      <tr><td><code>city</code></td><td>City name</td></tr>
+      <tr><td><code>postal_code</code></td><td>Postal/ZIP code</td></tr>
+      <tr><td><code>latitude</code> / <code>longitude</code></td><td>Approximate coordinates</td></tr>
+      <tr><td><code>timezone</code></td><td>IANA timezone (e.g. <code>America/New_York</code>)</td></tr>
+      <tr><td><code>accuracy_radius</code></td><td>Accuracy radius in kilometers</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="asn">asn -- Autonomous System</h3>
+  <p>Network ownership data from MaxMind GeoLite2 ASN. Available on all plans.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>asn</code></td><td>Autonomous System Number</td></tr>
+      <tr><td><code>organization</code></td><td>Organization that owns the ASN (e.g. "Google LLC")</td></tr>
+      <tr><td><code>network</code></td><td>CIDR block for the network</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="reverse-dns">reverse_dns -- PTR Records</h3>
+  <p>Reverse DNS lookup via PTR records. Available on all plans.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>hostnames</code></td><td>Array of hostnames from PTR records (e.g. <code>["dns.google"]</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="abuse-contact">abuse_contact -- Network Abuse Contact</h3>
+  <p>Abuse contact information from RDAP (Registration Data Access Protocol). Available on all plans.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>network</code></td><td>IP range (e.g. "8.8.8.0 - 8.8.8.255")</td></tr>
+      <tr><td><code>organization</code></td><td>Network owner organization</td></tr>
+      <tr><td><code>country</code></td><td>Country of the network registration</td></tr>
+      <tr><td><code>email</code></td><td>Abuse contact email address</td></tr>
+    </tbody>
+  </table>
+
+  <h3 id="threat-intel">threat_intel -- Threat Intelligence <span class="tag tag-pro">Pro</span></h3>
+  <p>Aggregated threat intelligence from multiple providers. Requires a Pro plan.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>risk_level</code></td><td>Aggregated risk: <code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, <code>critical</code></td></tr>
+      <tr><td><code>score</code></td><td>Numeric score (0-100)</td></tr>
+      <tr><td><code>categories</code></td><td>Detected categories (e.g. "malicious", "suspicious")</td></tr>
+      <tr><td><code>providers</code></td><td>Per-provider results with individual scores and details</td></tr>
+    </tbody>
+  </table>
+  <p>Providers: <strong>VirusTotal</strong> (50% weight), <strong>URLhaus</strong> (30%), <strong>AlienVault OTX</strong> (20%).</p>
+
+  <h3 id="errors-field">errors -- Partial Failures</h3>
+  <p>If individual lookups fail, they appear here. The rest of the response is still populated.</p>
+  <pre><code><span class="str">"errors"</span>: [
+  { <span class="str">"lookup"</span>: <span class="str">"reverse_dns"</span>, <span class="str">"message"</span>: <span class="str">"ptr lookup: no such host"</span> }
+]</code></pre>
+
+  <h2 id="full-response-example">Full Response Example</h2>
+  <pre><code>[
+  {
+    <span class="str">"ip"</span>: <span class="str">"8.8.8.8"</span>,
+    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+    <span class="str">"geo"</span>: {
+      <span class="str">"continent"</span>: <span class="str">"North America"</span>,
+      <span class="str">"continent_code"</span>: <span class="str">"NA"</span>,
+      <span class="str">"country"</span>: <span class="str">"United States"</span>,
+      <span class="str">"country_code"</span>: <span class="str">"US"</span>,
+      <span class="str">"region"</span>: <span class="str">"California"</span>,
+      <span class="str">"region_code"</span>: <span class="str">"CA"</span>,
+      <span class="str">"city"</span>: <span class="str">"Mountain View"</span>,
+      <span class="str">"latitude"</span>: <span class="num">37.386</span>,
+      <span class="str">"longitude"</span>: <span class="num">-122.0838</span>,
+      <span class="str">"timezone"</span>: <span class="str">"America/Los_Angeles"</span>,
+      <span class="str">"accuracy_radius"</span>: <span class="num">1000</span>
+    },
+    <span class="str">"asn"</span>: {
+      <span class="str">"asn"</span>: <span class="num">15169</span>,
+      <span class="str">"organization"</span>: <span class="str">"GOOGLE"</span>
+    },
+    <span class="str">"reverse_dns"</span>: {
+      <span class="str">"hostnames"</span>: [<span class="str">"dns.google"</span>]
+    },
+    <span class="str">"abuse_contact"</span>: {
+      <span class="str">"network"</span>: <span class="str">"8.8.8.0 - 8.8.8.255"</span>,
+      <span class="str">"organization"</span>: <span class="str">"Google LLC"</span>,
+      <span class="str">"country"</span>: <span class="str">"US"</span>,
+      <span class="str">"email"</span>: <span class="str">"network-abuse@google.com"</span>
+    },
+    <span class="str">"errors"</span>: []
+  }
+]</code></pre>
+
+</main>
+
+<script>
+function switchTab(event, lang) {
+  var tabs = event.target.parentElement.querySelectorAll('.lang-tab');
+  tabs.forEach(function(t) { t.classList.remove('active'); });
+  event.target.classList.add('active');
+  var container = event.target.parentElement.parentElement;
+  container.querySelectorAll('.lang-panel').forEach(function(p) { p.classList.remove('active'); });
+  container.querySelector('#tab-' + lang).classList.add('active');
+}
+
+document.querySelectorAll('.sidebar a').forEach(function(link) {
+  link.addEventListener('click', function() {
+    if (window.innerWidth <= 768) {
+      document.querySelector('.sidebar').classList.remove('open');
+    }
+  });
+});
+</script>
+
+</body>
+</html>

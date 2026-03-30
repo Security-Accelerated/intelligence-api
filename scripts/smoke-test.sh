@@ -105,7 +105,10 @@ DOMAIN='{"domains":["example.com"]}'
 
 echo ""
 echo "=== Docs ==="
-check 200 "GET / (API docs)" "$HOST/"
+check 301 "GET / (redirect to /docs)" "$HOST/"
+check 200 "GET /docs (landing page)" "$HOST/docs"
+check 200 "GET /docs/domain (domain docs)" "$HOST/docs/domain"
+check 200 "GET /docs/ip (IP docs)" "$HOST/docs/ip"
 
 echo ""
 echo "=== Health Check ==="
