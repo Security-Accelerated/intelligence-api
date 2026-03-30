@@ -33,6 +33,11 @@ func validateIP(raw string) (string, bool) {
 }
 
 func (h *Handler) IPLookup(c *gin.Context) {
+	if h.ipService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "ip intelligence not configured"})
+		return
+	}
+
 	var req domain.IPRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		var maxErr *http.MaxBytesError
