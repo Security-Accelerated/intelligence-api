@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -132,6 +133,90 @@ func TestIPService_Lookup_NilGeo(t *testing.T) {
 	// Other lookups should still work
 	if resp.ReverseDNS == nil {
 		t.Error("reverse DNS should still work without geo reader")
+	}
+}
+
+func TestIPService_Lookup_GeoNotLoaded_NotCached(t *testing.T) {
+	mc := newMockCache()
+	svc := &IPService{
+		cache:         mc,
+		cacheTTL:      time.Minute,
+		lookupTimeout: 30 * time.Second,
+		alerter:       &notifications.NoopRecorder{},
+		// Geo is configured but returns an error (simulates database not loaded)
+		lookupGeo: func(_ net.IP) (*domain.GeoIPInfo, error) {
+			return nil, fmt.Errorf("city database not loaded")
+		},
+		lookupASN: func(_ net.IP) (*domain.IPASNInfo, error) {
+			return nil, fmt.Errorf("asn database not loaded")
+		},
+		lookupReverseDNS: func(_ context.Context, _ string) (*domain.ReverseDNSInfo, error) {
+			return &domain.ReverseDNSInfo{Hostnames: []string{"dns.google"}}, nil
+		},
+		lookupAbuseContact: func(_ context.Context, _ string) (*domain.AbuseContactInfo, error) {
+			return &domain.AbuseContactInfo{Email: "abuse@google.com"}, nil
+		},
+		lookupThreatIntel: func(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+			return &domain.ThreatIntelInfo{RiskLevel: "none"}, nil
+		},
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "8.8.8.8", domain.IPLookupOptions{})
+
+	if resp.Geo != nil {
+		t.Error("expected nil geo when database not loaded")
+	}
+	if len(resp.Errors) == 0 {
+		t.Error("expected errors for geo/asn failures")
+	}
+
+	mc.mu.Lock()
+	calls := mc.setCalls
+	mc.mu.Unlock()
+	if calls != 0 {
+		t.Errorf("cache.Set called %d times, want 0 (should not cache pre-bootstrap failures)", calls)
+	}
+}
+
+func TestIPService_Lookup_PartialFailure_StillCached(t *testing.T) {
+	mc := newMockCache()
+	svc := &IPService{
+		cache:         mc,
+		cacheTTL:      time.Minute,
+		lookupTimeout: 30 * time.Second,
+		alerter:       &notifications.NoopRecorder{},
+		lookupGeo: func(_ net.IP) (*domain.GeoIPInfo, error) {
+			return &domain.GeoIPInfo{Country: "US"}, nil
+		},
+		lookupASN: func(_ net.IP) (*domain.IPASNInfo, error) {
+			return &domain.IPASNInfo{ASN: 15169}, nil
+		},
+		// Reverse DNS fails (missing PTR — normal)
+		lookupReverseDNS: func(_ context.Context, _ string) (*domain.ReverseDNSInfo, error) {
+			return nil, fmt.Errorf("no such host")
+		},
+		lookupAbuseContact: func(_ context.Context, _ string) (*domain.AbuseContactInfo, error) {
+			return &domain.AbuseContactInfo{Email: "abuse@google.com"}, nil
+		},
+		lookupThreatIntel: func(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+			return &domain.ThreatIntelInfo{RiskLevel: "none"}, nil
+		},
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "8.8.8.8", domain.IPLookupOptions{})
+
+	if resp.Geo == nil {
+		t.Error("expected geo to be populated")
+	}
+	if len(resp.Errors) == 0 {
+		t.Error("expected errors for reverse DNS failure")
+	}
+
+	mc.mu.Lock()
+	calls := mc.setCalls
+	mc.mu.Unlock()
+	if calls != 1 {
+		t.Errorf("cache.Set called %d times, want 1 (partial failures should still cache when geo is present)", calls)
 	}
 }
 
