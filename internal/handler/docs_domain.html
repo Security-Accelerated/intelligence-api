@@ -454,10 +454,6 @@
 <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
 
 <nav class="sidebar">
-  <div class="sidebar-brand">
-    <h2>Domain Intelligence</h2>
-  </div>
-
   <div class="sidebar-section">
     <div class="sidebar-section-title">Getting Started</div>
     <a href="#authentication">Authentication</a>
@@ -505,10 +501,9 @@
 
   <!-- Hero -->
   <section class="hero" id="top">
-    <p style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--accent);margin-bottom:4px;">Security Accelerated</p>
-    <h1>Intelligence API</h1>
-    <p>Domain intelligence REST API. Perform concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for any domain.</p>
-    <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span style="display:inline-block;background:rgba(99,91,255,0.1);color:var(--accent);font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle;">{{.Version}}</span>{{end}} <span style="display:inline-block;background:var(--pro-bg);color:var(--pro-text);font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:4px;vertical-align:middle;">Beta</span></div>
+    <h1>Domain Intelligence</h1>
+    <p>Concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for any domain.</p>
+    <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span style="display:inline-block;background:rgba(99,91,255,0.1);color:var(--accent);font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle;">{{.Version}}</span>{{end}}</div>
     <p style="margin-top:12px;font-size:14px;color:#697386;">Questions? <a href="mailto:support@securityaccelerated.com" style="color:var(--accent);text-decoration:none;">support@securityaccelerated.com</a></p>
   </section>
 
