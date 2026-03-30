@@ -51,6 +51,8 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/billing/success` | None (session_id token) | Post-checkout API key retrieval page |
 | GET | `/v1/info` | `admin` | Application and environment info |
 | POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |
+| POST | `/v1/ip/lookup` | All plans | IP intelligence lookup |
+| POST | `/v1/admin/geoip/refresh` | `admin` | Download and reload MaxMind GeoIP databases |
 | POST | `/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 | GET | `/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
 | POST | `/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
@@ -466,6 +468,36 @@ Each technology entry contains:
 
 Rules are stored in PostgreSQL and loaded into memory at startup. The default ruleset covers ~90 technologies. Admin users can update rules via `POST /v1/admin/fingerprints` without redeploying.
 
+### POST /v1/ip/lookup
+
+**Request:**
+```json
+{
+  "ips": ["8.8.8.8", "1.1.1.1"],
+  "threat_intel": true
+}
+```
+
+| Field | Type | Plan | Description |
+|-------|------|------|-------------|
+| `ips` | `string[]` | All | IP addresses to look up (required) |
+| `threat_intel` | `bool` | Pro/Admin | Enable threat intelligence from VirusTotal, URLhaus, AlienVault OTX |
+
+**Response fields:**
+
+| Field | Description |
+|-------|-------------|
+| `ip` | The queried IP address (canonicalized) |
+| `cache_hit` | Whether the result was served from Redis cache |
+| `geo` | GeoIP: country, city, region, coordinates, timezone (MaxMind GeoLite2) |
+| `asn` | ASN number, organization, network (MaxMind GeoLite2 ASN) |
+| `reverse_dns` | PTR record hostnames |
+| `abuse_contact` | Network owner, country, abuse email (via RDAP) |
+| `threat_intel` | Aggregated threat intelligence with risk score and per-provider results |
+| `errors` | Per-lookup errors (partial failures still return other fields) |
+
+Private, loopback, link-local, multicast, unspecified, and CGNAT IPs are rejected at input validation.
+
 ### `GET /v1/admin/usage` — Usage Statistics (Admin Only)
 
 Returns aggregated API usage statistics for a configurable time window.
@@ -639,6 +671,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `008_request_log.sql` — creates the `request_log` table for usage tracking (indexed on `created_at`, `customer_id`, `api_key_id`)
 - `009_request_log_threat_intel.sql` — adds `threat_intel` column to the `request_log` table
 - `010_drop_name_unique.sql` — drops the unique constraint on `customers.name` (allows same-name Stripe signups)
+- `011_request_log_ip.sql` — adds `ip_count` column to `request_log` for IP lookup analytics
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
@@ -786,6 +819,12 @@ git push origin main:release      # trigger Fly deploy
 | `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |
 | `THREAT_INTEL_VIRUSTOTAL_API_KEY` | VirusTotal API key (enables VirusTotal threat intel provider) |
 | `THREAT_INTEL_ALIENVAULT_API_KEY` | AlienVault OTX API key (enables AlienVault threat intel provider) |
+| `MAXMIND_LICENSE_KEY` | MaxMind license key (enables GeoIP database auto-refresh via admin endpoint) |
+| `MAXMIND_DB_PATH` | Directory for MaxMind .mmdb files (default: `/data/maxmind`) |
+| `IP_LOOKUP_TIMEOUT` | Timeout for IP intelligence lookups (default: 30s) |
+| `IP_MAX_IPS_FREE` | Max IPs per request for free plan (default: 1) |
+| `IP_MAX_IPS_BASIC` | Max IPs per request for basic plan (default: 5) |
+| `IP_MAX_IPS_PRO` | Max IPs per request for pro plan (default: 20) |
 
 ### Scripts
 
