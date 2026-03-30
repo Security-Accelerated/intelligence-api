@@ -8,7 +8,7 @@
       audience: public
     - text: "IP threat intelligence requires a pro plan (same as domain threat_intel)"
       audience: public
-    - text: "GeoIP and ASN data powered by MaxMind GeoLite2 embedded databases"
+    - text: "GeoIP and ASN data powered by MaxMind GeoLite2 databases (loaded from disk, refreshable via admin endpoint)"
       audience: public
     - text: "Admin endpoint POST /v1/admin/geoip/refresh for hot-reloading MaxMind databases"
       audience: internal
