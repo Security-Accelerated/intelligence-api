@@ -109,13 +109,17 @@ func (h *Handler) IPLookup(c *gin.Context) {
 	close(ch)
 
 	anyCached := false
-	errorCount := 0
 	for ir := range ch {
 		results[ir.index] = ir.resp
 		if ir.resp.CacheHit {
 			anyCached = true
 		}
-		errorCount += len(ir.resp.Errors)
+	}
+	errorCount := 0
+	for _, r := range results {
+		if r != nil {
+			errorCount += len(r.Errors)
+		}
 	}
 	c.Set("cache_hit", anyCached)
 	c.Set("error_count", errorCount)

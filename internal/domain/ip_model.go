@@ -42,7 +42,7 @@ type GeoIPInfo struct {
 // --- ASN ---
 
 type IPASNInfo struct {
-	ASN          int    `json:"asn"`
+	ASN          uint32 `json:"asn"`
 	Organization string `json:"organization,omitempty"`
 	Network      string `json:"network,omitempty"`
 }

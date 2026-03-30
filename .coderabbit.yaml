@@ -6,6 +6,3 @@ reviews:
     base_branches:
       - main
       - dev
-  tools:
-    docstring-coverage:
-      threshold: 0

@@ -183,6 +183,10 @@ func (p *URLhausIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatInte
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("urlhaus ip: HTTP %d", resp.StatusCode)
+	}
+
 	var uhResp struct {
 		QueryStatus string `json:"query_status"`
 		URLCount    int    `json:"url_count"`

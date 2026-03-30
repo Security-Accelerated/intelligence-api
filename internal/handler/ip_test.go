@@ -24,8 +24,8 @@ type mockIPService struct {
 
 func (m *mockIPService) Lookup(_ context.Context, ip string, opts domain.IPLookupOptions) (*domain.IPResponse, bool) {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.lastOpts = opts
-	m.mu.Unlock()
 	if m.resp != nil {
 		return m.resp, m.cached
 	}
@@ -85,7 +85,9 @@ func TestIPLookup_MultipleIPs(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	var results []*domain.IPResponse
-	json.Unmarshal(w.Body.Bytes(), &results)
+	if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
 	if len(results) != 2 {
 		t.Fatalf("got %d results, want 2", len(results))
 	}
@@ -158,7 +160,9 @@ func TestIPLookup_MixedValidInvalid(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	var results []*domain.IPResponse
-	json.Unmarshal(w.Body.Bytes(), &results)
+	if err := json.Unmarshal(w.Body.Bytes(), &results); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
 	if len(results) != 2 {
 		t.Fatalf("got %d results, want 2", len(results))
 	}

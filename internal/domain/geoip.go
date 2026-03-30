@@ -112,7 +112,7 @@ func (r *GeoIPReader) LookupASN(ip net.IP) (*IPASNInfo, error) {
 	}
 
 	return &IPASNInfo{
-		ASN:          int(record.AutonomousSystemNumber),
+		ASN:          uint32(record.AutonomousSystemNumber),
 		Organization: record.AutonomousSystemOrganization,
 	}, nil
 }
