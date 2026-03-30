@@ -34,11 +34,51 @@
     padding: 48px 32px 80px;
   }
 
+  /* Top header bar */
+  .topbar {
+    background: #1a1f36;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topbar-brand {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    letter-spacing: -0.2px;
+  }
+
+  .topbar-brand span {
+    color: var(--accent);
+  }
+
+  .topbar-nav {
+    display: flex;
+    gap: 24px;
+  }
+
+  .topbar-nav a {
+    color: #a3acb9;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .topbar-nav a:hover {
+    color: #fff;
+  }
+
+  /* Hero with gradient */
   .hero {
     text-align: center;
+    background: linear-gradient(180deg, #f0f2ff 0%, #ffffff 100%);
     border-bottom: 1px solid var(--border);
-    padding-bottom: 32px;
-    margin-bottom: 40px;
+    padding: 48px 32px 36px;
+    margin: 0 -32px 40px;
   }
 
   .hero .brand {
@@ -51,7 +91,7 @@
   }
 
   .hero h1 {
-    font-size: 32px;
+    font-size: 36px;
     font-weight: 700;
     color: var(--heading-text);
     letter-spacing: -0.5px;
@@ -67,13 +107,14 @@
   .base-url {
     display: inline-block;
     margin-top: 16px;
-    background: var(--code-bg);
+    background: #fff;
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 8px 16px;
     font-family: var(--font-mono);
     font-size: 14px;
     color: var(--accent);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   }
 
   h2 {
@@ -165,12 +206,14 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 24px;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
   }
 
   .service-card:hover {
     border-color: var(--accent);
-    box-shadow: 0 2px 12px rgba(99,91,255,0.1);
+    box-shadow: 0 4px 16px rgba(99,91,255,0.12);
+    transform: translateY(-2px);
   }
 
   .service-card h3 {
@@ -231,6 +274,16 @@
 </style>
 </head>
 <body>
+
+<header class="topbar">
+  <a href="/docs" class="topbar-brand"><span>Security</span> Accelerated</a>
+  <nav class="topbar-nav">
+    <a href="/docs/domain">Domain</a>
+    <a href="/docs/ip">IP</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#error-handling">Reference</a>
+  </nav>
+</header>
 
 <div class="container">
 

@@ -34,7 +34,15 @@
   html { scroll-behavior: smooth; scroll-padding-top: 24px; }
   body { font-family: var(--font-sans); font-size: 15px; line-height: 1.65; color: var(--content-text); background: var(--content-bg); }
 
-  .sidebar { position: fixed; top: 0; left: 0; width: var(--sidebar-width); height: 100vh; background: var(--sidebar-bg); overflow-y: auto; z-index: 100; padding: 24px 0; }
+  .topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 150; background: #1a1f36; padding: 10px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .topbar-brand { color: #fff; font-size: 15px; font-weight: 600; text-decoration: none; }
+  .topbar-brand span { color: #635bff; }
+  .topbar-nav { display: flex; gap: 24px; }
+  .topbar-nav a { color: #a3acb9; font-size: 13px; font-weight: 500; text-decoration: none; transition: color 0.15s; }
+  .topbar-nav a:hover { color: #fff; }
+  .topbar-nav a.active { color: #fff; }
+
+  .sidebar { position: fixed; top: 42px; left: 0; width: var(--sidebar-width); height: calc(100vh - 42px); background: var(--sidebar-bg); overflow-y: auto; z-index: 100; padding: 24px 0; }
   .sidebar-brand { padding: 0 20px 20px; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 16px; }
   .sidebar-brand h2 { color: #fff; font-size: 16px; font-weight: 600; }
   .sidebar-brand span { color: var(--sidebar-text); font-size: 12px; display: block; margin-top: 2px; }
@@ -45,7 +53,7 @@
   .sidebar a.indent { padding-left: 20px; font-size: 12.5px; }
   .sidebar-toggle { display: none; position: fixed; top: 12px; left: 12px; z-index: 200; background: var(--sidebar-bg); color: #fff; border: none; border-radius: 6px; width: 40px; height: 40px; font-size: 20px; cursor: pointer; }
 
-  .main { margin-left: var(--sidebar-width); padding: 40px 48px 80px; max-width: 880px; }
+  .main { margin-left: var(--sidebar-width); padding: 82px 48px 80px; max-width: 880px; }
   .hero { border-bottom: 1px solid var(--border); padding-bottom: 32px; margin-bottom: 40px; }
   .hero h1 { font-size: 32px; font-weight: 700; color: var(--heading-text); letter-spacing: -0.5px; }
   .hero p { font-size: 17px; color: #697386; margin-top: 8px; line-height: 1.6; }
@@ -95,16 +103,22 @@
 </head>
 <body>
 
+<header class="topbar">
+  <a href="/docs" class="topbar-brand"><span>Security</span> Accelerated</a>
+  <nav class="topbar-nav">
+    <a href="/docs/domain">Domain</a>
+    <a href="/docs/ip" class="active">IP</a>
+    <a href="/docs#pricing">Pricing</a>
+    <a href="/docs#error-handling">Reference</a>
+  </nav>
+</header>
+
 <button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="Toggle navigation">&#9776;</button>
 
 <nav class="sidebar">
   <div class="sidebar-brand">
     <h2>Security Accelerated</h2>
     <span>IP Intelligence</span>
-  </div>
-
-  <div class="sidebar-section">
-    <a href="/docs">&larr; All Services</a>
   </div>
 
   <div class="sidebar-section">
