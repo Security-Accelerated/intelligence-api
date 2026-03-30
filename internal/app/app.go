@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/security-accelerated/intelligence-api/internal/auth"
@@ -198,8 +199,53 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("usage tracking enabled", zap.Any("config", status.Services.Usage))
 
+	// GeoIP reader
+	var geoReader *domain.GeoIPReader
+	dbPath := cfg.GetString("maxmind.db_path")
+	cityPath := filepath.Join(dbPath, cfg.GetString("maxmind.city_db"))
+	asnPath := filepath.Join(dbPath, cfg.GetString("maxmind.asn_db"))
+	if _, err := os.Stat(cityPath); err == nil {
+		geoReader, err = domain.NewGeoIPReader(cityPath, asnPath)
+		if err != nil {
+			logger.Warn("failed to load MaxMind databases", zap.Error(err))
+		} else {
+			defer geoReader.Close()
+			status.Services.GeoIP = config.GeoIPStatus{
+				Enabled: true,
+				CityDB:  cfg.GetString("maxmind.city_db"),
+				ASNDB:   cfg.GetString("maxmind.asn_db"),
+				DBPath:  dbPath,
+			}
+			logger.Info("geoip databases loaded", zap.Any("config", status.Services.GeoIP))
+		}
+	} else {
+		logger.Info("geoip databases not found, IP geo/asn lookups will be unavailable", zap.String("path", cityPath))
+	}
+
+	// IP threat intel providers (adapters around the domain providers)
+	var ipTIProviders []domain.IPThreatIntelProvider
+	for _, p := range tiProviders {
+		switch tp := p.(type) {
+		case *domain.VirusTotalProvider:
+			ipTIProviders = append(ipTIProviders, domain.NewVTIPProvider(tp))
+		case *domain.URLhausProvider:
+			ipTIProviders = append(ipTIProviders, domain.NewURLhausIPProvider(tp))
+		case *domain.AlienVaultProvider:
+			ipTIProviders = append(ipTIProviders, domain.NewOTXIPProvider(tp))
+		}
+	}
+
+	// IP intelligence service
+	ipService := service.NewIPService(redisCache, cacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
+
+	// GeoIP refresher for admin endpoint (nil if no reader)
+	var geoRefresher handler.GeoIPRefresher
+	if geoReader != nil {
+		geoRefresher = geoReader
+	}
+
 	// HTTP
-	h := handler.New(domainService, fpService, billingSvc, usageQuerySvc, cfg, redisCache, cachedRepo, db, status)
+	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, geoRefresher, cfg, redisCache, cachedRepo, db, status)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
 	serverCfg := httpapi.ServerConfig{
 		Port:            status.System.Port,

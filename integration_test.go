@@ -236,7 +236,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	usageQ := &stubUsageQueryer{}
 	usageRec := usage.NoopRecorder{}
 
-	h := handler.New(svc, fpSvc, nil, usageQ, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
+	h := handler.New(svc, nil, fpSvc, nil, usageQ, nil, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
 		System: config.SystemStatus{Version: "test"},
 	})
 	h.RegisterRoutes(r)

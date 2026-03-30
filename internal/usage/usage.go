@@ -12,6 +12,7 @@ type UsageEntry struct {
 	StatusCode    int
 	LatencyMs     int
 	DomainCount   int
+	IPCount       int
 	CacheHit      bool
 	Screenshot    bool
 	Reputation    bool

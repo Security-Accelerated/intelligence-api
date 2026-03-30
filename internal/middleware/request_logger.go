@@ -22,6 +22,7 @@ var ContextKeys = []string{
 	"bgp_requested",
 	"fingerprint_requested",
 	"threat_intel_requested",
+	"ip_threat_intel_requested",
 }
 
 // IntContextKeys lists integer gin context keys logged per request.
@@ -30,6 +31,7 @@ var IntContextKeys = []string{
 	"rate_limit_remaining",
 	"customer_id",
 	"domain_count",
+	"ip_count",
 	"error_count",
 }
 

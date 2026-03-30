@@ -44,7 +44,7 @@ func newInfoRouter(version string, rc *cache.RedisCache, cr AuthCacheStats) *gin
 	if rc != nil {
 		status.Cache.Addr = rc.Client().Options().Addr
 	}
-	h := New(nil, nil, nil, nil, nil, rc, cr, nil, status)
+	h := New(nil, nil, nil, nil, nil, nil, nil, rc, cr, nil, status)
 	// Simulate admin auth so RequireAdmin passes
 	r.GET("/v1/info", func(c *gin.Context) {
 		c.Set("api_key_plan", "admin")
