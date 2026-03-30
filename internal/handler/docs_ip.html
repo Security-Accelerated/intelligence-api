@@ -122,7 +122,7 @@
 
   <div class="sidebar-section">
     <div class="sidebar-section-title">Endpoint</div>
-    <a href="#ip-lookup">IP Lookup</a>
+    <a href="#ip-lookup">IP Intelligence</a>
     <a href="#request-body" class="indent">Request Body</a>
     <a href="#example-request" class="indent">Example</a>
     <a href="#validation" class="indent">Validation</a>
@@ -141,8 +141,9 @@
   <div class="sidebar-section">
     <div class="sidebar-section-title">Reference</div>
     <a href="#full-response-example">Full Response</a>
+    <a href="#caching">Caching</a>
     <a href="#error-handling">Error Handling</a>
-    <a href="#error-handling">Error Handling</a>
+    <a href="#request-correlation">Request Correlation</a>
   </div>
 </nav>
 
@@ -178,7 +179,7 @@
     </tbody>
   </table>
 
-  <h2 id="ip-lookup">IP Lookup</h2>
+  <h2 id="ip-lookup">IP Intelligence</h2>
   <div class="endpoint">
     <span class="method">POST</span>
     <span class="path">/v1/ip/lookup</span>
@@ -214,6 +215,7 @@
   <pre><code>curl <span class="flag">-X POST</span> <span class="url">https://api.securityaccelerated.com/v1/ip/lookup</span> \
   <span class="flag">-H</span> <span class="str">'Content-Type: application/json'</span> \
   <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span> \
+  <span class="flag">-H</span> <span class="str">'X-Client-Request-ID: req-001'</span> \
   <span class="flag">-d</span> <span class="str">'{
     "ips": ["8.8.8.8", "1.1.1.1"],
     "threat_intel": true
@@ -224,7 +226,10 @@
 
 resp = requests.post(
     <span class="str">"https://api.securityaccelerated.com/v1/ip/lookup"</span>,
-    headers={<span class="str">"X-API-Key"</span>: <span class="str">"your-api-key"</span>},
+    headers={
+        <span class="str">"X-API-Key"</span>: <span class="str">"your-api-key"</span>,
+        <span class="str">"X-Client-Request-ID"</span>: <span class="str">"req-001"</span>,
+    },
     json={<span class="str">"ips"</span>: [<span class="str">"8.8.8.8"</span>]},
 )
 
@@ -255,6 +260,7 @@ resp = requests.post(
         bytes.NewReader(body))
     req.Header.Set(<span class="str">"Content-Type"</span>, <span class="str">"application/json"</span>)
     req.Header.Set(<span class="str">"X-API-Key"</span>, <span class="str">"your-api-key"</span>)
+    req.Header.Set(<span class="str">"X-Client-Request-ID"</span>, <span class="str">"req-001"</span>)
 
     resp, err := http.DefaultClient.Do(req)
     <span class="kw">if</span> err != <span class="kw">nil</span> { panic(err) }
@@ -395,6 +401,19 @@ resp = requests.post(
   <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
 }</code></pre>
   <div class="note">Partial lookup failures are different from HTTP errors. When individual lookups fail (e.g., reverse DNS timeout), the request still returns <code>200 OK</code> with successful lookups populated and failures listed in the <code>errors</code> array.</div>
+
+  <h2 id="caching">Caching</h2>
+  <p>Results are cached for <strong>60 minutes</strong>. The <code>cache_hit</code> field on each response indicates whether data was served from cache or fetched live.</p>
+
+  <h2 id="request-correlation">Request Correlation</h2>
+  <p>You can pass an optional <code>X-Client-Request-ID</code> header with your own correlation ID for end-to-end tracing. The API echoes it back in the response headers and includes it in server-side logs.</p>
+  <table>
+    <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>X-Client-Request-ID</code></td><td>Request</td><td>Your correlation ID (any string up to 128 chars)</td></tr>
+      <tr><td><code>X-Client-Request-ID</code></td><td>Response</td><td>Echoed back unchanged</td></tr>
+    </tbody>
+  </table>
 
 </main>
 
