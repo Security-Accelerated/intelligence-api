@@ -199,10 +199,12 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	wg.Wait()
 
-	// Only cache if there are no errors. This ensures that responses with
-	// "database not loaded" errors (pre-bootstrap) are not cached, so a
-	// subsequent GeoIP refresh takes effect immediately.
-	if len(resp.Errors) == 0 {
+	// Cache the result unless the GeoIP database wasn't loaded (pre-bootstrap).
+	// We detect this as: geo lookup is configured but returned nil (error).
+	// Other partial failures (missing PTR, provider timeouts) are normal and
+	// should be cached to avoid redundant external calls.
+	geoMissing := s.lookupGeo != nil && resp.Geo == nil
+	if !geoMissing {
 		if data, err := json.Marshal(resp); err != nil {
 			logger.Warn("cache marshal failed", zap.String("ip", ip), zap.Error(err))
 		} else {
