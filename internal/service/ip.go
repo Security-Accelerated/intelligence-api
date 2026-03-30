@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"sort"
 	"strings"
@@ -121,6 +122,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	var geoDBMissing bool
 	logger := logging.Logger()
 
 	// GeoIP (local DB, no network call)
@@ -130,6 +132,9 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
+				if errors.Is(err, domain.ErrDBNotLoaded) {
+					geoDBMissing = true
+				}
 				logger.Warn("lookup failed", zap.String("lookup", "geo"), zap.String("ip", ip), zap.Error(err))
 				resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "geo", Message: sanitizeErr(err)})
 				s.alerter.RecordLookupError("geo")
@@ -188,9 +193,10 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 	}
 
 	// Threat intel (optional, pro-only)
-	if opts.ThreatIntel {
+	if opts.ThreatIntel && s.lookupThreatIntel != nil {
+		tiLookup := s.lookupThreatIntel
 		wg.Go(func() {
-			result, errs := s.lookupThreatIntel(ctx, ip)
+			result, errs := tiLookup(ctx, ip)
 			mu.Lock()
 			defer mu.Unlock()
 			for _, e := range errs {
@@ -204,11 +210,9 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 	wg.Wait()
 
 	// Cache the result unless the GeoIP database wasn't loaded (pre-bootstrap).
-	// We detect this as: geo lookup is configured but returned nil (error).
-	// Other partial failures (missing PTR, provider timeouts) are normal and
-	// should be cached to avoid redundant external calls.
-	geoMissing := s.lookupGeo != nil && resp.Geo == nil
-	if !geoMissing {
+	// Only the specific ErrDBNotLoaded case skips caching — transient geo lookup
+	// failures (e.g., corrupt record) are still cached normally.
+	if !geoDBMissing {
 		if data, err := json.Marshal(resp); err != nil {
 			logger.Warn("cache marshal failed", zap.String("ip", ip), zap.Error(err))
 		} else {

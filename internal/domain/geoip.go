@@ -18,6 +18,10 @@ import (
 // MaxMind download URL template. The license key and edition are substituted at runtime.
 const maxmindDownloadURL = "https://download.maxmind.com/app/geoip_download?edition_id=%s&license_key=%s&suffix=tar.gz"
 
+// ErrDBNotLoaded is returned when a GeoIP lookup is attempted before databases
+// are loaded (e.g., fresh deployment before admin refresh).
+var ErrDBNotLoaded = fmt.Errorf("geoip database not loaded")
+
 // GeoIPReader provides concurrent-safe access to MaxMind GeoLite2 City and ASN
 // databases. Multiple goroutines can read simultaneously; Reload() acquires a
 // write lock to swap the underlying readers atomically.
@@ -62,7 +66,7 @@ func (r *GeoIPReader) LookupGeo(ip net.IP) (*GeoIPInfo, error) {
 	defer r.mu.RUnlock()
 
 	if r.cityDB == nil {
-		return nil, fmt.Errorf("city database not loaded")
+		return nil, ErrDBNotLoaded
 	}
 
 	record, err := r.cityDB.City(ip)
@@ -103,7 +107,7 @@ func (r *GeoIPReader) LookupASN(ip net.IP) (*IPASNInfo, error) {
 	defer r.mu.RUnlock()
 
 	if r.asnDB == nil {
-		return nil, fmt.Errorf("asn database not loaded")
+		return nil, ErrDBNotLoaded
 	}
 
 	record, err := r.asnDB.ASN(ip)

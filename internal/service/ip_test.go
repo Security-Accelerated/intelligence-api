@@ -145,10 +145,10 @@ func TestIPService_Lookup_GeoNotLoaded_NotCached(t *testing.T) {
 		alerter:       &notifications.NoopRecorder{},
 		// Geo is configured but returns an error (simulates database not loaded)
 		lookupGeo: func(_ net.IP) (*domain.GeoIPInfo, error) {
-			return nil, fmt.Errorf("city database not loaded")
+			return nil, domain.ErrDBNotLoaded
 		},
 		lookupASN: func(_ net.IP) (*domain.IPASNInfo, error) {
-			return nil, fmt.Errorf("asn database not loaded")
+			return nil, domain.ErrDBNotLoaded
 		},
 		lookupReverseDNS: func(_ context.Context, _ string) (*domain.ReverseDNSInfo, error) {
 			return &domain.ReverseDNSInfo{Hostnames: []string{"dns.google"}}, nil
