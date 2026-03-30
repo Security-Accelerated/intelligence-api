@@ -1,0 +1,11 @@
+language: en-US
+
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - main
+      - dev
+  tools:
+    docstring-coverage:
+      threshold: 0
