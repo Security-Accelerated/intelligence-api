@@ -46,8 +46,8 @@ func TestDocs_LandingPage(t *testing.T) {
 		t.Errorf("Content-Type = %q, want text/html", ct)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "Domain Lookup") {
-		t.Error("expected landing page to mention Domain Lookup")
+	if !strings.Contains(body, "Domain Intelligence") {
+		t.Error("expected landing page to mention Domain Intelligence")
 	}
 	if !strings.Contains(body, "IP Intelligence") {
 		t.Error("expected landing page to mention IP Intelligence")
@@ -64,7 +64,7 @@ func TestDocs_DomainPage(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "Domain Lookup") {
+	if !strings.Contains(body, "Domain Intelligence") {
 		t.Error("expected domain page content")
 	}
 }
