@@ -115,6 +115,12 @@
 
 <nav class="sidebar">
   <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="#authentication">Authentication</a>
+    <a href="#rate-limiting">Rate Limiting</a>
+  </div>
+
+  <div class="sidebar-section">
     <div class="sidebar-section-title">Endpoint</div>
     <a href="#ip-lookup">IP Lookup</a>
     <a href="#request-body" class="indent">Request Body</a>
@@ -135,7 +141,6 @@
   <div class="sidebar-section">
     <div class="sidebar-section-title">Reference</div>
     <a href="#full-response-example">Full Response</a>
-    <a href="#rate-limiting">Rate Limiting</a>
     <a href="#error-handling">Error Handling</a>
     <a href="#error-handling">Error Handling</a>
   </div>
@@ -149,6 +154,10 @@
     <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span style="display:inline-block;background:rgba(99,91,255,0.1);color:var(--accent);font-size:12px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:8px;vertical-align:middle;">{{.Version}}</span>{{end}}</div>
     <p style="margin-top:12px;font-size:14px;color:#697386;">Questions? <a href="mailto:support@securityaccelerated.com" style="color:var(--accent);text-decoration:none;">support@securityaccelerated.com</a></p>
   </section>
+
+  <h2 id="authentication">Authentication</h2>
+  <p>All requests require an API key passed via the <code>X-API-Key</code> header:</p>
+  <pre><code><span class="hdr">X-API-Key:</span> <span class="str">your-api-key-here</span></code></pre>
 
   <h2 id="ip-lookup">IP Lookup</h2>
   <div class="endpoint">
