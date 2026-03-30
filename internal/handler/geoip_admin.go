@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/security-accelerated/intelligence-api/internal/config"
 )
 
 // RefreshGeoIP triggers a download and hot-reload of the MaxMind GeoIP databases.
@@ -34,6 +35,15 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "refresh failed: " + err.Error()})
 		return
+	}
+
+	if h.status != nil {
+		h.status.Services.GeoIP = config.GeoIPStatus{
+			Enabled: true,
+			CityDB:  cityFile,
+			ASNDB:   asnFile,
+			DBPath:  dbPath,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
