@@ -49,7 +49,7 @@
   .sidebar-section { padding: 0 12px; margin-bottom: 8px; }
   .sidebar-section-title { color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 8px 4px; }
   .sidebar a { display: block; color: var(--sidebar-text); text-decoration: none; font-size: 13px; padding: 5px 8px; border-radius: 6px; transition: all 0.15s; }
-  .sidebar a:hover { color: var(--sidebar-active); background: var(--sidebar-hover); }
+  .sidebar a:hover, .sidebar a.active { color: var(--sidebar-active); background: var(--sidebar-hover); }
   .sidebar a.indent { padding-left: 20px; font-size: 12.5px; }
   .sidebar-toggle { display: none; position: fixed; top: 12px; left: 12px; z-index: 200; background: var(--sidebar-bg); color: #fff; border: none; border-radius: 6px; width: 40px; height: 40px; font-size: 20px; cursor: pointer; }
 
@@ -435,6 +435,33 @@ document.querySelectorAll('.sidebar a').forEach(function(link) {
     }
   });
 });
+
+// Scroll spy — highlight active sidebar link
+(function() {
+  var links = document.querySelectorAll('.sidebar a[href^="#"]');
+  var sections = [];
+  links.forEach(function(link) {
+    var id = link.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) sections.push({ el: el, link: link });
+  });
+
+  function onScroll() {
+    var scrollY = window.scrollY + 100;
+    var active = null;
+    for (var i = sections.length - 1; i >= 0; i--) {
+      if (sections[i].el.offsetTop <= scrollY) {
+        active = sections[i];
+        break;
+      }
+    }
+    links.forEach(function(l) { l.classList.remove('active'); });
+    if (active) active.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
 </script>
 
 </body>

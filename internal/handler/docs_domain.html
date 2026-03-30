@@ -99,7 +99,7 @@
     transition: all 0.15s;
   }
 
-  .sidebar a:hover {
+  .sidebar a:hover, .sidebar a.active {
     color: var(--sidebar-active);
     background: var(--sidebar-hover);
   }
@@ -1389,6 +1389,33 @@ document.querySelectorAll('.sidebar a').forEach(function(link) {
     }
   });
 });
+
+// Scroll spy — highlight active sidebar link
+(function() {
+  var links = document.querySelectorAll('.sidebar a[href^="#"]');
+  var sections = [];
+  links.forEach(function(link) {
+    var id = link.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) sections.push({ el: el, link: link });
+  });
+
+  function onScroll() {
+    var scrollY = window.scrollY + 100;
+    var active = null;
+    for (var i = sections.length - 1; i >= 0; i--) {
+      if (sections[i].el.offsetTop <= scrollY) {
+        active = sections[i];
+        break;
+      }
+    }
+    links.forEach(function(l) { l.classList.remove('active'); });
+    if (active) active.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
 </script>
 
 </body>
