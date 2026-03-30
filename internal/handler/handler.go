@@ -56,7 +56,7 @@ type IPLookupService interface {
 
 // GeoIPRefresher downloads and hot-reloads MaxMind databases.
 type GeoIPRefresher interface {
-	DownloadAndReload(licenseKey, dbPath string) (*domain.RefreshResult, error)
+	DownloadAndReload(licenseKey, dbPath, cityFile, asnFile string) (*domain.RefreshResult, error)
 }
 
 // AuthCacheStats provides read-only access to auth cache metrics for the info endpoint.

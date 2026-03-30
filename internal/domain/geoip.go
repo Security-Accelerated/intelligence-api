@@ -184,8 +184,9 @@ type RefreshResult struct {
 
 // DownloadAndReload fetches the latest MaxMind databases using the provided
 // license key, writes them to temp files, validates them, and atomically swaps
-// them into the reader. The old files are replaced on disk.
-func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath string) (*RefreshResult, error) {
+// them into the reader. cityFile and asnFile are the filenames (not paths) to
+// write inside dbPath, matching the configured maxmind.city_db / maxmind.asn_db.
+func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath, cityFile, asnFile string) (*RefreshResult, error) {
 	if licenseKey == "" {
 		return nil, fmt.Errorf("maxmind license key not configured")
 	}
@@ -210,9 +211,9 @@ func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath string) (*RefreshResu
 		return nil, fmt.Errorf("validate downloaded databases: %w", err)
 	}
 
-	// Move temp files to final location
-	cityFinal := filepath.Join(dbPath, "GeoLite2-City.mmdb")
-	asnFinal := filepath.Join(dbPath, "GeoLite2-ASN.mmdb")
+	// Move temp files to final location using configured filenames
+	cityFinal := filepath.Join(dbPath, cityFile)
+	asnFinal := filepath.Join(dbPath, asnFile)
 
 	if err := os.Rename(cityTmp, cityFinal); err != nil {
 		return nil, fmt.Errorf("move city db: %w", err)

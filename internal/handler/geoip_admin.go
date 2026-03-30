@@ -16,9 +16,13 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 
 	licenseKey := ""
 	dbPath := "/data/maxmind"
+	cityFile := "GeoLite2-City.mmdb"
+	asnFile := "GeoLite2-ASN.mmdb"
 	if h.cfg != nil {
 		licenseKey = h.cfg.GetString("maxmind.license_key")
 		dbPath = h.cfg.GetString("maxmind.db_path")
+		cityFile = h.cfg.GetString("maxmind.city_db")
+		asnFile = h.cfg.GetString("maxmind.asn_db")
 	}
 
 	if licenseKey == "" {
@@ -26,7 +30,7 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 		return
 	}
 
-	result, err := h.geoRefresher.DownloadAndReload(licenseKey, dbPath)
+	result, err := h.geoRefresher.DownloadAndReload(licenseKey, dbPath, cityFile, asnFile)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "refresh failed: " + err.Error()})
 		return
