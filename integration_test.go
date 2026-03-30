@@ -1785,3 +1785,26 @@ func TestIntegration_IPLookup_MultipleIPs(t *testing.T) {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
 }
+
+// --- GeoIP Admin Integration ---
+
+func TestIntegration_GeoIPRefresh_AdminOnly(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// No auth — 401
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	r.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusUnauthorized {
+		t.Fatalf("no auth: status = %d, want %d", w1.Code, http.StatusUnauthorized)
+	}
+
+	// Basic plan — 403
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	req2.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusForbidden {
+		t.Fatalf("basic plan: status = %d, want %d", w2.Code, http.StatusForbidden)
+	}
+}

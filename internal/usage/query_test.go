@@ -94,7 +94,7 @@ func TestQueryUsage_HappyPath(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(100, 30, 45.678, 80, 0, 10, 20, 15, 12, 8, 5, 25, 3))
+			AddRow(100, 30, 45.678, 80, 15, 10, 20, 15, 12, 8, 5, 25, 3))
 
 	// Status code query
 	mock.ExpectQuery("SELECT status_code").
@@ -131,6 +131,9 @@ func TestQueryUsage_HappyPath(t *testing.T) {
 	}
 	if summary.TotalDomains != 80 {
 		t.Errorf("TotalDomains = %d, want 80", summary.TotalDomains)
+	}
+	if summary.TotalIPs != 15 {
+		t.Errorf("TotalIPs = %d, want 15", summary.TotalIPs)
 	}
 
 	// Feature usage

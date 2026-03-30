@@ -216,9 +216,12 @@ func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath, cityFile, asnFile st
 	asnFinal := filepath.Join(dbPath, asnFile)
 
 	if err := os.Rename(cityTmp, cityFinal); err != nil {
+		os.Remove(asnTmp)
 		return nil, fmt.Errorf("move city db: %w", err)
 	}
 	if err := os.Rename(asnTmp, asnFinal); err != nil {
+		// City already moved to final; ASN temp orphaned — clean up
+		os.Remove(asnTmp)
 		return nil, fmt.Errorf("move asn db: %w", err)
 	}
 

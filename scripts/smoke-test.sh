@@ -325,9 +325,19 @@ check_json "IP response has ip field" '.[0].ip == "8.8.8.8"' \
     -X POST "$HOST/v1/ip/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d '{"ips":["8.8.8.8"]}'
+check_json "IP response has reverse_dns" '.[0].reverse_dns != null' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":["8.8.8.8"]}'
+check_json "IP response has abuse_contact" '.[0].abuse_contact != null' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":["8.8.8.8"]}'
 
 echo "=== GeoIP Admin ==="
-post 403 "refresh (basic)" /v1/admin/geoip/refresh "$BASIC" '{}'
+# Note: admin success test omitted — refresh downloads from MaxMind (requires real license key)
+post 403 "refresh (basic, forbidden)" /v1/admin/geoip/refresh "$BASIC" '{}'
+post 401 "refresh (no key)" /v1/admin/geoip/refresh "" '{}'
 
 # Summary
 echo ""

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -53,7 +54,7 @@ func LookupAbuseContact(ctx context.Context, ip string) (*AbuseContactInfo, erro
 	}
 
 	var rdap rdapResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rdap); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&rdap); err != nil {
 		return nil, fmt.Errorf("decode rdap response: %w", err)
 	}
 
