@@ -159,6 +159,25 @@
   <p>All requests require an API key passed via the <code>X-API-Key</code> header:</p>
   <pre><code><span class="hdr">X-API-Key:</span> <span class="str">your-api-key-here</span></code></pre>
 
+  <h2 id="rate-limiting">Rate Limiting</h2>
+  <p>Requests are rate-limited per API key using a sliding window. Every response includes rate limit headers:</p>
+  <table>
+    <thead><tr><th>Header</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests per minute for your plan</td></tr>
+      <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
+      <tr><td><code>Retry-After</code></td><td>Seconds to wait before retrying (only on 429)</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>Plan</th><th>Rate Limit</th><th>Max IPs / Request</th></tr></thead>
+    <tbody>
+      <tr><td>Free</td><td>5 req/min</td><td>1</td></tr>
+      <tr><td>Basic</td><td>30 req/min</td><td>5</td></tr>
+      <tr><td>Pro</td><td>120 req/min</td><td>20</td></tr>
+    </tbody>
+  </table>
+
   <h2 id="ip-lookup">IP Lookup</h2>
   <div class="endpoint">
     <span class="method">POST</span>
@@ -358,25 +377,6 @@ resp = requests.post(
     <span class="str">"errors"</span>: []
   }
 ]</code></pre>
-
-  <h2 id="rate-limiting">Rate Limiting</h2>
-  <p>Requests are rate-limited per API key using a sliding window. Every response includes rate limit headers:</p>
-  <table>
-    <thead><tr><th>Header</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests per minute for your plan</td></tr>
-      <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
-      <tr><td><code>Retry-After</code></td><td>Seconds to wait before retrying (only on 429)</td></tr>
-    </tbody>
-  </table>
-  <table>
-    <thead><tr><th>Plan</th><th>Rate Limit</th><th>Max IPs / Request</th></tr></thead>
-    <tbody>
-      <tr><td>Free</td><td>5 req/min</td><td>1</td></tr>
-      <tr><td>Basic</td><td>30 req/min</td><td>5</td></tr>
-      <tr><td>Pro</td><td>120 req/min</td><td>20</td></tr>
-    </tbody>
-  </table>
 
   <h2 id="error-handling">Error Handling</h2>
   <table>
