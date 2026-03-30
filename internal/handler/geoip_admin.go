@@ -5,6 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"go.uber.org/zap"
 )
 
 // RefreshGeoIP triggers a download and hot-reload of the MaxMind GeoIP databases.
@@ -33,7 +35,8 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 
 	result, err := h.geoRefresher.DownloadAndReload(licenseKey, dbPath, cityFile, asnFile)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "refresh failed: " + err.Error()})
+		logging.Logger().Error("geoip refresh failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "geoip refresh failed"})
 		return
 	}
 

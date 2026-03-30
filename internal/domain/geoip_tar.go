@@ -30,7 +30,7 @@ func extractMMDBFromTar(r io.Reader, edition string) ([]byte, error) {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		if !strings.HasSuffix(hdr.Name, suffix) {
+		if !strings.HasSuffix(hdr.Name, suffix) || !strings.Contains(hdr.Name, edition) {
 			continue
 		}
 		if hdr.Size <= 0 || hdr.Size > maxMMDBBytes {

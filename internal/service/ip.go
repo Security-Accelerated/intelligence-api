@@ -156,6 +156,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 	}
 
 	// Reverse DNS
+	if s.lookupReverseDNS != nil {
 	wg.Go(func() {
 		result, err := s.lookupReverseDNS(ctx, ip)
 		mu.Lock()
@@ -168,8 +169,10 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 		}
 		resp.ReverseDNS = result
 	})
+	}
 
 	// Abuse contact (RDAP)
+	if s.lookupAbuseContact != nil {
 	wg.Go(func() {
 		result, err := s.lookupAbuseContact(ctx, ip)
 		mu.Lock()
@@ -182,6 +185,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 		}
 		resp.AbuseContact = result
 	})
+	}
 
 	// Threat intel (optional, pro-only)
 	if opts.ThreatIntel {
