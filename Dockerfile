@@ -11,6 +11,7 @@ FROM alpine:3.21
 
 RUN apk add --no-cache chromium
 RUN adduser -D -u 1000 appuser
+RUN mkdir -p /data/maxmind && chown appuser:appuser /data/maxmind
 COPY --from=build /app/intelligence-api /usr/local/bin/intelligence-api
 
 USER appuser

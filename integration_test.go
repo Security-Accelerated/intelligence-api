@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -114,6 +115,9 @@ func testConfig() *viper.Viper {
 	cfg.Set("domain.max_domains.free", 1)
 	cfg.Set("domain.max_domains.basic", 5)
 	cfg.Set("domain.max_domains.pro", 20)
+	cfg.Set("ip.max_ips.free", 1)
+	cfg.Set("ip.max_ips.basic", 5)
+	cfg.Set("ip.max_ips.pro", 20)
 	return cfg
 }
 
@@ -213,6 +217,33 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		}, nil
 	})
 
+	// IP service with stubs
+	ipSvc := service.NewIPService(rc, 5*time.Minute, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
+	ipSvc.SetLookups(
+		func(_ net.IP) (*domain.GeoIPInfo, error) {
+			return &domain.GeoIPInfo{Country: "United States", CountryCode: "US", City: "Mountain View", Latitude: 37.386, Longitude: -122.084}, nil
+		},
+		func(_ net.IP) (*domain.IPASNInfo, error) {
+			return &domain.IPASNInfo{ASN: 15169, Organization: "GOOGLE"}, nil
+		},
+		func(_ context.Context, _ string) (*domain.ReverseDNSInfo, error) {
+			return &domain.ReverseDNSInfo{Hostnames: []string{"dns.google"}}, nil
+		},
+		func(_ context.Context, _ string) (*domain.AbuseContactInfo, error) {
+			return &domain.AbuseContactInfo{Organization: "Google LLC", Country: "US", Email: "network-abuse@google.com"}, nil
+		},
+		func(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
+			return &domain.ThreatIntelInfo{
+				RiskLevel: "low",
+				Score:     15,
+				Providers: []*domain.ThreatIntelProviderResult{
+					{Provider: "virustotal", Detected: false},
+					{Provider: "urlhaus", Detected: false},
+				},
+			}, nil
+		},
+	)
+
 	fpSvc := newStubFingerprintService()
 
 	repo := newStubRepo()
@@ -236,7 +267,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	usageQ := &stubUsageQueryer{}
 	usageRec := usage.NoopRecorder{}
 
-	h := handler.New(svc, fpSvc, nil, usageQ, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
+	h := handler.New(svc, ipSvc, fpSvc, nil, usageQ, nil, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
 		System: config.SystemStatus{Version: "test"},
 	})
 	h.RegisterRoutes(r)
@@ -368,11 +399,26 @@ func TestIntegration_DomainLookup_InvalidDomain(t *testing.T) {
 	}
 }
 
-func TestIntegration_Docs_RootServesHTML(t *testing.T) {
+func TestIntegration_Docs_RootRedirects(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusMovedPermanently)
+	}
+	if loc := w.Header().Get("Location"); loc != "/docs" {
+		t.Errorf("Location = %q, want /docs", loc)
+	}
+}
+
+func TestIntegration_Docs_LandingPage(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -1129,8 +1175,8 @@ func TestIntegration_SecurityHeaders_Present(t *testing.T) {
 func TestIntegration_BodyLimit_Exceeded(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	// Create a body larger than 1MB. MaxBytesReader causes a read error that
-	// surfaces as 400 from Gin's JSON binding layer.
+	// Create a body larger than 1MB. The middleware rejects it with 413
+	// via Content-Length early check.
 	bigBody := strings.Repeat("x", 1<<20+1)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(bigBody))
@@ -1138,8 +1184,8 @@ func TestIntegration_BodyLimit_Exceeded(t *testing.T) {
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d (oversized body rejected via MaxBytesReader)", w.Code, http.StatusBadRequest)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d (oversized body rejected)", w.Code, http.StatusRequestEntityTooLarge)
 	}
 }
 
@@ -1527,5 +1573,238 @@ func TestIntegration_ThreatIntel_AdminAllowed(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp[0].ThreatIntel == nil {
 		t.Fatal("expected ThreatIntel to be populated")
+	}
+}
+
+// ==================== IP Lookup Integration Tests ====================
+
+func TestIntegration_IPLookup_FullFlow(t *testing.T) {
+	r, _ := setupRouter(t)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var results []*domain.IPResponse
+	json.Unmarshal(w.Body.Bytes(), &results)
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	ip := results[0]
+	if ip.IP != "8.8.8.8" {
+		t.Errorf("IP = %q, want %q", ip.IP, "8.8.8.8")
+	}
+	if ip.Geo == nil || ip.Geo.Country != "United States" {
+		t.Error("expected geo.country = United States")
+	}
+	if ip.ASN == nil || ip.ASN.ASN != 15169 {
+		t.Error("expected asn.asn = 15169")
+	}
+	if ip.ReverseDNS == nil || len(ip.ReverseDNS.Hostnames) == 0 {
+		t.Error("expected reverse_dns hostnames")
+	}
+	if ip.AbuseContact == nil || ip.AbuseContact.Email == "" {
+		t.Error("expected abuse_contact with email")
+	}
+}
+
+func TestIntegration_IPLookup_Caching(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	body := `{"ips":["8.8.8.8"]}`
+
+	// First request — cache miss
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w1, req1)
+
+	var r1 []*domain.IPResponse
+	json.Unmarshal(w1.Body.Bytes(), &r1)
+	if r1[0].CacheHit {
+		t.Error("first request should be a cache miss")
+	}
+
+	// Second request — cache hit
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w2, req2)
+
+	var r2 []*domain.IPResponse
+	json.Unmarshal(w2.Body.Bytes(), &r2)
+	if !r2[0].CacheHit {
+		t.Error("second request should be a cache hit")
+	}
+}
+
+func TestIntegration_IPLookup_ThreatIntelProOnly(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// Basic plan — should be forbidden
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8"],"threat_intel":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key") // basic plan
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("basic plan with threat_intel: status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+
+	// Pro plan — should succeed
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8"],"threat_intel":true}`))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-API-Key", "test-pro-key")
+	r.ServeHTTP(w2, req2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("pro plan with threat_intel: status = %d, want %d; body: %s", w2.Code, http.StatusOK, w2.Body.String())
+	}
+
+	var results []*domain.IPResponse
+	json.Unmarshal(w2.Body.Bytes(), &results)
+	if results[0].ThreatIntel == nil {
+		t.Error("expected threat_intel to be populated for pro plan")
+	}
+}
+
+func TestIntegration_IPLookup_PrivateIPRejected(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	tests := []struct {
+		name string
+		ip   string
+	}{
+		{"loopback", "127.0.0.1"},
+		{"private", "10.0.0.1"},
+		{"metadata", "169.254.169.254"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			body := `{"ips":["` + tt.ip + `"]}`
+			req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-API-Key", "test-admin-key")
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d for %s", w.Code, http.StatusBadRequest, tt.ip)
+			}
+		})
+	}
+}
+
+func TestIntegration_IPLookup_MaxIPsPerPlan(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// Free plan allows 1 IP — send 2
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("free plan 2 IPs: status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestIntegration_IPLookup_NoAuth(t *testing.T) {
+	r, _ := setupRouter(t)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestIntegration_IPLookup_InvalidBody(t *testing.T) {
+	r, _ := setupRouter(t)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`not json`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestIntegration_IPLookup_IPv6(t *testing.T) {
+	r, _ := setupRouter(t)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["2001:4860:4860::8888"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestIntegration_IPLookup_MultipleIPs(t *testing.T) {
+	r, _ := setupRouter(t)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-pro-key") // pro allows up to 20
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var results []*domain.IPResponse
+	json.Unmarshal(w.Body.Bytes(), &results)
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+}
+
+// --- GeoIP Admin Integration ---
+
+func TestIntegration_GeoIPRefresh_AdminOnly(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// No auth — 401
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	r.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusUnauthorized {
+		t.Fatalf("no auth: status = %d, want %d", w1.Code, http.StatusUnauthorized)
+	}
+
+	// Basic plan — 403
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	req2.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusForbidden {
+		t.Fatalf("basic plan: status = %d, want %d", w2.Code, http.StatusForbidden)
 	}
 }

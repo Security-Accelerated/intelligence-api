@@ -43,6 +43,11 @@ func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 				entry.DomainCount = n
 			}
 		}
+		if v, ok := c.Get("ip_count"); ok {
+			if n, ok := v.(int); ok {
+				entry.IPCount = n
+			}
+		}
 		if v, ok := c.Get("cache_hit"); ok {
 			if b, ok := v.(bool); ok {
 				entry.CacheHit = b
@@ -86,6 +91,11 @@ func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 		if v, ok := c.Get("threat_intel_requested"); ok {
 			if b, ok := v.(bool); ok {
 				entry.ThreatIntel = b
+			}
+		}
+		if v, ok := c.Get("ip_threat_intel_requested"); ok {
+			if b, ok := v.(bool); ok && b {
+				entry.ThreatIntel = true
 			}
 		}
 

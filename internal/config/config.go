@@ -99,6 +99,14 @@ func init() {
 	config.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
 	config.SetDefault("alerts.max_concurrent_sends", 5)
 	config.SetDefault("alerts.max_window_size", 1000)
+	config.SetDefault("maxmind.license_key", "")
+	config.SetDefault("maxmind.db_path", "/data/maxmind")
+	config.SetDefault("maxmind.city_db", "GeoLite2-City.mmdb")
+	config.SetDefault("maxmind.asn_db", "GeoLite2-ASN.mmdb")
+	config.SetDefault("ip.lookup_timeout", "30s")
+	config.SetDefault("ip.max_ips.free", 1)
+	config.SetDefault("ip.max_ips.basic", 5)
+	config.SetDefault("ip.max_ips.pro", 20)
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))

@@ -40,6 +40,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 		COALESCE(SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END), 0),
 		COALESCE(AVG(latency_ms), 0),
 		COALESCE(SUM(domain_count), 0),
+		COALESCE(SUM(ip_count), 0),
 		COALESCE(SUM(CASE WHEN screenshot THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN reputation THEN 1 ELSE 0 END), 0),
 		COALESCE(SUM(CASE WHEN email_security THEN 1 ELSE 0 END), 0),
@@ -56,6 +57,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 		&summary.CacheHits,
 		&summary.AvgLatencyMs,
 		&summary.TotalDomains,
+		&summary.TotalIPs,
 		&screenshot, &reputation, &emailSecurity, &subdomains, &ctLogs, &bgp, &fingerprint, &threatIntel,
 	)
 	if err != nil {

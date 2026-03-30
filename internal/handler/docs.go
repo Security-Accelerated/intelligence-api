@@ -11,7 +11,15 @@ import (
 //go:embed docs.html
 var docsHTML string
 
+//go:embed docs_domain.html
+var docsDomainHTML string
+
+//go:embed docs_ip.html
+var docsIPHTML string
+
 var docsTmpl = template.Must(template.New("docs").Parse(docsHTML))
+var docsDomainTmpl = template.Must(template.New("docs_domain").Parse(docsDomainHTML))
+var docsIPTmpl = template.Must(template.New("docs_ip").Parse(docsIPHTML))
 
 type docsData struct {
 	BasicPaymentLink string
@@ -27,7 +35,7 @@ type docsChangelogVersion struct {
 	Changes []string
 }
 
-func (h *Handler) Docs(c *gin.Context) {
+func (h *Handler) buildDocsData() docsData {
 	version := ""
 	if h.status != nil {
 		version = h.status.System.Version
@@ -39,7 +47,6 @@ func (h *Handler) Docs(c *gin.Context) {
 		data.PortalLink = h.cfg.GetString("stripe.portal_link")
 	}
 
-	// Filter changelog to public entries only.
 	for _, v := range h.changelog {
 		var publicChanges []string
 		for _, ch := range v.Changes {
@@ -55,8 +62,24 @@ func (h *Handler) Docs(c *gin.Context) {
 			})
 		}
 	}
+	return data
+}
 
+func (h *Handler) renderDocs(c *gin.Context, tmpl *template.Template) {
+	data := h.buildDocsData()
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.Status(http.StatusOK)
-	docsTmpl.Execute(c.Writer, data)
+	tmpl.Execute(c.Writer, data)
+}
+
+func (h *Handler) Docs(c *gin.Context) {
+	h.renderDocs(c, docsTmpl)
+}
+
+func (h *Handler) DocsDomain(c *gin.Context) {
+	h.renderDocs(c, docsDomainTmpl)
+}
+
+func (h *Handler) DocsIP(c *gin.Context) {
+	h.renderDocs(c, docsIPTmpl)
 }

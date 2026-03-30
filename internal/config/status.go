@@ -1,16 +1,36 @@
 package config
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // StatusSnapshot holds all static application status, built once at startup.
 // Used for structured startup logging and the /v1/info admin endpoint.
 // Adding a field to any sub-struct automatically surfaces it in both places.
+// The mu field protects fields that may be updated at runtime (e.g. GeoIP status
+// after an admin refresh).
 type StatusSnapshot struct {
+	mu       sync.RWMutex   `json:"-"`
 	System   SystemStatus   `json:"system"`
 	Database DatabaseConfig `json:"database"`
 	Cache    CacheConfig    `json:"cache"`
 	Lookups  LookupConfig   `json:"lookups"`
 	Services ServicesStatus `json:"services"`
+}
+
+// SetGeoIPStatus updates the GeoIP status safely for concurrent access.
+func (s *StatusSnapshot) SetGeoIPStatus(status GeoIPStatus) {
+	s.mu.Lock()
+	s.Services.GeoIP = status
+	s.mu.Unlock()
+}
+
+// GetServices returns a snapshot of ServicesStatus safely for concurrent access.
+func (s *StatusSnapshot) GetServices() ServicesStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Services
 }
 
 type SystemStatus struct {
@@ -64,6 +84,10 @@ type LookupConfig struct {
 	MaxDomainsFree       int    `json:"max_domains_free"`
 	MaxDomainsBasic      int    `json:"max_domains_basic"`
 	MaxDomainsPro        int    `json:"max_domains_pro"`
+	IPTimeout            string `json:"ip_timeout"`
+	MaxIPsFree           int    `json:"max_ips_free"`
+	MaxIPsBasic          int    `json:"max_ips_basic"`
+	MaxIPsPro            int    `json:"max_ips_pro"`
 }
 
 type ServicesStatus struct {
@@ -72,6 +96,7 @@ type ServicesStatus struct {
 	ThreatIntel   ThreatIntelStatus   `json:"threat_intel"`
 	Fingerprint   FingerprintStatus   `json:"fingerprint"`
 	Usage         UsageStatus         `json:"usage"`
+	GeoIP         GeoIPStatus         `json:"geoip"`
 }
 
 type NotificationsStatus struct {
@@ -104,6 +129,13 @@ type FingerprintStatus struct {
 type UsageStatus struct {
 	BufferSize    int    `json:"buffer_size"`
 	FlushInterval string `json:"flush_interval"`
+}
+
+type GeoIPStatus struct {
+	Enabled bool   `json:"enabled"`
+	CityDB  string `json:"city_db"`
+	ASNDB   string `json:"asn_db"`
+	DBPath  string `json:"db_path"`
 }
 
 // NewStatusSnapshot builds a StatusSnapshot from the current config values.
@@ -160,6 +192,10 @@ func NewStatusSnapshot(version string) *StatusSnapshot {
 			MaxDomainsFree:       cfg.GetInt("domain.max_domains.free"),
 			MaxDomainsBasic:      cfg.GetInt("domain.max_domains.basic"),
 			MaxDomainsPro:        cfg.GetInt("domain.max_domains.pro"),
+			IPTimeout:            cfg.GetDuration("ip.lookup_timeout").String(),
+			MaxIPsFree:           cfg.GetInt("ip.max_ips.free"),
+			MaxIPsBasic:          cfg.GetInt("ip.max_ips.basic"),
+			MaxIPsPro:            cfg.GetInt("ip.max_ips.pro"),
 		},
 	}
 }

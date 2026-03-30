@@ -105,7 +105,10 @@ DOMAIN='{"domains":["example.com"]}'
 
 echo ""
 echo "=== Docs ==="
-check 200 "GET / (API docs)" "$HOST/"
+check 301 "GET / (redirect to /docs)" "$HOST/"
+check 200 "GET /docs (landing page)" "$HOST/docs"
+check 200 "GET /docs/domain (domain docs)" "$HOST/docs/domain"
+check 200 "GET /docs/ip (IP docs)" "$HOST/docs/ip"
 
 echo ""
 echo "=== Health Check ==="
@@ -294,6 +297,47 @@ else
     fail=$((fail + 1))
     errors+=("X-Client-Request-ID echo failed")
 fi
+
+echo "=== IP Lookup — Auth ==="
+IP='{"ips":["8.8.8.8"]}'
+post 200 "admin key" /v1/ip/lookup "$ADMIN" "$IP"
+post 200 "basic key" /v1/ip/lookup "$BASIC" "$IP"
+post 200 "pro key" /v1/ip/lookup "$PRO" "$IP"
+post 200 "free key" /v1/ip/lookup "$FREE" "$IP"
+post 401 "no key" /v1/ip/lookup "" "$IP"
+post 401 "bad key" /v1/ip/lookup "invalid-key" "$IP"
+
+echo "=== IP Lookup — Pro Options ==="
+post 200 "threat_intel (admin)" /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"threat_intel":true}'
+post 200 "threat_intel (pro)" /v1/ip/lookup "$PRO" '{"ips":["8.8.8.8"],"threat_intel":true}'
+post 403 "threat_intel (basic)" /v1/ip/lookup "$BASIC" '{"ips":["8.8.8.8"],"threat_intel":true}'
+post 403 "threat_intel (free)" /v1/ip/lookup "$FREE" '{"ips":["8.8.8.8"],"threat_intel":true}'
+
+echo "=== IP Lookup — Validation ==="
+post 400 "invalid IP" /v1/ip/lookup "$ADMIN" '{"ips":["not-an-ip"]}'
+post 400 "private IP" /v1/ip/lookup "$ADMIN" '{"ips":["127.0.0.1"]}'
+post 400 "metadata IP" /v1/ip/lookup "$ADMIN" '{"ips":["169.254.169.254"]}'
+post 400 "empty array" /v1/ip/lookup "$ADMIN" '{"ips":[]}'
+post 400 "missing field" /v1/ip/lookup "$ADMIN" '{}'
+
+echo "=== IP Lookup — Response Validation ==="
+check_json "IP response has ip field" '.[0].ip == "8.8.8.8"' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":["8.8.8.8"]}'
+check_json "IP response has reverse_dns" '.[0].reverse_dns != null' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":["8.8.8.8"]}'
+check_json "IP response has abuse_contact" '.[0].abuse_contact != null' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":["8.8.8.8"]}'
+
+echo "=== GeoIP Admin ==="
+# Note: admin success test omitted — refresh downloads from MaxMind (requires real license key)
+post 403 "refresh (basic, forbidden)" /v1/admin/geoip/refresh "$BASIC" '{}'
+post 401 "refresh (no key)" /v1/admin/geoip/refresh "" '{}'
 
 # Summary
 echo ""
