@@ -29,6 +29,12 @@ type GeoIPReader struct {
 	asnPath  string
 }
 
+// NewEmptyGeoIPReader creates a reader with no databases loaded. Lookups will
+// return errors, but DownloadAndReload can be called to bootstrap the databases.
+func NewEmptyGeoIPReader() *GeoIPReader {
+	return &GeoIPReader{}
+}
+
 // NewGeoIPReader opens the City and ASN databases from the given file paths.
 func NewGeoIPReader(cityPath, asnPath string) (*GeoIPReader, error) {
 	cityDB, err := geoip2.Open(cityPath)

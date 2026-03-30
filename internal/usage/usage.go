@@ -41,6 +41,7 @@ type UsageSummary struct {
 	CacheHitRate   float64            `json:"cache_hit_rate"`
 	AvgLatencyMs   float64            `json:"avg_latency_ms"`
 	TotalDomains   int                `json:"total_domains"`
+	TotalIPs       int                `json:"total_ips"`
 	StatusCodes    map[string]int     `json:"status_codes"`
 	FeatureUsage   map[string]int     `json:"feature_usage"`
 	RequestsByPath map[string]int     `json:"requests_by_path"`

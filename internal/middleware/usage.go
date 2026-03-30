@@ -93,6 +93,11 @@ func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 				entry.ThreatIntel = b
 			}
 		}
+		if v, ok := c.Get("ip_threat_intel_requested"); ok {
+			if b, ok := v.(bool); ok && b {
+				entry.ThreatIntel = true
+			}
+		}
 
 		recorder.Record(entry)
 	}

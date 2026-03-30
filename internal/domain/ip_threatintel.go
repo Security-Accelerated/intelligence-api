@@ -185,7 +185,7 @@ func (p *URLhausIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatInte
 
 	var uhResp struct {
 		QueryStatus string `json:"query_status"`
-		URLCount    int    `json:"urls_online"`
+		URLCount    int    `json:"url_count"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&uhResp); err != nil {
 		return nil, fmt.Errorf("urlhaus ip: decode: %w", err)
@@ -221,7 +221,12 @@ func (p *OTXIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatIntelPro
 		return &ThreatIntelProviderResult{Provider: "alienvault_otx", Detected: false, Details: "skipped (rate limit)"}, nil
 	}
 
-	apiURL := "https://otx.alienvault.com/api/v1/indicators/IPv4/" + ip + "/general"
+	// OTX uses different paths for IPv4 vs IPv6
+	indicator := "IPv4"
+	if strings.Contains(ip, ":") {
+		indicator = "IPv6"
+	}
+	apiURL := "https://otx.alienvault.com/api/v1/indicators/" + indicator + "/" + ip + "/general"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("otx ip: build request: %w", err)

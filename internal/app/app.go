@@ -199,17 +199,19 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("usage tracking enabled", zap.Any("config", status.Services.Usage))
 
-	// GeoIP reader
-	var geoReader *domain.GeoIPReader
+	// GeoIP reader — always created so the admin refresh endpoint can bootstrap
+	// databases on fresh deployments. Lookups gracefully return errors until
+	// databases are loaded (either from disk at startup or via admin refresh).
 	dbPath := cfg.GetString("maxmind.db_path")
 	cityPath := filepath.Join(dbPath, cfg.GetString("maxmind.city_db"))
 	asnPath := filepath.Join(dbPath, cfg.GetString("maxmind.asn_db"))
+	var geoReader *domain.GeoIPReader
 	if _, err := os.Stat(cityPath); err == nil {
 		geoReader, err = domain.NewGeoIPReader(cityPath, asnPath)
 		if err != nil {
-			logger.Warn("failed to load MaxMind databases", zap.Error(err))
+			logger.Warn("failed to load MaxMind databases, using empty reader", zap.Error(err))
+			geoReader = domain.NewEmptyGeoIPReader()
 		} else {
-			defer geoReader.Close()
 			status.Services.GeoIP = config.GeoIPStatus{
 				Enabled: true,
 				CityDB:  cfg.GetString("maxmind.city_db"),
@@ -219,8 +221,10 @@ func Run(logger *zap.Logger, version string) error {
 			logger.Info("geoip databases loaded", zap.Any("config", status.Services.GeoIP))
 		}
 	} else {
-		logger.Info("geoip databases not found, IP geo/asn lookups will be unavailable", zap.String("path", cityPath))
+		geoReader = domain.NewEmptyGeoIPReader()
+		logger.Info("geoip databases not found, use POST /v1/admin/geoip/refresh to bootstrap", zap.String("path", cityPath))
 	}
+	defer geoReader.Close()
 
 	// IP threat intel providers (adapters around the domain providers)
 	var ipTIProviders []domain.IPThreatIntelProvider
@@ -238,14 +242,8 @@ func Run(logger *zap.Logger, version string) error {
 	// IP intelligence service
 	ipService := service.NewIPService(redisCache, cacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
 
-	// GeoIP refresher for admin endpoint (nil if no reader)
-	var geoRefresher handler.GeoIPRefresher
-	if geoReader != nil {
-		geoRefresher = geoReader
-	}
-
 	// HTTP
-	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, geoRefresher, cfg, redisCache, cachedRepo, db, status)
+	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, geoReader, cfg, redisCache, cachedRepo, db, status)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
 	serverCfg := httpapi.ServerConfig{
 		Port:            status.System.Port,
