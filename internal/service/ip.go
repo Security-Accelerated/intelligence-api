@@ -199,12 +199,16 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	wg.Wait()
 
-	// Cache the result
-	if data, err := json.Marshal(resp); err != nil {
-		logger.Warn("cache marshal failed", zap.String("ip", ip), zap.Error(err))
-	} else {
-		if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL); err != nil {
-			logger.Warn("cache set failed", zap.String("ip", ip), zap.Error(err))
+	// Only cache if there are no errors. This ensures that responses with
+	// "database not loaded" errors (pre-bootstrap) are not cached, so a
+	// subsequent GeoIP refresh takes effect immediately.
+	if len(resp.Errors) == 0 {
+		if data, err := json.Marshal(resp); err != nil {
+			logger.Warn("cache marshal failed", zap.String("ip", ip), zap.Error(err))
+		} else {
+			if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL); err != nil {
+				logger.Warn("cache set failed", zap.String("ip", ip), zap.Error(err))
+			}
 		}
 	}
 
