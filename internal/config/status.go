@@ -1,16 +1,36 @@
 package config
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // StatusSnapshot holds all static application status, built once at startup.
 // Used for structured startup logging and the /v1/info admin endpoint.
 // Adding a field to any sub-struct automatically surfaces it in both places.
+// The mu field protects fields that may be updated at runtime (e.g. GeoIP status
+// after an admin refresh).
 type StatusSnapshot struct {
+	mu       sync.RWMutex   `json:"-"`
 	System   SystemStatus   `json:"system"`
 	Database DatabaseConfig `json:"database"`
 	Cache    CacheConfig    `json:"cache"`
 	Lookups  LookupConfig   `json:"lookups"`
 	Services ServicesStatus `json:"services"`
+}
+
+// SetGeoIPStatus updates the GeoIP status safely for concurrent access.
+func (s *StatusSnapshot) SetGeoIPStatus(status GeoIPStatus) {
+	s.mu.Lock()
+	s.Services.GeoIP = status
+	s.mu.Unlock()
+}
+
+// GetServices returns a snapshot of ServicesStatus safely for concurrent access.
+func (s *StatusSnapshot) GetServices() ServicesStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Services
 }
 
 type SystemStatus struct {

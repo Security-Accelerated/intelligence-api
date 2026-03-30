@@ -212,13 +212,14 @@ func Run(logger *zap.Logger, version string) error {
 			logger.Warn("failed to load MaxMind databases, using empty reader", zap.Error(err))
 			geoReader = domain.NewEmptyGeoIPReader()
 		} else {
-			status.Services.GeoIP = config.GeoIPStatus{
+			geoStatus := config.GeoIPStatus{
 				Enabled: true,
 				CityDB:  cfg.GetString("maxmind.city_db"),
 				ASNDB:   cfg.GetString("maxmind.asn_db"),
 				DBPath:  dbPath,
 			}
-			logger.Info("geoip databases loaded", zap.Any("config", status.Services.GeoIP))
+			status.SetGeoIPStatus(geoStatus)
+			logger.Info("geoip databases loaded", zap.Any("config", geoStatus))
 		}
 	} else {
 		geoReader = domain.NewEmptyGeoIPReader()

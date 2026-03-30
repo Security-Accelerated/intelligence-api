@@ -204,28 +204,39 @@ func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath, cityFile, asnFile st
 		return nil, fmt.Errorf("download asn db: %w", err)
 	}
 
-	// Validate by opening the temp files as MaxMind databases
-	if err := r.Reload(cityTmp, asnTmp); err != nil {
+	// Validate temp files by opening them with throwaway readers (not the live ones).
+	// This ensures the downloads are valid before touching disk or live state.
+	testCity, err := geoip2.Open(cityTmp)
+	if err != nil {
 		os.Remove(cityTmp)
 		os.Remove(asnTmp)
-		return nil, fmt.Errorf("validate downloaded databases: %w", err)
+		return nil, fmt.Errorf("validate city db: %w", err)
 	}
+	testCity.Close()
 
-	// Move temp files to final location using configured filenames
+	testASN, err := geoip2.Open(asnTmp)
+	if err != nil {
+		os.Remove(cityTmp)
+		os.Remove(asnTmp)
+		return nil, fmt.Errorf("validate asn db: %w", err)
+	}
+	testASN.Close()
+
+	// Move temp files to final location. Both must succeed before we reload.
 	cityFinal := filepath.Join(dbPath, cityFile)
 	asnFinal := filepath.Join(dbPath, asnFile)
 
 	if err := os.Rename(cityTmp, cityFinal); err != nil {
+		os.Remove(cityTmp)
 		os.Remove(asnTmp)
 		return nil, fmt.Errorf("move city db: %w", err)
 	}
 	if err := os.Rename(asnTmp, asnFinal); err != nil {
-		// City already moved to final; ASN temp orphaned — clean up
 		os.Remove(asnTmp)
 		return nil, fmt.Errorf("move asn db: %w", err)
 	}
 
-	// Re-reload from the final paths so the reader tracks the correct filenames
+	// Files are in their final location — now swap the live readers.
 	if err := r.Reload(cityFinal, asnFinal); err != nil {
 		return nil, fmt.Errorf("reload from final paths: %w", err)
 	}

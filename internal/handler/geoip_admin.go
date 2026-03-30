@@ -38,12 +38,12 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 	}
 
 	if h.status != nil {
-		h.status.Services.GeoIP = config.GeoIPStatus{
+		h.status.SetGeoIPStatus(config.GeoIPStatus{
 			Enabled: true,
 			CityDB:  cityFile,
 			ASNDB:   asnFile,
 			DBPath:  dbPath,
-		}
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
