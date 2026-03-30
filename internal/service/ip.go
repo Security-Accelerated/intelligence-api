@@ -155,6 +155,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 			if err != nil {
 				resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "asn", Message: sanitizeErr(err)})
 				if errors.Is(err, domain.ErrDBNotLoaded) {
+					geoDBMissing = true
 					logger.Info("asn database not loaded", zap.String("ip", ip))
 				} else {
 					logger.Warn("lookup failed", zap.String("lookup", "asn"), zap.String("ip", ip), zap.Error(err))
