@@ -141,6 +141,8 @@
   <div class="sidebar-section">
     <div class="sidebar-section-title">Reference</div>
     <a href="#full-response-example">Full Response</a>
+    <a href="#rate-limiting">Rate Limiting</a>
+    <a href="#error-handling">Error Handling</a>
   </div>
 </nav>
 
@@ -352,6 +354,43 @@ resp = requests.post(
     <span class="str">"errors"</span>: []
   }
 ]</code></pre>
+
+  <h2 id="rate-limiting">Rate Limiting</h2>
+  <p>Requests are rate-limited per API key using a sliding window. Every response includes rate limit headers:</p>
+  <table>
+    <thead><tr><th>Header</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests per minute for your plan</td></tr>
+      <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
+      <tr><td><code>Retry-After</code></td><td>Seconds to wait before retrying (only on 429)</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>Plan</th><th>Rate Limit</th><th>Max IPs / Request</th></tr></thead>
+    <tbody>
+      <tr><td>Free</td><td>5 req/min</td><td>1</td></tr>
+      <tr><td>Basic</td><td>30 req/min</td><td>5</td></tr>
+      <tr><td>Pro</td><td>120 req/min</td><td>20</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="error-handling">Error Handling</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>ips</code> field, or non-routable IP address</td></tr>
+      <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
+      <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this feature (e.g. <code>threat_intel</code> requires Pro)</td></tr>
+      <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
+      <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
+      <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
+    </tbody>
+  </table>
+  <p>All error responses use this format:</p>
+  <pre><code>{
+  <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
+}</code></pre>
+  <div class="note">Partial lookup failures are different from HTTP errors. When individual lookups fail (e.g., reverse DNS timeout), the request still returns <code>200 OK</code> with successful lookups populated and failures listed in the <code>errors</code> array.</div>
 
 </main>
 
