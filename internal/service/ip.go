@@ -132,12 +132,14 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
+				resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "geo", Message: sanitizeErr(err)})
 				if errors.Is(err, domain.ErrDBNotLoaded) {
 					geoDBMissing = true
+					logger.Info("geoip database not loaded", zap.String("ip", ip))
+				} else {
+					logger.Warn("lookup failed", zap.String("lookup", "geo"), zap.String("ip", ip), zap.Error(err))
+					s.alerter.RecordLookupError("geo")
 				}
-				logger.Warn("lookup failed", zap.String("lookup", "geo"), zap.String("ip", ip), zap.Error(err))
-				resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "geo", Message: sanitizeErr(err)})
-				s.alerter.RecordLookupError("geo")
 				return
 			}
 			resp.Geo = result
@@ -151,9 +153,13 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				logger.Warn("lookup failed", zap.String("lookup", "asn"), zap.String("ip", ip), zap.Error(err))
 				resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "asn", Message: sanitizeErr(err)})
-				s.alerter.RecordLookupError("asn")
+				if errors.Is(err, domain.ErrDBNotLoaded) {
+					logger.Info("asn database not loaded", zap.String("ip", ip))
+				} else {
+					logger.Warn("lookup failed", zap.String("lookup", "asn"), zap.String("ip", ip), zap.Error(err))
+					s.alerter.RecordLookupError("asn")
+				}
 				return
 			}
 			resp.ASN = result
