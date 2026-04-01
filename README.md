@@ -902,6 +902,7 @@ Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to enable. Without them, the
 ## Testing
 
 ```sh
-make test                # unit tests
-make test-integration    # integration tests (uses in-memory Redis, stub auth)
+make test                # unit tests with race detector
+make test-integration    # integration tests (in-memory Redis, stub auth)
+make test-all            # both unit + integration with pass/fail summary
 ```
