@@ -1,11 +1,15 @@
 package safenet
 
 import (
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"go.uber.org/zap"
 )
 
 // NewSafeProxy returns an HTTP proxy server that routes all outbound connections
@@ -38,7 +42,11 @@ func newProxy(dialer *net.Dialer) (*http.Server, net.Listener, error) {
 		}),
 	}
 
-	go srv.Serve(ln)
+	go func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logging.Logger().Error("safe proxy server failed", zap.Error(err))
+		}
+	}()
 
 	return srv, ln, nil
 }
@@ -47,26 +55,28 @@ func newProxy(dialer *net.Dialer) (*http.Server, net.Listener, error) {
 func handleConnect(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 	targetConn, err := dialer.DialContext(r.Context(), "tcp", r.Host)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeProxyError(w, "proxy connect failed", err)
 		return
 	}
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		targetConn.Close()
+		closeConn(targetConn, "target")
 		http.Error(w, "hijack not supported", http.StatusInternalServerError)
 		return
 	}
 
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
-		targetConn.Close()
+		logging.Logger().Warn("proxy hijack failed", zap.Error(err))
+		closeConn(targetConn, "target")
 		return
 	}
 
 	if _, err := clientConn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n")); err != nil {
-		clientConn.Close()
-		targetConn.Close()
+		logging.Logger().Warn("proxy connect response write failed", zap.Error(err))
+		closeConn(clientConn, "client")
+		closeConn(targetConn, "target")
 		return
 	}
 
@@ -98,10 +108,14 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 
 	resp, err := transport.RoundTrip(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		writeProxyError(w, "proxy round trip failed", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logging.Logger().Debug("proxy response body close failed", zap.Error(err))
+		}
+	}()
 
 	removeHopByHop(resp.Header)
 
@@ -111,7 +125,9 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, dialer *net.Dialer) {
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil && !errors.Is(err, net.ErrClosed) {
+		logging.Logger().Warn("proxy response copy failed", zap.Error(err))
+	}
 }
 
 // removeHopByHop strips standard hop-by-hop headers and any additional headers
@@ -131,7 +147,33 @@ func removeHopByHop(h http.Header) {
 }
 
 func transfer(dst io.WriteCloser, src io.ReadCloser) {
-	defer dst.Close()
-	defer src.Close()
-	io.Copy(dst, src)
+	defer closeConn(dst, "proxy-dst")
+	defer closeConn(src, "proxy-src")
+
+	if _, err := io.Copy(dst, src); err != nil && !errors.Is(err, net.ErrClosed) && !strings.Contains(err.Error(), "use of closed network connection") {
+		logging.Logger().Debug("proxy stream copy failed", zap.Error(err))
+	}
+}
+
+func writeProxyError(w http.ResponseWriter, msg string, err error) {
+	logging.Logger().Warn(msg, zap.Error(err))
+
+	message := "upstream request failed"
+	var blocked *BlockedError
+	if errors.As(err, &blocked) {
+		message = "upstream request blocked by network policy"
+	}
+	http.Error(w, message, http.StatusBadGateway)
+}
+
+func closeConn(conn io.Closer, name string) {
+	if conn == nil {
+		return
+	}
+	if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		logging.Logger().Debug("proxy close failed",
+			zap.String("conn", name),
+			zap.Error(err),
+		)
+	}
 }

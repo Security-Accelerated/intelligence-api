@@ -197,3 +197,18 @@ func TestInfo_VersionField(t *testing.T) {
 		t.Errorf("system.version = %v, want %q", sys["version"], "2.5.3")
 	}
 }
+
+func TestInfo_NoStatusConfigured(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	r.GET("/v1/info", h.Info)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}

@@ -48,7 +48,11 @@ func Run(logger *zap.Logger, version string) error {
 	if err != nil {
 		return fmt.Errorf("connect to postgres: %w", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("postgres close failed", zap.Error(err))
+		}
+	}()
 	logger.Info("connected to postgres", zap.Any("config", status.Database))
 
 	// Auth
@@ -68,7 +72,11 @@ func Run(logger *zap.Logger, version string) error {
 		cfg.GetString("redis.password"),
 		cfg.GetInt("redis.db"),
 	)
-	defer redisCache.Close()
+	defer func() {
+		if err := redisCache.Close(); err != nil {
+			logger.Error("redis close failed", zap.Error(err))
+		}
+	}()
 
 	if err := redisCache.Ping(ctx); err != nil {
 		return fmt.Errorf("connect to redis: %w", err)
@@ -120,9 +128,10 @@ func Run(logger *zap.Logger, version string) error {
 		logger.Warn("failed to load fingerprint rules from DB, using embedded defaults", zap.Error(err))
 		fpSource = "embedded"
 		defaults, defErr := domain.DefaultRules()
-		if defErr == nil {
-			fpService.Engine().LoadRules(defaults)
+		if defErr != nil {
+			return fmt.Errorf("load embedded fingerprint defaults: %w", defErr)
 		}
+		fpService.Engine().LoadRules(defaults)
 	}
 	status.Services.Fingerprint = config.FingerprintStatus{
 		Source:    fpSource,
@@ -225,7 +234,11 @@ func Run(logger *zap.Logger, version string) error {
 		geoReader = domain.NewEmptyGeoIPReader()
 		logger.Info("geoip databases not found, use POST /v1/admin/geoip/refresh to bootstrap", zap.String("path", cityPath))
 	}
-	defer geoReader.Close()
+	defer func() {
+		if err := geoReader.Close(); err != nil {
+			logger.Error("geoip reader close failed", zap.Error(err))
+		}
+	}()
 
 	// IP threat intel providers (adapters around the domain providers)
 	var ipTIProviders []domain.IPThreatIntelProvider

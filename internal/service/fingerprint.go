@@ -39,7 +39,10 @@ func (s *FingerprintService) LoadFromDB(ctx context.Context) error {
 		}
 		s.engine.LoadRules(defaults)
 
-		data, _ := json.Marshal(defaults)
+		data, err := json.Marshal(defaults)
+		if err != nil {
+			return fmt.Errorf("marshal default rules: %w", err)
+		}
 		_, insertErr := s.db.ExecContext(ctx,
 			"INSERT INTO fingerprint_rules (rules) VALUES ($1)", data)
 		if insertErr != nil {

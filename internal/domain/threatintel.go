@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"strings"
 	"sync"
 )
 
@@ -50,9 +51,13 @@ func LookupThreatIntel(ctx context.Context, domain string, providers []ThreatInt
 	var errs []LookupError
 	for pr := range ch {
 		if pr.err != nil {
+			msg := pr.err.Error()
+			if i := strings.LastIndex(msg, ": "); i != -1 {
+				msg = msg[i+2:]
+			}
 			errs = append(errs, LookupError{
 				Lookup:  "threat_intel:" + pr.name,
-				Message: pr.err.Error(),
+				Message: msg,
 			})
 			continue
 		}

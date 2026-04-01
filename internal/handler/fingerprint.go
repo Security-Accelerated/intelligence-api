@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
@@ -11,6 +12,11 @@ import (
 
 // GetFingerprints returns the current technology fingerprint rules.
 func (h *Handler) GetFingerprints(c *gin.Context) {
+	if h.fingerprintService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fingerprint service not configured"})
+		return
+	}
+
 	rules := h.fingerprintService.GetRules()
 	c.JSON(http.StatusOK, gin.H{
 		"count": len(rules),
@@ -20,6 +26,11 @@ func (h *Handler) GetFingerprints(c *gin.Context) {
 
 // UpdateFingerprints replaces the technology fingerprint rules.
 func (h *Handler) UpdateFingerprints(c *gin.Context) {
+	if h.fingerprintService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "fingerprint service not configured"})
+		return
+	}
+
 	var rules []domain.TechRule
 	if err := c.ShouldBindJSON(&rules); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: expected a JSON array of rules"})
@@ -38,7 +49,15 @@ func (h *Handler) UpdateFingerprints(c *gin.Context) {
 	}
 
 	if err := h.fingerprintService.UpdateRules(c.Request.Context(), rules, apiKeyID); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// Validation errors (e.g., missing rule name) are client errors.
+		// Database errors are server errors and should not leak details.
+		msg := err.Error()
+		if strings.Contains(msg, "sql") || strings.Contains(msg, "database") || strings.Contains(msg, "connection") {
+			logging.Logger().Error("fingerprint update failed", zap.Error(err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update fingerprint rules"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
 

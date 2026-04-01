@@ -40,12 +40,15 @@ func NewIPService(
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
 	}
+	if alerter == nil {
+		alerter = &notifications.NoopRecorder{}
+	}
 
 	svc := &IPService{
-		cache:         c,
-		cacheTTL:      cacheTTL,
-		lookupTimeout: lookupTimeout,
-		alerter:       alerter,
+		cache:              c,
+		cacheTTL:           cacheTTL,
+		lookupTimeout:      lookupTimeout,
+		alerter:            alerter,
 		lookupReverseDNS:   domain.LookupReverseDNS,
 		lookupAbuseContact: domain.LookupAbuseContact,
 		lookupThreatIntel: func(ctx context.Context, ip string) (*domain.ThreatIntelInfo, []domain.LookupError) {
@@ -169,34 +172,34 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	// Reverse DNS
 	if s.lookupReverseDNS != nil {
-	wg.Go(func() {
-		result, err := s.lookupReverseDNS(ctx, ip)
-		mu.Lock()
-		defer mu.Unlock()
-		if err != nil {
-			logger.Warn("lookup failed", zap.String("lookup", "reverse_dns"), zap.String("ip", ip), zap.Error(err))
-			resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "reverse_dns", Message: sanitizeErr(err)})
-			s.alerter.RecordLookupError("reverse_dns")
-			return
-		}
-		resp.ReverseDNS = result
-	})
+		wg.Go(func() {
+			result, err := s.lookupReverseDNS(ctx, ip)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "reverse_dns"), zap.String("ip", ip), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "reverse_dns", Message: sanitizeErr(err)})
+				s.alerter.RecordLookupError("reverse_dns")
+				return
+			}
+			resp.ReverseDNS = result
+		})
 	}
 
 	// Abuse contact (RDAP)
 	if s.lookupAbuseContact != nil {
-	wg.Go(func() {
-		result, err := s.lookupAbuseContact(ctx, ip)
-		mu.Lock()
-		defer mu.Unlock()
-		if err != nil {
-			logger.Warn("lookup failed", zap.String("lookup", "abuse_contact"), zap.String("ip", ip), zap.Error(err))
-			resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "abuse_contact", Message: sanitizeErr(err)})
-			s.alerter.RecordLookupError("abuse_contact")
-			return
-		}
-		resp.AbuseContact = result
-	})
+		wg.Go(func() {
+			result, err := s.lookupAbuseContact(ctx, ip)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "abuse_contact"), zap.String("ip", ip), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{Lookup: "abuse_contact", Message: sanitizeErr(err)})
+				s.alerter.RecordLookupError("abuse_contact")
+				return
+			}
+			resp.AbuseContact = result
+		})
 	}
 
 	// Threat intel (optional, pro-only)

@@ -49,17 +49,22 @@ type poolStats struct {
 }
 
 type cacheStats struct {
-	Addr           string   `json:"addr"`
-	DB             int      `json:"db"`
-	CacheTTL       string   `json:"cache_ttl"`
-	AuthCacheTTL   string   `json:"auth_cache_ttl"`
-	PingMs         *float64 `json:"ping_ms,omitempty"`
-	KeyCount       *int64   `json:"key_count,omitempty"`
-	MemoryUsed     string   `json:"memory_used,omitempty"`
-	AuthCacheSize  *int     `json:"auth_cache_size,omitempty"`
+	Addr          string   `json:"addr"`
+	DB            int      `json:"db"`
+	CacheTTL      string   `json:"cache_ttl"`
+	AuthCacheTTL  string   `json:"auth_cache_ttl"`
+	PingMs        *float64 `json:"ping_ms,omitempty"`
+	KeyCount      *int64   `json:"key_count,omitempty"`
+	MemoryUsed    string   `json:"memory_used,omitempty"`
+	AuthCacheSize *int     `json:"auth_cache_size,omitempty"`
 }
 
 func (h *Handler) Info(c *gin.Context) {
+	if h.status == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "status not configured"})
+		return
+	}
+
 	s := h.status
 
 	// System — static snapshot + computed uptime

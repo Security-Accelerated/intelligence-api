@@ -12,9 +12,11 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/usage"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,10 +36,12 @@ type ChangelogChange struct {
 	Audience string `json:"audience" yaml:"audience"`
 }
 
-func parseChangelog() []ChangelogVersion {
+func parseChangelog() ([]ChangelogVersion, error) {
 	var entries []ChangelogVersion
-	yaml.Unmarshal(changelogYAML, &entries)
-	return entries
+	if err := yaml.Unmarshal(changelogYAML, &entries); err != nil {
+		return nil, fmt.Errorf("parse changelog yaml: %w", err)
+	}
+	return entries, nil
 }
 
 // FingerprintAdminService provides admin access to fingerprint rules.
@@ -80,6 +84,11 @@ type Handler struct {
 }
 
 func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
+	changelog, err := parseChangelog()
+	if err != nil {
+		logging.Logger().Error("failed to parse changelog", zap.Error(err))
+	}
+
 	return &Handler{
 		domainService:      domainService,
 		ipService:          ipService,
@@ -92,7 +101,7 @@ func New(domainService DomainLookupService, ipService IPLookupService, fingerpri
 		authCacheStats:     authCacheStats,
 		db:                 db,
 		status:             status,
-		changelog:          parseChangelog(),
+		changelog:          changelog,
 	}
 }
 

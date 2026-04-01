@@ -3,8 +3,10 @@ package notifications
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/logging"
@@ -44,20 +46,39 @@ func NewPushoverNotifier(apiToken, userKey string) *PushoverNotifier {
 
 // Send posts a notification to the Pushover API.
 func (p *PushoverNotifier) Send(ctx context.Context, title, message string, priority int) error {
-	resp, err := p.client.PostForm(p.endpoint, url.Values{
+	form := url.Values{
 		"token":    {p.apiToken},
 		"user":     {p.userKey},
 		"title":    {title},
 		"message":  {message},
 		"priority": {fmt.Sprintf("%d", priority)},
-	})
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("build pushover request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := p.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("pushover request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logging.Logger().Warn("pushover response close failed", zap.Error(err))
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("pushover returned status %d", resp.StatusCode)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		if readErr != nil {
+			return fmt.Errorf("read pushover error response: %w", readErr)
+		}
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			return fmt.Errorf("pushover returned status %d", resp.StatusCode)
+		}
+		return fmt.Errorf("pushover returned status %d: %s", resp.StatusCode, msg)
 	}
 
 	logging.Logger().Info("pushover notification sent",

@@ -69,6 +69,13 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 		return fmt.Errorf("retrieve checkout session: %w", err)
 	}
 
+	if sess.Customer == nil {
+		return fmt.Errorf("checkout session %s has no customer", event.GetObjectValue("id"))
+	}
+	if sess.CustomerDetails == nil {
+		return fmt.Errorf("checkout session %s has no customer details", event.GetObjectValue("id"))
+	}
+
 	stripeCustomerID := sess.Customer.ID
 	email := sess.CustomerDetails.Email
 
