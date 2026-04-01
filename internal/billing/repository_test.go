@@ -398,6 +398,27 @@ func TestUpdatePlan_ExecError(t *testing.T) {
 	}
 }
 
+func TestUpdatePlan_RowsAffectedError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	mock.ExpectExec("UPDATE customers SET plan").
+		WithArgs("pro", "cus_123").
+		WillReturnResult(sqlmock.NewErrorResult(errors.New("rows affected failed")))
+
+	repo := NewRepository(db)
+	err = repo.UpdatePlan(context.Background(), "cus_123", "pro")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
 // --- DowngradeToFree ---
 
 func TestDowngradeToFree_DelegatesToUpdatePlan(t *testing.T) {
@@ -511,6 +532,32 @@ func TestDeactivateStaleKeys_ExecError(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("count = %d, want 0 on error", count)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestDeactivateStaleKeys_RowsAffectedError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	cutoff := time.Now().Add(-30 * 24 * time.Hour)
+
+	mock.ExpectExec("UPDATE customers SET active = false").
+		WithArgs(cutoff).
+		WillReturnResult(sqlmock.NewErrorResult(errors.New("rows affected failed")))
+
+	repo := NewRepository(db)
+	count, err := repo.DeactivateStaleKeys(context.Background(), cutoff)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if count != 0 {
+		t.Fatalf("count = %d, want 0 on error", count)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unfulfilled expectations: %v", err)

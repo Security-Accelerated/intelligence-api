@@ -25,6 +25,11 @@ type checkoutSuccessData struct {
 
 // StripeWebhook handles incoming Stripe webhook events.
 func (h *Handler) StripeWebhook(c *gin.Context) {
+	if h.billingService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "billing not configured"})
+		return
+	}
+
 	payload, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
@@ -51,6 +56,11 @@ func (h *Handler) StripeWebhook(c *gin.Context) {
 
 // CheckoutSuccess renders the success page showing the provisioned API key.
 func (h *Handler) CheckoutSuccess(c *gin.Context) {
+	if h.billingService == nil {
+		renderCheckoutError(c, "Billing is not configured.")
+		return
+	}
+
 	sessionID := c.Query("session_id")
 	if sessionID == "" {
 		renderCheckoutError(c, "Missing session ID. Please use the link from your checkout confirmation.")
@@ -72,19 +82,19 @@ func (h *Handler) CheckoutSuccess(c *gin.Context) {
 		portalLink = h.cfg.GetString("stripe.portal_link")
 	}
 
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Header("Cache-Control", "no-store")
-	c.Status(http.StatusOK)
-	checkoutSuccessTmpl.Execute(c.Writer, checkoutSuccessData{
+	renderHTML(c, http.StatusOK, checkoutSuccessTmpl, checkoutSuccessData{
 		APIKey:     rawKey,
 		Plan:       "paid",
 		PortalLink: portalLink,
+	}, map[string]string{
+		"Content-Type":  "text/html; charset=utf-8",
+		"Cache-Control": "no-store",
 	})
 }
 
 func renderCheckoutError(c *gin.Context, msg string) {
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Header("Cache-Control", "no-store")
-	c.Status(http.StatusOK)
-	checkoutSuccessTmpl.Execute(c.Writer, checkoutSuccessData{Error: msg})
+	renderHTML(c, http.StatusOK, checkoutSuccessTmpl, checkoutSuccessData{Error: msg}, map[string]string{
+		"Content-Type":  "text/html; charset=utf-8",
+		"Cache-Control": "no-store",
+	})
 }

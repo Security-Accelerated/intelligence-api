@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
+	"go.uber.org/zap"
 )
 
 // DefaultMaxPNGBytes is the default maximum size for a screenshot PNG (5 MB).
@@ -71,7 +73,9 @@ func probeURL(ctx context.Context, domain string) (string, int, error) {
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			logging.Logger().Debug("screenshot probe response close failed", zap.Error(err))
+		}
 		return u, resp.StatusCode, nil
 	}
 
@@ -86,7 +90,11 @@ func captureScreenshot(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("start safe proxy: %w", err)
 	}
-	defer proxy.Close()
+	defer func() {
+		if err := proxy.Close(); err != nil {
+			logging.Logger().Warn("safe proxy close failed", zap.Error(err))
+		}
+	}()
 
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.WindowSize(1280, 720),

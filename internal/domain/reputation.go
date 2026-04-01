@@ -61,9 +61,13 @@ func LookupReputation(ctx context.Context, domain string) (*ReputationResult, []
 	var errs []LookupError
 	for pr := range ch {
 		if pr.err != nil {
+			msg := pr.err.Error()
+			if i := strings.LastIndex(msg, ": "); i != -1 {
+				msg = msg[i+2:]
+			}
 			errs = append(errs, LookupError{
 				Lookup:  "reputation:" + pr.name,
-				Message: pr.err.Error(),
+				Message: msg,
 			})
 			continue
 		}

@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	ErrKeyNotFound = errors.New("provisioned key not found")
+	ErrKeyNotFound  = errors.New("provisioned key not found")
 	ErrKeyRetrieved = errors.New("key has already been retrieved")
-	ErrKeyExpired  = errors.New("provisioned key has expired")
+	ErrKeyExpired   = errors.New("provisioned key has expired")
 )
 
 // Repository handles billing-related database operations.
@@ -28,14 +28,20 @@ func NewRepository(db *sql.DB) *Repository {
 // transaction. This ensures all three records exist atomically — a partial failure
 // cannot leave a customer without a retrievable API key.
 // Returns the new customer ID.
-func (r *Repository) ProvisionCustomer(ctx context.Context, name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string) (int, error) {
+func (r *Repository) ProvisionCustomer(ctx context.Context, name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string) (customerID int, err error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err == nil {
+			return
+		}
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			err = errors.Join(err, fmt.Errorf("rollback transaction: %w", rbErr))
+		}
+	}()
 
-	var customerID int
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO customers (name, email, stripe_customer_id, plan, active, created_at)
 		 VALUES ($1, $2, $3, $4, true, now())
@@ -125,7 +131,10 @@ func (r *Repository) UpdatePlan(ctx context.Context, stripeCustomerID, plan stri
 	if err != nil {
 		return fmt.Errorf("update plan: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("update plan rows affected: %w", err)
+	}
 	if rows == 0 {
 		return fmt.Errorf("no active customer found with stripe_customer_id %s", stripeCustomerID)
 	}
@@ -158,15 +167,18 @@ func (r *Repository) DeactivateStaleKeys(ctx context.Context, cutoff time.Time) 
 			SELECT c.id FROM customers c
 			JOIN api_keys ak ON ak.customer_id = c.id
 			WHERE c.active = true AND c.plan != 'admin'
-			  AND (ak.last_used_at IS NULL AND ak.created_at < $1)
-			   OR (ak.last_used_at IS NOT NULL AND ak.last_used_at < $1)
+			  AND ((ak.last_used_at IS NULL AND ak.created_at < $1)
+			    OR (ak.last_used_at IS NOT NULL AND ak.last_used_at < $1))
 		 )`,
 		cutoff,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("deactivate stale keys: %w", err)
 	}
-	rows, _ := result.RowsAffected()
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("deactivate stale keys rows affected: %w", err)
+	}
 	return int(rows), nil
 }
 
@@ -182,4 +194,3 @@ func (r *Repository) CustomerExistsByStripeID(ctx context.Context, stripeCustome
 	}
 	return exists, nil
 }
-

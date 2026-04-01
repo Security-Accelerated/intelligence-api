@@ -43,6 +43,11 @@ func normalizeDomain(raw string) (string, bool) {
 }
 
 func (h *Handler) DomainLookup(c *gin.Context) {
+	if h.domainService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "domain intelligence not configured"})
+		return
+	}
+
 	var req domain.DomainRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		var maxErr *http.MaxBytesError

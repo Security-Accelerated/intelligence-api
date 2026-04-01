@@ -11,11 +11,17 @@ var version = "dev"
 
 func main() {
 	logger := logging.Logger()
-	defer logger.Sync()
+	defer func() {
+		if err := logging.Sync(logger); err != nil {
+			_, _ = os.Stderr.WriteString("logger sync failed: " + err.Error() + "\n")
+		}
+	}()
 
 	if err := app.Run(logger, version); err != nil {
 		logger.Error(err.Error())
-		logger.Sync()
+		if syncErr := logging.Sync(logger); syncErr != nil {
+			_, _ = os.Stderr.WriteString("logger sync failed: " + syncErr.Error() + "\n")
+		}
 		os.Exit(1)
 	}
 }

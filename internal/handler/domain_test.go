@@ -100,6 +100,18 @@ func TestDomainLookup_ValidDomain(t *testing.T) {
 	}
 }
 
+func TestDomainLookup_NoService(t *testing.T) {
+	r := newTestRouter(nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func TestDomainLookup_MultipleDomains(t *testing.T) {
 	r := newTestRouter(&mockService{})
 	w := httptest.NewRecorder()

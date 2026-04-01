@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/service"
 )
 
 type mockFingerprintService struct {
@@ -155,9 +156,9 @@ func TestUpdateFingerprints_EmptyArray(t *testing.T) {
 	}
 }
 
-func TestUpdateFingerprints_ServiceError(t *testing.T) {
+func TestUpdateFingerprints_ValidationError(t *testing.T) {
 	fpSvc := &mockFingerprintService{
-		err: errors.New("rule 0: name is required"),
+		err: &service.ValidationError{Message: "rule 0: name is required"},
 	}
 	r := newFingerprintRouter(fpSvc)
 
@@ -169,5 +170,26 @@ func TestUpdateFingerprints_ServiceError(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestUpdateFingerprints_DatabaseError(t *testing.T) {
+	fpSvc := &mockFingerprintService{
+		err: errors.New("insert fingerprint rules: connection refused"),
+	}
+	r := newFingerprintRouter(fpSvc)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/fingerprints",
+		strings.NewReader(`[{"name":"Nginx","category":"web-server","headers":{"Server":"nginx"}}]`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
+	}
+	// Should not leak the raw error
+	if strings.Contains(w.Body.String(), "connection refused") {
+		t.Error("response should not contain raw database error")
 	}
 }

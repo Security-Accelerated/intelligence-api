@@ -67,9 +67,9 @@ func (h *Handler) buildDocsData() docsData {
 
 func (h *Handler) renderDocs(c *gin.Context, tmpl *template.Template) {
 	data := h.buildDocsData()
-	c.Header("Content-Type", "text/html; charset=utf-8")
-	c.Status(http.StatusOK)
-	tmpl.Execute(c.Writer, data)
+	renderHTML(c, http.StatusOK, tmpl, data, map[string]string{
+		"Content-Type": "text/html; charset=utf-8",
+	})
 }
 
 func (h *Handler) Docs(c *gin.Context) {

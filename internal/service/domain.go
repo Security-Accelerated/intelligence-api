@@ -33,26 +33,26 @@ func sanitizeErr(err error) string {
 }
 
 type DomainService struct {
-	cache             cache.Cache
-	cacheTTL          time.Duration
-	lookupTimeout     time.Duration
-	screenshotTimeout time.Duration
+	cache               cache.Cache
+	cacheTTL            time.Duration
+	lookupTimeout       time.Duration
+	screenshotTimeout   time.Duration
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
 	fingerprintEngine   *domain.FingerprintEngine
 	alerter             notifications.ErrorRecorder
 
-	lookupWhois      func(ctx context.Context, d string) (*domain.WhoisInfo, error)
-	lookupDNS        func(ctx context.Context, d string) (*domain.DNSInfo, error)
-	lookupSSL        func(ctx context.Context, d string) (*domain.SSLInfo, error)
-	lookupHeaders    func(ctx context.Context, d string) (*domain.HeadersInfo, error)
-	lookupScreenshot     func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
-	lookupReputation     func(ctx context.Context, d string) (*domain.ReputationResult, []domain.LookupError)
-	lookupEmailSecurity  func(ctx context.Context, d string) (*domain.EmailSecurityInfo, error)
-	lookupSubdomains     func(ctx context.Context, d string, opts domain.SubdomainOptions) (*domain.SubdomainInfo, error)
-	lookupCTLogs         func(ctx context.Context, d string, maxEntries int) (*domain.CTLogsInfo, error)
-	lookupBGP            func(ctx context.Context, d string) (*domain.BGPInfo, error)
-	lookupThreatIntel    func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError)
+	lookupWhois         func(ctx context.Context, d string) (*domain.WhoisInfo, error)
+	lookupDNS           func(ctx context.Context, d string) (*domain.DNSInfo, error)
+	lookupSSL           func(ctx context.Context, d string) (*domain.SSLInfo, error)
+	lookupHeaders       func(ctx context.Context, d string) (*domain.HeadersInfo, error)
+	lookupScreenshot    func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
+	lookupReputation    func(ctx context.Context, d string) (*domain.ReputationResult, []domain.LookupError)
+	lookupEmailSecurity func(ctx context.Context, d string) (*domain.EmailSecurityInfo, error)
+	lookupSubdomains    func(ctx context.Context, d string, opts domain.SubdomainOptions) (*domain.SubdomainInfo, error)
+	lookupCTLogs        func(ctx context.Context, d string, maxEntries int) (*domain.CTLogsInfo, error)
+	lookupBGP           func(ctx context.Context, d string) (*domain.BGPInfo, error)
+	lookupThreatIntel   func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError)
 }
 
 func NewDomainService(c cache.Cache, cacheTTL, lookupTimeout, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
@@ -64,6 +64,9 @@ func NewDomainService(c cache.Cache, cacheTTL, lookupTimeout, screenshotTimeout 
 	}
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
+	}
+	if alerter == nil {
+		alerter = &notifications.NoopRecorder{}
 	}
 	return &DomainService{
 		cache:               c,
