@@ -9,6 +9,13 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
+// ValidationError indicates a client input error (as opposed to a server/database error).
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string { return e.Message }
+
 // FingerprintService manages technology fingerprint rules in PostgreSQL
 // and exposes a FingerprintEngine for runtime matching.
 type FingerprintService struct {
@@ -66,10 +73,10 @@ func (s *FingerprintService) LoadFromDB(ctx context.Context) error {
 func (s *FingerprintService) UpdateRules(ctx context.Context, rules []domain.TechRule, apiKeyID int) error {
 	for i, r := range rules {
 		if r.Name == "" {
-			return fmt.Errorf("rule %d: name is required", i)
+			return &ValidationError{Message: fmt.Sprintf("rule %d: name is required", i)}
 		}
 		if !domain.ValidCategories[r.Category] {
-			return fmt.Errorf("rule %d (%s): invalid category %q", i, r.Name, r.Category)
+			return &ValidationError{Message: fmt.Sprintf("rule %d (%s): invalid category %q", i, r.Name, r.Category)}
 		}
 	}
 

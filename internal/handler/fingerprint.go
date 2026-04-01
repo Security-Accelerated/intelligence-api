@@ -1,12 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/service"
 	"go.uber.org/zap"
 )
 
@@ -49,15 +50,13 @@ func (h *Handler) UpdateFingerprints(c *gin.Context) {
 	}
 
 	if err := h.fingerprintService.UpdateRules(c.Request.Context(), rules, apiKeyID); err != nil {
-		// Validation errors (e.g., missing rule name) are client errors.
-		// Database errors are server errors and should not leak details.
-		msg := err.Error()
-		if strings.Contains(msg, "sql") || strings.Contains(msg, "database") || strings.Contains(msg, "connection") {
-			logging.Logger().Error("fingerprint update failed", zap.Error(err))
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update fingerprint rules"})
+		var validationErr *service.ValidationError
+		if errors.As(err, &validationErr) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": validationErr.Message})
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		logging.Logger().Error("fingerprint update failed", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update fingerprint rules"})
 		return
 	}
 
