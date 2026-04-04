@@ -5,20 +5,34 @@ import (
 	"database/sql"
 	"fmt"
 
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/spf13/viper"
 )
 
 func openDB(ctx context.Context, cfg *viper.Viper) (*sql.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		cfg.GetString("postgres.host"),
-		cfg.GetInt("postgres.port"),
+	// Build a postgres:// URL so pgx can parse it natively.
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		cfg.GetString("postgres.user"),
 		cfg.GetString("postgres.password"),
+		cfg.GetString("postgres.host"),
+		cfg.GetInt("postgres.port"),
 		cfg.GetString("postgres.dbname"),
 		cfg.GetString("postgres.sslmode"),
 	)
-	db, err := sql.Open("postgres", dsn)
+
+	// Parse the DSN into a pgx config so we can set simple protocol mode.
+	// Simple protocol avoids prepared statements, which Neon's serverless
+	// pooler (PgBouncer in transaction mode) invalidates between requests.
+	connConfig, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parse postgres dsn: %w", err)
+	}
+	connConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	// Register the config with pgx/stdlib and open via database/sql.
+	connStr := stdlib.RegisterConnConfig(connConfig)
+	db, err := sql.Open("pgx", connStr)
 	if err != nil {
 		return nil, err
 	}
