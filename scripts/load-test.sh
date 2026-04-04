@@ -264,9 +264,11 @@ DOMAIN_PID=$!
 run_worker "ip" "$IP_LOG" "${IPS[@]}" &
 IP_PID=$!
 
-# Wait for both
-wait "$DOMAIN_PID" 2>/dev/null || true
-wait "$IP_PID" 2>/dev/null || true
+# Wait for both and capture exit status
+DOMAIN_STATUS=0
+IP_STATUS=0
+wait "$DOMAIN_PID" || DOMAIN_STATUS=$?
+wait "$IP_PID" || IP_STATUS=$?
 
 # --- Aggregate results ---
 end_time=$(date +%s)
@@ -313,4 +315,4 @@ fi
 echo "============================================"
 echo ""
 
-[ "$fail" -eq 0 ]
+[ "$fail" -eq 0 ] && [ "$DOMAIN_STATUS" -eq 0 ] && [ "$IP_STATUS" -eq 0 ]
