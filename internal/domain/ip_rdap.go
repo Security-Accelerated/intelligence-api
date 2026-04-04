@@ -21,7 +21,8 @@ var rirEndpoints = map[string]string{
 	"afrinic": "https://rdap.afrinic.net/rdap/ip/",
 }
 
-// rdapLimiter prevents hammering any single RIR endpoint under load.
+// rdapLimiter is a global safety net that limits total RDAP request volume
+// across all RIR endpoints to avoid overwhelming upstream services under load.
 var rdapLimiter = rate.NewLimiter(rate.Limit(10), 5) // 10 req/s, burst of 5
 
 // rdapResponse is a minimal subset of the RDAP IP Network response.
@@ -112,7 +113,6 @@ func rirEndpointForIP(ip string) string {
 		first >= 5 && first <= 5,
 		first >= 25 && first <= 31,
 		first >= 37 && first <= 37,
-		first >= 41 && first <= 42,
 		first >= 46 && first <= 46,
 		first >= 51 && first <= 51,
 		first >= 62 && first <= 62,
