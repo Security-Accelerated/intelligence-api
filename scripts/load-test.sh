@@ -2,7 +2,7 @@
 # Load test — hits domain and IP endpoints concurrently with enough unique
 # targets to avoid cache hits. Measures response times and error rates.
 #
-# With ~500 domains and ~1500 IPs running concurrently, this runs 30-60 minutes.
+# With ~1000 domains and ~3000 IPs running concurrently, this runs 60-120 minutes.
 #
 # Usage:
 #   ./scripts/load-test.sh                          # localhost
@@ -39,7 +39,7 @@ DOMAIN_LOG="$TMPDIR/domain.log"
 IP_LOG="$TMPDIR/ip.log"
 touch "$DOMAIN_LOG" "$IP_LOG"
 
-# --- ~500 unique domains ---
+# --- ~1000 unique domains ---
 DOMAINS=(
     # Big tech
     "google.com" "youtube.com" "facebook.com" "instagram.com" "twitter.com"
@@ -138,9 +138,133 @@ DOMAINS=(
     "uber.com" "lyft.com" "airbnb.com" "booking.com" "tripadvisor.com"
     "zillow.com" "realtor.com" "redfin.com" "trulia.com" "apartments.com"
     "yelp.com" "doordash.com" "grubhub.com" "ubereats.com" "instacart.com"
+    # --- Added batch 2 (~500 more) ---
+    # AI / ML
+    "openai.com" "anthropic.com" "huggingface.co" "deepmind.com" "midjourney.com"
+    "stability.ai" "cohere.com" "replicate.com" "perplexity.ai" "together.ai"
+    "wandb.ai" "mlflow.org" "ray.io" "modal.com" "anyscale.com"
+    "nvidia.com" "amd.com" "intel.com" "arm.com" "qualcomm.com"
+    # Infrastructure / DevOps
+    "terraform.io" "ansible.com" "puppet.com" "chef.io" "saltproject.io"
+    "docker.com" "kubernetes.io" "rancher.com" "portainer.io" "nomadproject.io"
+    "consul.io" "vault.hashicorp.com" "prometheus.io" "thanos.io" "cortexmetrics.io"
+    "argocd.io" "fluxcd.io" "tekton.dev" "jenkins.io" "circleci.com"
+    "travisci.com" "drone.io" "semaphoreci.com" "buildkite.com" "concourse-ci.org"
+    # VPN / privacy
+    "mullvad.net" "nordvpn.com" "expressvpn.com" "surfshark.com" "windscribe.com"
+    "privateinternetaccess.com" "cyberghostvpn.com" "ipvanish.com" "tunnelbear.com" "hotspotshield.com"
+    # Analytics / marketing
+    "google-analytics.com" "mixpanel.com" "amplitude.com" "segment.com" "heap.io"
+    "hotjar.com" "crazyegg.com" "optimizely.com" "launchdarkly.com" "split.io"
+    "semrush.com" "ahrefs.com" "moz.com" "similarweb.com" "buzzsumo.com"
+    # Hosting / registrars
+    "bluehost.com" "hostgator.com" "dreamhost.com" "siteground.com" "ionos.com"
+    "a2hosting.com" "inmotionhosting.com" "hostinger.com" "kinsta.com" "wpengine.com"
+    "gandi.net" "hover.com" "porkbun.com" "iwantmyname.com" "dynadot.com"
+    # Collaboration / productivity
+    "dropbox.com" "box.com" "onedrive.com" "icloud.com" "mega.nz"
+    "evernote.com" "obsidian.md" "roamresearch.com" "logseq.com" "coda.io"
+    "webex.com" "gotomeeting.com" "bluejeans.com" "whereby.com" "around.co"
+    # Healthcare / biotech
+    "mayoclinic.org" "webmd.com" "healthline.com" "nih.gov" "cdc.gov"
+    "pfizer.com" "modernatx.com" "johnsonandjohnson.com" "merck.com" "novartis.com"
+    # Automotive
+    "tesla.com" "ford.com" "gm.com" "toyota.com" "bmw.com"
+    "mercedes-benz.com" "volkswagen.com" "audi.com" "porsche.com" "rivian.com"
+    # Travel / transport
+    "delta.com" "united.com" "southwest.com" "aa.com" "jetblue.com"
+    "expedia.com" "kayak.com" "skyscanner.com" "hopper.com" "google.com/travel"
+    "marriott.com" "hilton.com" "hyatt.com" "ihg.com" "wyndhamhotels.com"
+    # Food / beverage
+    "starbucks.com" "mcdonalds.com" "chipotle.com" "dominos.com" "pizzahut.com"
+    "coca-cola.com" "pepsi.com" "nestle.com" "unilever.com" "kraftheinzcompany.com"
+    # Fashion / retail
+    "nike.com" "adidas.com" "zara.com" "hm.com" "uniqlo.com"
+    "target.com" "walmart.com" "costco.com" "homedepot.com" "lowes.com"
+    "ikea.com" "wayfair.com" "overstock.com" "nordstrom.com" "macys.com"
+    # Finance / banking
+    "chase.com" "bankofamerica.com" "wellsfargo.com" "citibank.com" "capitalone.com"
+    "schwab.com" "fidelity.com" "vanguard.com" "robinhood.com" "sofi.com"
+    "goldmansachs.com" "morganstanley.com" "blackrock.com" "jpmorgan.com" "hsbc.com"
+    # Music / creative
+    "ableton.com" "splice.com" "distrokid.com" "tunecore.com" "cdbaby.com"
+    "behance.net" "dribbble.com" "deviantart.com" "artstation.com" "unsplash.com"
+    "pexels.com" "pixabay.com" "shutterstock.com" "gettyimages.com" "istockphoto.com"
+    # Science / research
+    "nature.com" "science.org" "arxiv.org" "researchgate.net" "academia.edu"
+    "scholar.google.com" "pubmed.ncbi.nlm.nih.gov" "ieee.org" "acm.org" "springer.com"
+    # Legal / compliance
+    "legalzoom.com" "docusign.com" "hellosign.com" "pandadoc.com" "contractworks.com"
+    "gdpr.eu" "iapp.org" "onetrust.com" "trustarc.com" "bigid.com"
+    # Real estate / property
+    "compass.com" "opendoor.com" "offerpad.com" "knock.com" "ribbon.com"
+    "costar.com" "loopnet.com" "crexi.com" "reonomy.com" "yardi.com"
+    # Fitness / wellness
+    "peloton.com" "fitbit.com" "myfitnesspal.com" "strava.com" "nike.com/run"
+    "headspace.com" "calm.com" "noom.com" "whoop.com" "oura.com"
+    # Crypto / web3
+    "ethereum.org" "solana.com" "polygon.technology" "avalabs.org" "near.org"
+    "opensea.io" "rarible.com" "foundation.app" "uniswap.org" "aave.com"
+    "chainlink.com" "polkadot.network" "cosmos.network" "algorand.com" "cardano.org"
+    # Logistics / shipping
+    "fedex.com" "ups.com" "usps.com" "dhl.com" "shippo.com"
+    "easypost.com" "aftership.com" "shipstation.com" "flexport.com" "freightos.com"
+    # Miscellaneous
+    "craigslist.org" "nextdoor.com" "meetup.com" "eventbrite.com" "ticketmaster.com"
+    "goodreads.com" "librarything.com" "letterboxd.com" "rateyourmusic.com" "discogs.com"
+    "producthunt.com" "betalist.com" "indiehackers.com" "microacquire.com" "acquire.com"
+    "glassdoor.com" "indeed.com" "monster.com" "ziprecruiter.com" "dice.com"
+    "upwork.com" "fiverr.com" "toptal.com" "freelancer.com" "99designs.com"
+    # Messaging / communication
+    "viber.com" "line.me" "wechat.com" "kakaocorp.com" "threema.ch"
+    "matrix.org" "element.io" "mattermost.com" "rocket.chat" "zulip.com"
+    # CRM / ERP
+    "zoho.com/crm" "pipedrive.com" "copper.com" "insightly.com" "sugarcrm.com"
+    "sap.com" "oracle.com" "workday.com" "servicenow.com" "netsuite.com"
+    # Testing / QA
+    "selenium.dev" "cypress.io" "playwright.dev" "appium.io" "browserstack.com"
+    "saucelabs.com" "lambdatest.com" "testim.io" "mabl.com" "katalon.com"
+    # Data / ETL
+    "snowflake.com" "databricks.com" "fivetran.com" "airbyte.com" "dbt.com"
+    "looker.com" "tableau.com" "powerbi.com" "metabase.com" "redash.io"
+    "apache.org/spark" "kafka.apache.org" "flink.apache.org" "airflow.apache.org" "beam.apache.org"
+    # Maps / geo
+    "mapbox.com" "here.com" "tomtom.com" "openstreetmap.org" "leafletjs.com"
+    "google.com/maps" "bing.com/maps" "waze.com" "what3words.com" "carto.com"
+    # Social / communities
+    "mastodon.social" "bluesky.app" "threads.net" "cohost.org" "lemmy.world"
+    "twitch.tv" "myspace.com" "flickr.com" "500px.com" "vsco.co"
+    # Podcasts / audio
+    "anchor.fm" "simplecast.com" "transistor.fm" "buzzsprout.com" "podbean.com"
+    "overcast.fm" "pocketcasts.com" "castbox.fm" "stitcher.com" "podchaser.com"
+    # IoT / embedded
+    "particle.io" "balena.io" "arduino.cc" "raspberrypi.org" "espressif.com"
+    "adafruit.com" "sparkfun.com" "seeedstudio.com" "digikey.com" "mouser.com"
+    # Sustainability / energy
+    "tesla.com/energy" "enphase.com" "solaredge.com" "sunrun.com" "sunnova.com"
+    "arcadia.com" "ohmconnect.com" "sense.com" "span.io" "emporia.energy"
+    # Space / aerospace
+    "spacex.com" "nasa.gov" "esa.int" "blueorigin.com" "rocketlabusa.com"
+    "planet.com" "spire.com" "maxar.com" "airbus.com" "boeing.com"
+    # Insurance / finserv
+    "lemonade.com" "root.com" "metromile.com" "hippo.com" "next-insurance.com"
+    "plaid.com/products" "marqeta.com" "galileo-ft.com" "synapsepay.com" "dwolla.com"
+    # Pets / animals
+    "chewy.com" "petco.com" "petsmart.com" "rover.com" "wag.com"
+    # Weather
+    "weather.com" "accuweather.com" "wunderground.com" "windy.com" "darksky.net"
+    # Sports
+    "espn.com" "nba.com" "nfl.com" "mlb.com" "nhl.com"
+    "fifa.com" "premierleague.com" "laliga.com" "bundesliga.com" "seriea.com"
+    # News (international)
+    "aljazeera.com" "dw.com" "france24.com" "nhk.or.jp" "abc.net.au"
+    "cbc.ca" "rtve.es" "rte.ie" "svt.se" "yle.fi"
+    # Nonprofit / charity
+    "redcross.org" "unicef.org" "wwf.org" "greenpeace.org" "amnesty.org"
+    "donorschoose.org" "kiva.org" "charity-navigator.org" "givewell.org" "givedirectly.org"
 )
 
-# --- Curated IPs + generated from public ranges (~1500 unique) ---
+# --- Curated IPs + generated from public ranges (~3000 unique) ---
 IPS=(
     # DNS resolvers (curated)
     "8.8.8.8" "8.8.4.4" "1.1.1.1" "1.0.0.1" "9.9.9.9" "9.9.9.10"
@@ -157,42 +281,46 @@ IPS=(
     "104.244.42.65" "192.229.211.108" "23.67.75.179" "205.251.242.103" "93.184.216.34"
 )
 
-# Generate IPs from well-known public ranges to pad to ~1500
+# Generate IPs from well-known public ranges to pad to ~3000
 generate_ips() {
     # Cloudflare (104.16.0.0/12)
-    for i in $(seq 0 99); do printf "104.16.%d.%d\n" "$((i / 10))" "$((i % 10 + 1))"; done
+    for i in $(seq 0 199); do printf "104.16.%d.%d\n" "$((i / 10))" "$((i % 10 + 1))"; done
     # AWS (52.0.0.0/8 subset)
-    for i in $(seq 1 100); do printf "52.%d.%d.1\n" "$((i % 256))" "$(((i * 7) % 256))"; done
+    for i in $(seq 1 200); do printf "52.%d.%d.1\n" "$((i % 256))" "$(((i * 7) % 256))"; done
     # Google (142.250.0.0/16 subset)
-    for i in $(seq 1 100); do printf "142.250.%d.%d\n" "$((i % 256))" "$(((i * 3) % 256 + 1))"; done
+    for i in $(seq 1 200); do printf "142.250.%d.%d\n" "$((i % 256))" "$(((i * 3) % 256 + 1))"; done
     # Azure (20.0.0.0/8 subset)
-    for i in $(seq 1 100); do printf "20.%d.%d.%d\n" "$((i % 256))" "$(((i * 11) % 256))" "$(((i * 5) % 256 + 1))"; done
+    for i in $(seq 1 200); do printf "20.%d.%d.%d\n" "$((i % 256))" "$(((i * 11) % 256))" "$(((i * 5) % 256 + 1))"; done
     # Fastly (151.101.0.0/16)
-    for i in $(seq 1 100); do printf "151.101.%d.%d\n" "$((i % 256))" "$(((i * 9) % 256 + 1))"; done
+    for i in $(seq 1 200); do printf "151.101.%d.%d\n" "$((i % 256))" "$(((i * 9) % 256 + 1))"; done
     # Akamai (23.0.0.0/8 subset)
-    for i in $(seq 1 100); do printf "23.%d.%d.%d\n" "$((i % 256))" "$(((i * 13) % 256))" "$(((i * 7) % 256 + 1))"; done
+    for i in $(seq 1 200); do printf "23.%d.%d.%d\n" "$((i % 256))" "$(((i * 13) % 256))" "$(((i * 7) % 256 + 1))"; done
     # DigitalOcean (159.89.0.0/16, 165.22.0.0/16)
-    for i in $(seq 1 50); do printf "159.89.%d.%d\n" "$((i % 256))" "$(((i * 3) % 256 + 1))"; done
-    for i in $(seq 1 50); do printf "165.22.%d.%d\n" "$((i % 256))" "$(((i * 7) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "159.89.%d.%d\n" "$((i % 256))" "$(((i * 3) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "165.22.%d.%d\n" "$((i % 256))" "$(((i * 7) % 256 + 1))"; done
     # Hetzner (95.216.0.0/16)
-    for i in $(seq 1 100); do printf "95.216.%d.%d\n" "$((i % 256))" "$(((i * 11) % 256 + 1))"; done
+    for i in $(seq 1 200); do printf "95.216.%d.%d\n" "$((i % 256))" "$(((i * 11) % 256 + 1))"; done
     # OVH (51.0.0.0/8 subset)
-    for i in $(seq 1 100); do printf "51.%d.%d.%d\n" "$((i % 256))" "$(((i * 17) % 256))" "$(((i * 3) % 256 + 1))"; done
+    for i in $(seq 1 200); do printf "51.%d.%d.%d\n" "$((i % 256))" "$(((i * 17) % 256))" "$(((i * 3) % 256 + 1))"; done
     # Meta (157.240.0.0/16)
-    for i in $(seq 1 100); do printf "157.240.%d.%d\n" "$((i % 256))" "$(((i * 7) % 256 + 1))"; done
+    for i in $(seq 1 200); do printf "157.240.%d.%d\n" "$((i % 256))" "$(((i * 7) % 256 + 1))"; done
     # GitHub (140.82.112.0/20)
-    for i in $(seq 1 50); do printf "140.82.%d.%d\n" "$((112 + i % 16))" "$(((i * 5) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "140.82.%d.%d\n" "$((112 + i % 16))" "$(((i * 5) % 256 + 1))"; done
     # Linode (45.33.0.0/16)
-    for i in $(seq 1 50); do printf "45.33.%d.%d\n" "$((i % 256))" "$(((i * 9) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "45.33.%d.%d\n" "$((i % 256))" "$(((i * 9) % 256 + 1))"; done
     # Vultr (45.76.0.0/16, 45.77.0.0/16)
-    for i in $(seq 1 50); do printf "45.76.%d.%d\n" "$((i % 256))" "$(((i * 3) % 256 + 1))"; done
-    for i in $(seq 1 50); do printf "45.77.%d.%d\n" "$((i % 256))" "$(((i * 7) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "45.76.%d.%d\n" "$((i % 256))" "$(((i * 3) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "45.77.%d.%d\n" "$((i % 256))" "$(((i * 7) % 256 + 1))"; done
     # Scaleway (51.15.0.0/16)
-    for i in $(seq 1 50); do printf "51.15.%d.%d\n" "$((i % 256))" "$(((i * 11) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "51.15.%d.%d\n" "$((i % 256))" "$(((i * 11) % 256 + 1))"; done
     # Oracle Cloud (132.145.0.0/16)
-    for i in $(seq 1 50); do printf "132.145.%d.%d\n" "$((i % 256))" "$(((i * 13) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "132.145.%d.%d\n" "$((i % 256))" "$(((i * 13) % 256 + 1))"; done
     # Alibaba Cloud (47.88.0.0/16)
-    for i in $(seq 1 50); do printf "47.88.%d.%d\n" "$((i % 256))" "$(((i * 5) % 256 + 1))"; done
+    for i in $(seq 1 100); do printf "47.88.%d.%d\n" "$((i % 256))" "$(((i * 5) % 256 + 1))"; done
+    # Tencent Cloud (43.128.0.0/16)
+    for i in $(seq 1 100); do printf "43.128.%d.%d\n" "$((i % 256))" "$(((i * 9) % 256 + 1))"; done
+    # Samsung (52.78.0.0/16 — AWS Seoul)
+    for i in $(seq 1 100); do printf "52.78.%d.%d\n" "$((i % 256))" "$(((i * 13) % 256 + 1))"; done
 }
 
 # Append generated IPs (deduplicated)
