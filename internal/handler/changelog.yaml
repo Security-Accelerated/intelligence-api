@@ -1,6 +1,18 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.49.1
+  date: 2026-04-04
+  changes:
+    - text: "Session IDs redacted from billing logs to prevent token leakage"
+      audience: internal
+    - text: "Upstream provider requests (crt.sh, RDAP, threat intel) now verify TLS certificates"
+      audience: internal
+    - text: "Response header size capped at 1 MB to prevent memory pressure from malicious servers"
+      audience: internal
+    - text: "Client IP detection uses Fly-Client-IP header in production to prevent X-Forwarded-For spoofing"
+      audience: internal
+
 - version: v0.49.0
   date: 2026-04-04
   changes:
