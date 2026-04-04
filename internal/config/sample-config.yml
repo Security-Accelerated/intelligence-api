@@ -83,6 +83,13 @@ usage:
   buffer_size: 256
   flush_interval: 5s
 
+# External DNS resolvers (empty = Google, Cloudflare, OpenDNS defaults)
+# dns:
+#   servers:
+#     - "8.8.8.8:53"
+#     - "1.1.1.1:53"
+#     - "208.67.222.222:53"
+
 ip:
   lookup_timeout: 30s
   max_ips:
