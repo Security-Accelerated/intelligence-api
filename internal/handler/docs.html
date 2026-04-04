@@ -4,6 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Intelligence API Documentation</title>
+<script>
+  (function() {
+    var storageKey = "sa-docs-theme";
+    var root = document.documentElement;
+    var theme = null;
+
+    try {
+      theme = localStorage.getItem(storageKey);
+    } catch (err) {}
+
+    if (theme !== "light" && theme !== "dark") {
+      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    root.setAttribute("data-theme", theme);
+    root.style.colorScheme = theme;
+  })();
+</script>
 <style>
   :root {
     --bg: #eef1ff;
@@ -21,10 +39,110 @@
     --shadow: 0 24px 64px rgba(16, 32, 43, 0.12);
     --font-sans: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
     --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+    --page-glow-a: rgba(91, 108, 255, 0.18);
+    --page-glow-b: rgba(140, 124, 255, 0.16);
+    --page-grad-start: #f7f8ff;
+    --page-grad-mid: #eef0ff;
+    --page-grad-end: #e8ebff;
+    --grid-line: rgba(16, 32, 43, 0.03);
+    --grid-mask: rgba(0, 0, 0, 0.12);
+    --topbar-border: rgba(16, 32, 43, 0.08);
+    --topbar-bg: rgba(247, 250, 248, 0.84);
+    --nav-bg: rgba(255, 255, 255, 0.72);
+    --nav-shadow: 0 14px 28px rgba(16, 32, 43, 0.08);
+    --nav-hover-bg: rgba(91, 108, 255, 0.12);
+    --control-bg: rgba(255, 255, 255, 0.88);
+    --control-soft-bg: rgba(255, 255, 255, 0.72);
+    --control-shadow: 0 16px 28px rgba(16, 32, 43, 0.08);
+    --hero-glow: rgba(91, 108, 255, 0.22);
+    --hero-panel-bg-start: rgba(91, 108, 255, 0.1);
+    --hero-panel-bg-end: rgba(255, 255, 255, 0.92);
+    --hero-panel-border: rgba(16, 32, 43, 0.08);
+    --metric-bg: rgba(255, 255, 255, 0.82);
+    --card-hover-border: rgba(91, 108, 255, 0.24);
+    --card-hover-shadow: 0 28px 56px rgba(16, 32, 43, 0.14);
+    --section-accent-line: rgba(140, 124, 255, 0.45);
+    --accent-line: rgba(91, 108, 255, 0.45);
+    --code-inline-border: rgba(91, 108, 255, 0.16);
+    --code-block-border: rgba(91, 108, 255, 0.12);
+    --code-block-start: #152532;
+    --code-block-end: #0f1b26;
+    --code-block-inset: rgba(255, 255, 255, 0.04);
+    --table-head-bg: rgba(91, 108, 255, 0.08);
+    --table-cell-bg: rgba(255, 255, 255, 0.88);
+    --note-border: rgba(140, 124, 255, 0.2);
+    --note-bg-start: rgba(140, 124, 255, 0.1);
+    --note-bg-end: rgba(255, 255, 255, 0.84);
+    --divider: rgba(16, 32, 43, 0.08);
+    --on-accent: #f5fbf9;
+    --theme-toggle-bg: rgba(255, 255, 255, 0.72);
+    --theme-toggle-border: rgba(16, 32, 43, 0.08);
+    --theme-toggle-shadow: 0 14px 28px rgba(16, 32, 43, 0.08);
+    --theme-toggle-label: var(--ink);
+  }
+
+  html[data-theme="dark"] {
+    --bg: #09121b;
+    --ink: #f3f7ff;
+    --ink-soft: #a9bbcf;
+    --accent: #8d9cff;
+    --accent-strong: #bcc7ff;
+    --accent-soft: rgba(141, 156, 255, 0.18);
+    --warm: #b094ff;
+    --border: rgba(169, 187, 207, 0.16);
+    --panel: rgba(10, 18, 28, 0.84);
+    --panel-muted: rgba(169, 187, 207, 0.08);
+    --code-block-bg: #08111a;
+    --code-block-text: #e6eef8;
+    --shadow: 0 28px 72px rgba(0, 0, 0, 0.4);
+    --page-glow-a: rgba(91, 108, 255, 0.26);
+    --page-glow-b: rgba(140, 124, 255, 0.2);
+    --page-grad-start: #0b1220;
+    --page-grad-mid: #0a1320;
+    --page-grad-end: #081018;
+    --grid-line: rgba(169, 187, 207, 0.06);
+    --grid-mask: rgba(0, 0, 0, 0.4);
+    --topbar-border: rgba(169, 187, 207, 0.12);
+    --topbar-bg: rgba(8, 14, 22, 0.84);
+    --nav-bg: rgba(15, 24, 37, 0.82);
+    --nav-shadow: 0 18px 38px rgba(0, 0, 0, 0.28);
+    --nav-hover-bg: rgba(141, 156, 255, 0.16);
+    --control-bg: rgba(15, 24, 37, 0.88);
+    --control-soft-bg: rgba(15, 24, 37, 0.78);
+    --control-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+    --hero-glow: rgba(141, 156, 255, 0.24);
+    --hero-panel-bg-start: rgba(91, 108, 255, 0.18);
+    --hero-panel-bg-end: rgba(12, 22, 35, 0.96);
+    --hero-panel-border: rgba(169, 187, 207, 0.1);
+    --metric-bg: rgba(18, 29, 44, 0.86);
+    --card-hover-border: rgba(141, 156, 255, 0.34);
+    --card-hover-shadow: 0 30px 64px rgba(0, 0, 0, 0.34);
+    --section-accent-line: rgba(176, 148, 255, 0.5);
+    --accent-line: rgba(141, 156, 255, 0.55);
+    --code-inline-border: rgba(141, 156, 255, 0.24);
+    --code-block-border: rgba(141, 156, 255, 0.16);
+    --code-block-start: #0b1723;
+    --code-block-end: #08111a;
+    --code-block-inset: rgba(255, 255, 255, 0.03);
+    --table-head-bg: rgba(141, 156, 255, 0.12);
+    --table-cell-bg: rgba(13, 23, 35, 0.88);
+    --note-border: rgba(176, 148, 255, 0.24);
+    --note-bg-start: rgba(176, 148, 255, 0.12);
+    --note-bg-end: rgba(14, 25, 38, 0.92);
+    --divider: rgba(169, 187, 207, 0.14);
+    --on-accent: #f4f7ff;
+    --theme-toggle-bg: rgba(15, 24, 37, 0.82);
+    --theme-toggle-border: rgba(169, 187, 207, 0.12);
+    --theme-toggle-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+    --theme-toggle-label: #f3f7ff;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 96px; }
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 96px;
+    color-scheme: light;
+  }
 
   body {
     min-height: 100vh;
@@ -33,9 +151,9 @@
     line-height: 1.7;
     color: var(--ink-soft);
     background:
-      radial-gradient(circle at 0 0, rgba(91, 108, 255, 0.18), transparent 28rem),
-      radial-gradient(circle at 100% 0, rgba(140, 124, 255, 0.16), transparent 24rem),
-      linear-gradient(180deg, #f7f8ff 0%, #eef0ff 52%, #e8ebff 100%);
+      radial-gradient(circle at 0 0, var(--page-glow-a), transparent 28rem),
+      radial-gradient(circle at 100% 0, var(--page-glow-b), transparent 24rem),
+      linear-gradient(180deg, var(--page-grad-start) 0%, var(--page-grad-mid) 52%, var(--page-grad-end) 100%);
   }
 
   body::before {
@@ -44,10 +162,10 @@
     inset: 0;
     pointer-events: none;
     background-image:
-      linear-gradient(rgba(16, 32, 43, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(16, 32, 43, 0.03) 1px, transparent 1px);
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
     background-size: 28px 28px;
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.12), transparent 70%);
+    mask-image: linear-gradient(180deg, var(--grid-mask), transparent 70%);
   }
 
   a { color: var(--accent); text-decoration: none; }
@@ -62,8 +180,8 @@
     justify-content: space-between;
     gap: 20px;
     padding: 18px 32px;
-    border-bottom: 1px solid rgba(16, 32, 43, 0.08);
-    background: rgba(247, 250, 248, 0.84);
+    border-bottom: 1px solid var(--topbar-border);
+    background: var(--topbar-bg);
     backdrop-filter: blur(14px);
   }
 
@@ -88,15 +206,21 @@
 
   .topbar-brand span { color: var(--accent); }
 
+  .topbar-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+
   .topbar-nav {
     display: inline-flex;
     align-items: center;
     gap: 10px;
     padding: 6px;
-    border: 1px solid rgba(16, 32, 43, 0.08);
+    border: 1px solid var(--topbar-border);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.72);
-    box-shadow: 0 14px 28px rgba(16, 32, 43, 0.08);
+    background: var(--nav-bg);
+    box-shadow: var(--nav-shadow);
   }
 
   .topbar-nav a {
@@ -111,7 +235,37 @@
   .topbar-nav a.active,
   .topbar-nav a:hover {
     color: var(--ink);
-    background: rgba(91, 108, 255, 0.12);
+    background: var(--nav-hover-bg);
+  }
+
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--theme-toggle-border);
+    border-radius: 999px;
+    background: var(--theme-toggle-bg);
+    box-shadow: var(--theme-toggle-shadow);
+    color: var(--theme-toggle-label);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  }
+
+  .theme-toggle:hover {
+    transform: translateY(-1px);
+    border-color: var(--accent-soft);
+  }
+
+  .theme-toggle-glyph {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--warm) 100%);
+    box-shadow: 0 0 0 4px var(--accent-soft);
   }
 
   .page-shell {
@@ -144,7 +298,7 @@
     position: absolute;
     inset: auto -10% -30% 36%;
     height: 240px;
-    background: radial-gradient(circle, rgba(91, 108, 255, 0.22) 0%, transparent 65%);
+    background: radial-gradient(circle, var(--hero-glow) 0%, transparent 65%);
     pointer-events: none;
   }
 
@@ -164,7 +318,7 @@
     content: "";
     width: 32px;
     height: 1px;
-    background: rgba(91, 108, 255, 0.45);
+    background: var(--accent-line);
   }
 
   .hero-card h1 {
@@ -195,13 +349,13 @@
     align-items: center;
     gap: 12px;
     padding: 14px 18px;
-    border: 1px solid rgba(91, 108, 255, 0.16);
+    border: 1px solid var(--code-inline-border);
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.88);
+    background: var(--control-bg);
     color: var(--ink);
     font-family: var(--font-mono);
     font-size: 14px;
-    box-shadow: 0 16px 28px rgba(16, 32, 43, 0.08);
+    box-shadow: var(--control-shadow);
   }
 
   .version-pill {
@@ -223,7 +377,7 @@
     align-items: center;
     padding: 12px 16px;
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.72);
+    background: var(--control-soft-bg);
     color: var(--ink);
     font-weight: 600;
   }
@@ -236,9 +390,9 @@
 
   .hero-panel {
     padding: 22px;
-    border: 1px solid rgba(16, 32, 43, 0.08);
+    border: 1px solid var(--hero-panel-border);
     border-radius: 22px;
-    background: linear-gradient(180deg, rgba(91, 108, 255, 0.1) 0%, rgba(255, 255, 255, 0.92) 100%);
+    background: linear-gradient(180deg, var(--hero-panel-bg-start) 0%, var(--hero-panel-bg-end) 100%);
   }
 
   .hero-panel h2,
@@ -266,7 +420,7 @@
     gap: 4px;
     padding: 14px 16px;
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.82);
+    background: var(--metric-bg);
   }
 
   .hero-metrics strong {
@@ -297,8 +451,8 @@
 
   .service-card:hover {
     transform: translateY(-4px);
-    border-color: rgba(91, 108, 255, 0.24);
-    box-shadow: 0 28px 56px rgba(16, 32, 43, 0.14);
+    border-color: var(--card-hover-border);
+    box-shadow: var(--card-hover-shadow);
   }
 
   .service-card h3 { font-size: 22px; line-height: 1.1; }
@@ -351,8 +505,8 @@
 
   .service-card.is-overview {
     background:
-      radial-gradient(circle at top right, rgba(140, 124, 255, 0.18), transparent 44%),
-      linear-gradient(180deg, rgba(91, 108, 255, 0.1) 0%, rgba(255, 255, 255, 0.92) 100%);
+      radial-gradient(circle at top right, var(--page-glow-b), transparent 44%),
+      linear-gradient(180deg, var(--hero-panel-bg-start) 0%, var(--hero-panel-bg-end) 100%);
   }
 
   .section-card { margin-top: 28px; padding: 32px; }
@@ -373,7 +527,7 @@
     content: "";
     width: 28px;
     height: 1px;
-    background: rgba(140, 124, 255, 0.45);
+    background: var(--section-accent-line);
   }
 
   .section-card h2 {
@@ -393,7 +547,7 @@
 
   code {
     padding: 2px 6px;
-    border: 1px solid rgba(91, 108, 255, 0.16);
+    border: 1px solid var(--code-inline-border);
     border-radius: 8px;
     background: var(--panel-muted);
     color: var(--accent-strong);
@@ -405,10 +559,10 @@
     margin-top: 18px;
     padding: 18px 20px;
     overflow-x: auto;
-    border: 1px solid rgba(91, 108, 255, 0.12);
+    border: 1px solid var(--code-block-border);
     border-radius: 20px;
-    background: linear-gradient(180deg, #152532 0%, #0f1b26 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    background: linear-gradient(180deg, var(--code-block-start) 0%, var(--code-block-end) 100%);
+    box-shadow: inset 0 1px 0 var(--code-block-inset);
   }
 
   pre code {
@@ -434,7 +588,7 @@
     padding: 12px 14px;
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
-    background: rgba(91, 108, 255, 0.08);
+    background: var(--table-head-bg);
     color: var(--ink);
     font-size: 12px;
     font-weight: 700;
@@ -455,7 +609,7 @@
   td {
     padding: 13px 14px;
     border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.88);
+    background: var(--table-cell-bg);
     vertical-align: top;
   }
 
@@ -467,9 +621,9 @@
   .note {
     margin-top: 18px;
     padding: 16px 18px;
-    border: 1px solid rgba(140, 124, 255, 0.2);
+    border: 1px solid var(--note-border);
     border-radius: 18px;
-    background: linear-gradient(180deg, rgba(140, 124, 255, 0.1) 0%, rgba(255, 255, 255, 0.84) 100%);
+    background: linear-gradient(180deg, var(--note-bg-start) 0%, var(--note-bg-end) 100%);
     color: var(--ink);
   }
 
@@ -480,7 +634,7 @@
     padding: 9px 14px;
     border-radius: 999px;
     background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-    color: #f6fcfa;
+    color: var(--on-accent);
     font-size: 13px;
     font-weight: 700;
   }
@@ -502,7 +656,7 @@
   .changelog-entry + .changelog-entry {
     margin-top: 22px;
     padding-top: 22px;
-    border-top: 1px solid rgba(16, 32, 43, 0.08);
+    border-top: 1px solid var(--divider);
   }
 
   .changelog-entry h3 {
@@ -531,6 +685,8 @@
   @media (max-width: 720px) {
     .topbar { padding: 16px 18px; }
     .topbar-nav { display: none; }
+    .theme-toggle { padding: 10px 12px; }
+    .theme-toggle-label { display: none; }
     .page-shell { padding: 28px 16px 72px; }
     .hero-card,
     .section-card,
@@ -551,11 +707,17 @@
 
 <header class="topbar">
   <a href="/docs" class="topbar-brand"><span>Security</span> Accelerated</a>
-  <nav class="topbar-nav">
-    <a href="/docs" class="active">Overview</a>
-    <a href="/docs/domain">Domain</a>
-    <a href="/docs/ip">IP</a>
-  </nav>
+  <div class="topbar-actions">
+    <nav class="topbar-nav">
+      <a href="/docs" class="active">Overview</a>
+      <a href="/docs/domain">Domain</a>
+      <a href="/docs/ip">IP</a>
+    </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch theme" aria-pressed="false">
+      <span class="theme-toggle-glyph" aria-hidden="true"></span>
+      <span class="theme-toggle-label">Dark mode</span>
+    </button>
+  </div>
 </header>
 
 <main class="page-shell">
@@ -737,5 +899,55 @@
   {{end}}
 </main>
 
+<script>
+  (function() {
+    var storageKey = "sa-docs-theme";
+    var root = document.documentElement;
+    var toggle = document.querySelector("[data-theme-toggle]");
+    if (!toggle) return;
+
+    var label = toggle.querySelector(".theme-toggle-label");
+
+    function setTheme(theme) {
+      root.setAttribute("data-theme", theme);
+      root.style.colorScheme = theme;
+      toggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+      toggle.setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+      label.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+    }
+
+    function storedTheme() {
+      try {
+        return localStorage.getItem(storageKey);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    setTheme(root.getAttribute("data-theme") || "light");
+
+    toggle.addEventListener("click", function() {
+      var nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      setTheme(nextTheme);
+      try {
+        localStorage.setItem(storageKey, nextTheme);
+      } catch (err) {}
+    });
+
+    if (!window.matchMedia) return;
+    var media = window.matchMedia("(prefers-color-scheme: dark)");
+    var syncTheme = function(event) {
+      var savedTheme = storedTheme();
+      if (savedTheme === "light" || savedTheme === "dark") return;
+      setTheme(event.matches ? "dark" : "light");
+    };
+
+    if (media.addEventListener) {
+      media.addEventListener("change", syncTheme);
+    } else if (media.addListener) {
+      media.addListener(syncTheme);
+    }
+  })();
+</script>
 </body>
 </html>
