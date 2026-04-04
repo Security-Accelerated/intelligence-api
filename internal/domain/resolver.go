@@ -6,23 +6,19 @@ import (
 	"time"
 )
 
-// DefaultDNSServers is the ordered list of external DNS resolvers used as
-// fallback when the system resolver fails (e.g., Fly.io internal DNS).
+// DefaultDNSServers is the ordered list of external DNS resolvers used for
+// all runtime lookups (domain intelligence, IP intelligence, etc.).
 var DefaultDNSServers = []string{
 	"8.8.8.8:53",        // Google
 	"1.1.1.1:53",        // Cloudflare
 	"208.67.222.222:53", // OpenDNS
 }
 
-// DefaultDNSDialTimeout is the per-server connection timeout. Kept short so
-// fallback to the next server happens quickly within the caller's context deadline.
-var DefaultDNSDialTimeout = 2 * time.Second
+// DefaultDNSDialTimeout is the per-server connection timeout.
+var DefaultDNSDialTimeout = 30 * time.Second
 
-// NewExternalResolver creates a net.Resolver that tries the system resolver
-// first, then falls back to the given external DNS servers in order. This
-// preserves Docker/platform internal DNS (e.g., resolving "postgres" or
-// "redis" container names) while providing external fallback for domains
-// that the platform resolver can't handle.
+// NewExternalResolver creates a net.Resolver that uses the given external DNS
+// servers in order, falling back to the next if the current one fails.
 func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resolver {
 	if len(servers) == 0 {
 		return net.DefaultResolver
@@ -34,18 +30,7 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			// No safenet.DialControl here — DNS resolvers are often on private/loopback
-			// addresses (Docker's 127.0.0.11, Fly's fdaa::3) which DialControl would block.
-			// SSRF protection is enforced at the HTTP transport layer, not DNS.
 			d := net.Dialer{Timeout: dialTimeout}
-
-			// Try the system/platform resolver first (preserves Docker DNS, etc.)
-			conn, err := d.DialContext(ctx, network, address)
-			if err == nil {
-				return conn, nil
-			}
-
-			// Fall back to external resolvers
 			var lastErr error
 			for _, server := range servers {
 				if ctx.Err() != nil {
@@ -62,9 +47,9 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 	}
 }
 
-// InitResolver overrides net.DefaultResolver with a resolver that tries the
-// system DNS first, then falls back to external servers. Call this early in
-// application startup.
+// InitResolver overrides net.DefaultResolver with an external resolver.
+// Call this AFTER database and Redis connections are established so that
+// platform-internal hostnames (postgres, redis) resolve via system DNS.
 func InitResolver(servers []string, dialTimeout time.Duration) {
 	if len(servers) == 0 {
 		servers = DefaultDNSServers

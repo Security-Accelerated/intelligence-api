@@ -35,15 +35,6 @@ func Run(logger *zap.Logger, version string) error {
 		Pro:   cfg.GetInt("rate_limit.pro"),
 	}
 
-	// DNS resolver — use external resolvers to avoid platform DNS issues (e.g., Fly.io)
-	dnsServers := cfg.GetStringSlice("dns.servers")
-	dnsTimeout := cfg.GetDuration("dns.timeout")
-	domain.InitResolver(dnsServers, dnsTimeout)
-	if len(dnsServers) == 0 {
-		dnsServers = domain.DefaultDNSServers
-	}
-	logger.Info("dns resolver configured", zap.Strings("servers", dnsServers), zap.Duration("dial_timeout", domain.DefaultDNSDialTimeout))
-
 	logger.Info("initializing application",
 		zap.Any("system", status.System),
 		zap.Any("lookups", status.Lookups),
@@ -91,6 +82,17 @@ func Run(logger *zap.Logger, version string) error {
 		return fmt.Errorf("connect to redis: %w", err)
 	}
 	logger.Info("connected to redis", zap.Any("config", status.Cache))
+
+	// DNS resolver — override AFTER DB and Redis are connected so platform-internal
+	// hostnames (postgres, redis) resolve via system DNS. All subsequent lookups
+	// (domain intelligence, IP intelligence) use external resolvers.
+	dnsServers := cfg.GetStringSlice("dns.servers")
+	dnsTimeout := cfg.GetDuration("dns.timeout")
+	domain.InitResolver(dnsServers, dnsTimeout)
+	if len(dnsServers) == 0 {
+		dnsServers = domain.DefaultDNSServers
+	}
+	logger.Info("dns resolver configured", zap.Strings("servers", dnsServers), zap.Duration("dial_timeout", domain.DefaultDNSDialTimeout))
 
 	// Notifications
 	var alerter notifications.ErrorRecorder
