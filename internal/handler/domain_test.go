@@ -374,6 +374,7 @@ func TestNormalizeDomain(t *testing.T) {
 		{"ssh scheme stripped", "ssh://example.com", "example.com", true},
 		{"double scheme stripped", "https://https://example.com", "example.com", true},
 		{"path at-sign not userinfo", "https://example.com/path@evil.com", "example.com", true},
+		{"full compound", "https://user:pass@example.com:443/path@evil.com?q=1#frag", "example.com", true},
 		{"empty", "", "", false},
 		{"no dot", "localhost", "localhost", false},
 		{"protocol only", "https://", "", false},
