@@ -79,7 +79,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 }
 ```
 
-The `domains` field accepts an array of domain names. The API extracts the hostname from whatever you provide — schemes, ports, paths, query strings, fragments, and userinfo are all stripped and the result is lowercased (e.g. `https://Example.COM/path?q=1` → `example.com`). The `domain` field in the response shows exactly what was looked up. Domains are looked up concurrently.
+The `domains` field accepts an array of domain names. You can pass bare domains or full URLs with any scheme — the API extracts the hostname by stripping scheme prefixes, userinfo, ports, paths, query strings, and fragments, then lowercases the result (e.g. `https://Example.COM/path?q=1` → `example.com`). The `domain` field in the response shows exactly what was looked up. Domains are looked up concurrently.
 
 The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
 

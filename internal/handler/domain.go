@@ -14,17 +14,32 @@ import (
 
 func normalizeDomain(raw string) (string, bool) {
 	d := strings.TrimSpace(raw)
-	d = strings.TrimPrefix(d, "http://")
-	d = strings.TrimPrefix(d, "https://")
 
-	// Extract hostname — strip userinfo, path, query, fragment, port.
-	if at := strings.Index(d, "@"); at != -1 {
-		d = d[at+1:]
+	// Strip any scheme (http, https, ftp, etc.). Loop handles malformed
+	// double-scheme inputs like "https://https://example.com".
+	for {
+		if i := strings.Index(d, "://"); i != -1 {
+			d = d[i+3:]
+		} else {
+			break
+		}
 	}
-	for _, sep := range []string{"/", "?", "#", ":"} {
+
+	// Strip path, query, fragment first so '@' in the path can't poison
+	// the host (e.g. "example.com/path@evil.com").
+	for _, sep := range []string{"/", "?", "#"} {
 		if i := strings.Index(d, sep); i != -1 {
 			d = d[:i]
 		}
+	}
+	// Strip userinfo (user:pass@) from authority before removing port,
+	// since userinfo may contain a colon.
+	if at := strings.Index(d, "@"); at != -1 {
+		d = d[at+1:]
+	}
+	// Now strip port.
+	if i := strings.Index(d, ":"); i != -1 {
+		d = d[:i]
 	}
 
 	d = strings.TrimRight(d, ".")

@@ -1119,14 +1119,15 @@
   </table>
 
   <h4>Domain Normalization</h4>
-  <p>Domain names are normalized automatically. The API extracts the hostname from whatever you provide &mdash; schemes, ports, paths, query strings, fragments, and userinfo are all stripped. The result is lowercased. The <code>domain</code> field in the response shows exactly what was looked up. Raw IP addresses are rejected &mdash; use the <a href="/docs/ip">IP Intelligence</a> endpoint instead.</p>
+  <p>Domain names are normalized automatically. You can pass bare domains or full URLs with any scheme &mdash; the API extracts the hostname by stripping scheme prefixes, userinfo, ports, paths, query strings, and fragments. The result is lowercased. The <code>domain</code> field in the response shows exactly what was looked up. Raw IP addresses are rejected &mdash; use the <a href="/docs/ip">IP Intelligence</a> endpoint instead.</p>
   <table class="param-table">
     <thead><tr><th>You send</th><th>We look up</th></tr></thead>
     <tbody>
       <tr><td><code>example.com</code></td><td><code>example.com</code></td></tr>
       <tr><td><code>https://example.com/path?q=1</code></td><td><code>example.com</code></td></tr>
+      <tr><td><code>ftp://example.com</code></td><td><code>example.com</code></td></tr>
       <tr><td><code>example.com:8080</code></td><td><code>example.com</code></td></tr>
-      <tr><td><code>user@example.com</code></td><td><code>example.com</code></td></tr>
+      <tr><td><code>user:pass@example.com</code></td><td><code>example.com</code></td></tr>
       <tr><td><code>Example.COM/</code></td><td><code>example.com</code></td></tr>
     </tbody>
   </table>
