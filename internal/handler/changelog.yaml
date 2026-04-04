@@ -1,6 +1,12 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.45.0
+  date: 2026-04-04
+  changes:
+    - text: "Reverse DNS lookups gracefully handle missing PTR records instead of logging warnings"
+      audience: internal
+
 - version: v0.44.0
   date: 2026-04-03
   changes:
