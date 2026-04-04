@@ -1834,21 +1834,17 @@ func TestIntegration_BillingWebhook_NoBillingService(t *testing.T) {
 	}
 }
 
-func TestIntegration_BillingWebhook_MissingSignature(t *testing.T) {
+func TestIntegration_BillingWebhook_NoBillingService_NoSignature(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	// Wire a stub billing service so we get past the nil guard
-	// and hit the signature validation.
-	// With nil billing, we get 503 before signature check, so this
-	// test verifies the route is reachable and body limit applies.
+	// Billing is nil, so the nil guard fires before signature validation.
+	// This verifies the route is reachable through the middleware chain.
 	w := httptest.NewRecorder()
 	body := strings.NewReader(`{}`)
 	req := httptest.NewRequest(http.MethodPost, "/billing/webhook", body)
 	req.Header.Set("Content-Type", "application/json")
-	// No Stripe-Signature header
 	r.ServeHTTP(w, req)
 
-	// With nil billing service, returns 503 before checking signature
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
@@ -1870,9 +1866,11 @@ func TestIntegration_BillingSuccess_NoBillingService(t *testing.T) {
 	}
 }
 
-func TestIntegration_BillingSuccess_MissingSessionID(t *testing.T) {
+func TestIntegration_BillingSuccess_NoBillingService_NoSessionID(t *testing.T) {
 	r, _ := setupRouter(t)
 
+	// Billing is nil, so the nil guard fires before session_id validation.
+	// This verifies the route is reachable without auth through the middleware chain.
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/billing/success", nil)
 	r.ServeHTTP(w, req)
@@ -1881,7 +1879,6 @@ func TestIntegration_BillingSuccess_MissingSessionID(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	body := w.Body.String()
-	// With nil billing, we get the "not configured" error before session_id check
 	if !strings.Contains(body, "Billing is not configured") {
 		t.Error("expected billing not configured error")
 	}
@@ -1920,5 +1917,74 @@ func TestIntegration_BillingSuccess_NoAuthRequired(t *testing.T) {
 	}
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+// --- Admin positive path tests ---
+
+func TestIntegration_AdminChangelog_AdminAllowed(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/changelog", nil)
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	// Response is a JSON array of changelog versions
+	body := w.Body.String()
+	if body == "" || body[0] != '[' {
+		t.Errorf("expected JSON array, got %q", body[:min(len(body), 50)])
+	}
+	// Should include both public and internal entries (unfiltered)
+	if !strings.Contains(body, "public") || !strings.Contains(body, "internal") {
+		t.Error("admin changelog should include both public and internal audience entries")
+	}
+}
+
+func TestIntegration_AdminChangelog_NonAdminForbidden(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/changelog", nil)
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestIntegration_AdminChangelog_NoKeyUnauthorized(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/changelog", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestIntegration_AdminInfo_AdminAllowed(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", nil)
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "system") {
+		t.Error("expected info response to contain 'system' section")
+	}
+	if !strings.Contains(body, "version") {
+		t.Error("expected info response to contain 'version' field")
 	}
 }
