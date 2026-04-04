@@ -3,6 +3,7 @@ package billing
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -79,17 +80,27 @@ func TestStripeService_NotifyMultiple(t *testing.T) {
 // --- Mock types for webhook handler tests ---
 
 type mockBillingRepo struct {
-	updatePlanCalls []struct{ customerID, plan string }
-	downgradeCalls  []string
-	updatePlanErr   error
-	downgradeErr    error
+	updatePlanCalls  []struct{ customerID, plan string }
+	downgradeCalls   []string
+	provisionCalls   []provisionCall
+	updatePlanErr    error
+	downgradeErr     error
+	customerExists   bool
+	customerExistsErr error
+	provisionErr     error
+	provisionID      int
 }
 
-func (m *mockBillingRepo) CustomerExistsByStripeID(context.Context, string) (bool, error) {
-	return false, nil
+type provisionCall struct {
+	name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string
 }
-func (m *mockBillingRepo) ProvisionCustomer(context.Context, string, string, string, string, string, string, string) (int, error) {
-	return 0, nil
+
+func (m *mockBillingRepo) CustomerExistsByStripeID(_ context.Context, stripeID string) (bool, error) {
+	return m.customerExists, m.customerExistsErr
+}
+func (m *mockBillingRepo) ProvisionCustomer(_ context.Context, name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string) (int, error) {
+	m.provisionCalls = append(m.provisionCalls, provisionCall{name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey})
+	return m.provisionID, m.provisionErr
 }
 func (m *mockBillingRepo) RetrieveProvisionedKey(context.Context, string) (string, error) {
 	return "", nil
@@ -113,10 +124,11 @@ func (m *mockAuthCache) InvalidateAll() {
 
 func newTestStripeService(repo *mockBillingRepo, authCache *mockAuthCache, notifier *mockNotifier) *StripeService {
 	return &StripeService{
-		priceToplan: map[string]string{"price_basic": "basic", "price_pro": "pro"},
-		repo:        repo,
-		authCache:   authCache,
-		notifier:    notifier,
+		priceToplan:    map[string]string{"price_basic": "basic", "price_pro": "pro"},
+		repo:           repo,
+		authCache:      authCache,
+		notifier:       notifier,
+		generateAPIKey: func() (string, error) { return "test-generated-key-abc123", nil },
 	}
 }
 
@@ -365,5 +377,250 @@ func TestNewStripeService_SetsNotifier(t *testing.T) {
 	}
 	if svc.priceToplan["price_1"] != "basic" {
 		t.Errorf("priceToplan[price_1] = %q, want %q", svc.priceToplan["price_1"], "basic")
+	}
+}
+
+// --- Checkout completed handler tests ---
+
+// mockSession returns a stripe.CheckoutSession for testing.
+func mockSession(id, customerID, email, name string, lineItems []*stripe.LineItem) *stripe.CheckoutSession {
+	sess := &stripe.CheckoutSession{
+		ID: id,
+		Customer: &stripe.Customer{
+			ID: customerID,
+		},
+		CustomerDetails: &stripe.CheckoutSessionCustomerDetails{
+			Email: email,
+			Name:  name,
+		},
+	}
+	if lineItems != nil {
+		sess.LineItems = &stripe.LineItemList{
+			Data: lineItems,
+		}
+	}
+	return sess
+}
+
+func newCheckoutTestService(repo *mockBillingRepo, sess *stripe.CheckoutSession, expandedSess *stripe.CheckoutSession) *StripeService {
+	callCount := 0
+	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+	svc.fetchSession = func(id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+		callCount++
+		if callCount == 1 {
+			return sess, nil
+		}
+		return expandedSess, nil
+	}
+	return svc
+}
+
+func TestHandleCheckoutCompleted_HappyPath(t *testing.T) {
+	repo := &mockBillingRepo{provisionID: 99}
+	sess := mockSession("cs_123", "cus_abc", "user@example.com", "Jane Doe", nil)
+	expanded := mockSession("cs_123", "cus_abc", "user@example.com", "Jane Doe",
+		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_pro"}}},
+	)
+	svc := newCheckoutTestService(repo, sess, expanded)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(repo.provisionCalls) != 1 {
+		t.Fatalf("expected 1 ProvisionCustomer call, got %d", len(repo.provisionCalls))
+	}
+	call := repo.provisionCalls[0]
+	if call.name != "Jane Doe" {
+		t.Errorf("name = %q, want %q", call.name, "Jane Doe")
+	}
+	if call.email != "user@example.com" {
+		t.Errorf("email = %q, want %q", call.email, "user@example.com")
+	}
+	if call.plan != "pro" {
+		t.Errorf("plan = %q, want %q", call.plan, "pro")
+	}
+	if call.stripeCustomerID != "cus_abc" {
+		t.Errorf("stripeCustomerID = %q, want %q", call.stripeCustomerID, "cus_abc")
+	}
+}
+
+func TestHandleCheckoutCompleted_UsesEmailAsNameWhenEmpty(t *testing.T) {
+	repo := &mockBillingRepo{provisionID: 1}
+	sess := mockSession("cs_123", "cus_abc", "user@example.com", "", nil)
+	expanded := mockSession("cs_123", "cus_abc", "user@example.com", "",
+		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_basic"}}},
+	)
+	svc := newCheckoutTestService(repo, sess, expanded)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.provisionCalls[0].name != "user@example.com" {
+		t.Errorf("name = %q, want email fallback %q", repo.provisionCalls[0].name, "user@example.com")
+	}
+}
+
+func TestHandleCheckoutCompleted_IdempotentForExistingCustomer(t *testing.T) {
+	repo := &mockBillingRepo{customerExists: true}
+	sess := mockSession("cs_123", "cus_abc", "user@example.com", "Jane", nil)
+	svc := newCheckoutTestService(repo, sess, nil)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(repo.provisionCalls) != 0 {
+		t.Error("expected no ProvisionCustomer calls for existing customer")
+	}
+}
+
+func TestHandleCheckoutCompleted_NilCustomer_ReturnsError(t *testing.T) {
+	sess := &stripe.CheckoutSession{ID: "cs_123", Customer: nil}
+	svc := newCheckoutTestService(&mockBillingRepo{}, sess, nil)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error for nil customer")
+	}
+	if !strings.Contains(err.Error(), "no customer") {
+		t.Errorf("error = %q, want to contain 'no customer'", err.Error())
+	}
+}
+
+func TestHandleCheckoutCompleted_NilCustomerDetails_ReturnsError(t *testing.T) {
+	sess := &stripe.CheckoutSession{
+		ID:       "cs_123",
+		Customer: &stripe.Customer{ID: "cus_abc"},
+	}
+	svc := newCheckoutTestService(&mockBillingRepo{}, sess, nil)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error for nil customer details")
+	}
+	if !strings.Contains(err.Error(), "no customer details") {
+		t.Errorf("error = %q, want to contain 'no customer details'", err.Error())
+	}
+}
+
+func TestHandleCheckoutCompleted_UnmatchedPriceID_ReturnsError(t *testing.T) {
+	repo := &mockBillingRepo{}
+	sess := mockSession("cs_123", "cus_abc", "user@example.com", "Jane", nil)
+	expanded := mockSession("cs_123", "cus_abc", "user@example.com", "Jane",
+		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_unknown"}}},
+	)
+	svc := newCheckoutTestService(repo, sess, expanded)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error for unmatched price ID")
+	}
+	if !strings.Contains(err.Error(), "no matching price ID") {
+		t.Errorf("error = %q, want to contain 'no matching price ID'", err.Error())
+	}
+	if len(repo.provisionCalls) != 0 {
+		t.Error("expected no ProvisionCustomer calls when plan determination fails")
+	}
+}
+
+func TestHandleCheckoutCompleted_ProvisionError_ReturnsError(t *testing.T) {
+	repo := &mockBillingRepo{provisionErr: errors.New("db down")}
+	sess := mockSession("cs_123", "cus_abc", "user@example.com", "Jane", nil)
+	expanded := mockSession("cs_123", "cus_abc", "user@example.com", "Jane",
+		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_basic"}}},
+	)
+	svc := newCheckoutTestService(repo, sess, expanded)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error from provision failure")
+	}
+	if !strings.Contains(err.Error(), "provision customer") {
+		t.Errorf("error = %q, want to contain 'provision customer'", err.Error())
+	}
+}
+
+func TestHandleCheckoutCompleted_CustomerExistsCheckError_ReturnsError(t *testing.T) {
+	repo := &mockBillingRepo{customerExistsErr: errors.New("db down")}
+	sess := mockSession("cs_123", "cus_abc", "user@example.com", "Jane", nil)
+	svc := newCheckoutTestService(repo, sess, nil)
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error from customer exists check")
+	}
+	if !strings.Contains(err.Error(), "check existing customer") {
+		t.Errorf("error = %q, want to contain 'check existing customer'", err.Error())
+	}
+}
+
+func TestHandleCheckoutCompleted_SessionFetchError_ReturnsError(t *testing.T) {
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+	svc.fetchSession = func(string, *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+		return nil, errors.New("stripe unavailable")
+	}
+
+	event := &stripe.Event{
+		Data: &stripe.EventData{
+			Object: map[string]any{"id": "cs_123"},
+		},
+	}
+
+	err := svc.handleCheckoutCompleted(context.Background(), event, zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error from session fetch failure")
+	}
+	if !strings.Contains(err.Error(), "retrieve checkout session") {
+		t.Errorf("error = %q, want to contain 'retrieve checkout session'", err.Error())
 	}
 }

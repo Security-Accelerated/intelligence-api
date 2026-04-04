@@ -48,6 +48,18 @@ func APIKeyAuthWithLogger(repo auth.Repository, logger *zap.Logger) gin.HandlerF
 			return
 		}
 
+		// Defense-in-depth: the DB query filters active = true, but guard
+		// against a stale cache entry or future repo change.
+		if !customer.Active {
+			logger.Warn("auth failed: inactive account",
+				zap.String("client_ip", c.ClientIP()),
+				zap.String("path", c.Request.URL.Path),
+				zap.Int("customer_id", customer.ID),
+			)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "account inactive"})
+			return
+		}
+
 		c.Set("customer_id", customer.ID)
 		c.Set("api_key_id", customer.APIKeyID)
 		c.Set("api_key_plan", customer.Plan)

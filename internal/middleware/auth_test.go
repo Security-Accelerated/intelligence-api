@@ -126,6 +126,7 @@ func TestAPIKeyAuth_Success_SetsContextValues(t *testing.T) {
 		customer: &auth.Customer{
 			APIKeyID: 42,
 			Plan:     "pro",
+			Active:   true,
 		},
 	}
 
@@ -157,6 +158,36 @@ func TestAPIKeyAuth_Success_SetsContextValues(t *testing.T) {
 	}
 	if gotPlan != "pro" {
 		t.Errorf("api_key_plan = %q, want %q", gotPlan, "pro")
+	}
+}
+
+func TestAPIKeyAuth_InactiveCustomer_Rejected(t *testing.T) {
+	repo := &mockAuthRepo{
+		customer: &auth.Customer{
+			ID:       10,
+			APIKeyID: 42,
+			Plan:     "pro",
+			Active:   false,
+		},
+	}
+	r, logs := setupAuthRouter(repo, zapcore.WarnLevel)
+
+	w := doAuthRequest(r, "valid-but-inactive")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+
+	var body map[string]string
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body["error"] != "account inactive" {
+		t.Errorf("error = %q, want %q", body["error"], "account inactive")
+	}
+
+	if logs.Len() == 0 {
+		t.Fatal("expected warn log")
+	}
+	if logs.All()[0].Message != "auth failed: inactive account" {
+		t.Errorf("log message = %q, want %q", logs.All()[0].Message, "auth failed: inactive account")
 	}
 }
 

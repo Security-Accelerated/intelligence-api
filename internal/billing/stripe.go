@@ -15,11 +15,13 @@ import (
 
 // StripeService handles Stripe billing webhooks and key provisioning.
 type StripeService struct {
-	webhookSecret string
-	priceToplan   map[string]string
-	repo          BillingRepository
-	authCache     AuthCacheInvalidator
-	notifier      notifications.Notifier
+	webhookSecret  string
+	priceToplan    map[string]string
+	repo           BillingRepository
+	authCache      AuthCacheInvalidator
+	notifier       notifications.Notifier
+	fetchSession   func(id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error)
+	generateAPIKey func() (string, error)
 }
 
 // NewStripeService creates a billing service backed by Stripe.
@@ -29,11 +31,13 @@ type StripeService struct {
 func NewStripeService(secretKey, webhookSecret string, priceMap map[string]string, repo BillingRepository, authCache AuthCacheInvalidator, notifier notifications.Notifier) *StripeService {
 	stripe.Key = secretKey
 	return &StripeService{
-		webhookSecret: webhookSecret,
-		priceToplan:   priceMap,
-		repo:          repo,
-		authCache:     authCache,
-		notifier:      notifier,
+		webhookSecret:  webhookSecret,
+		priceToplan:    priceMap,
+		repo:           repo,
+		authCache:      authCache,
+		notifier:       notifier,
+		fetchSession:   session.Get,
+		generateAPIKey: GenerateAPIKey,
 	}
 }
 
@@ -62,7 +66,7 @@ func (s *StripeService) HandleWebhook(ctx context.Context, payload []byte, sigHe
 }
 
 func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stripe.Event, logger *zap.Logger) error {
-	sess, err := session.Get(event.GetObjectValue("id"), &stripe.CheckoutSessionParams{
+	sess, err := s.fetchSession(event.GetObjectValue("id"), &stripe.CheckoutSessionParams{
 		Params: stripe.Params{Context: ctx},
 	})
 	if err != nil {
@@ -99,7 +103,7 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 		Params: stripe.Params{Context: ctx},
 	}
 	expandedParams.AddExpand("line_items")
-	expandedSess, err := session.Get(sess.ID, expandedParams)
+	expandedSess, err := s.fetchSession(sess.ID, expandedParams)
 	if err != nil {
 		return fmt.Errorf("retrieve checkout line items: %w", err)
 	}
@@ -120,7 +124,7 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 	}
 
 	// Generate API key
-	rawKey, err := GenerateAPIKey()
+	rawKey, err := s.generateAPIKey()
 	if err != nil {
 		return fmt.Errorf("generate API key: %w", err)
 	}
