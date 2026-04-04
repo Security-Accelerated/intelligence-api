@@ -1,6 +1,14 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.47.0
+  date: 2026-04-04
+  changes:
+    - text: "Routine upstream lookup failures (DNS, WHOIS, TLS) no longer trigger Pushover alerts"
+      audience: internal
+    - text: "Usage batch flush uses transaction + prepared statement to avoid Neon prepared statement invalidation"
+      audience: internal
+
 - version: v0.46.0
   date: 2026-04-04
   changes:
