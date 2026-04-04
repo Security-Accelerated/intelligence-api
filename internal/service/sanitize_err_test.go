@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -74,5 +75,77 @@ func TestSanitizeErr_BlockedErrorTakesPrecedence(t *testing.T) {
 	want := "domain resolves to a private/reserved IP address"
 	if got != want {
 		t.Errorf("sanitizeErr(wrapped with colons) = %q, want %q", got, want)
+	}
+}
+
+// --- isExpectedError tests ---
+
+func TestIsExpectedError_ContextDeadline(t *testing.T) {
+	if !isExpectedError(context.DeadlineExceeded) {
+		t.Error("context.DeadlineExceeded should be expected")
+	}
+	if !isExpectedError(fmt.Errorf("whois: %w", context.DeadlineExceeded)) {
+		t.Error("wrapped context.DeadlineExceeded should be expected")
+	}
+}
+
+func TestIsExpectedError_ContextCanceled(t *testing.T) {
+	if !isExpectedError(context.Canceled) {
+		t.Error("context.Canceled should be expected")
+	}
+}
+
+func TestIsExpectedError_DNSError(t *testing.T) {
+	dnsErr := &net.DNSError{Err: "no such host", Name: "example.com"}
+	if !isExpectedError(dnsErr) {
+		t.Error("net.DNSError should be expected")
+	}
+	if !isExpectedError(fmt.Errorf("ptr lookup: %w", dnsErr)) {
+		t.Error("wrapped net.DNSError should be expected")
+	}
+}
+
+func TestIsExpectedError_WhoisNotFound(t *testing.T) {
+	if !isExpectedError(errors.New("whoisparser: domain is not found")) {
+		t.Error("WHOIS 'domain is not found' should be expected")
+	}
+}
+
+func TestIsExpectedError_NoWhoisServer(t *testing.T) {
+	if !isExpectedError(errors.New("whois: no whois server found for domain: example.app")) {
+		t.Error("'no whois server found' should be expected")
+	}
+}
+
+func TestIsExpectedError_IOTimeout(t *testing.T) {
+	if !isExpectedError(errors.New("dial tcp 1.2.3.4:443: i/o timeout")) {
+		t.Error("i/o timeout should be expected")
+	}
+}
+
+func TestIsExpectedError_TLSConnect(t *testing.T) {
+	if !isExpectedError(errors.New("tls connect: dial tcp: lookup example.com: i/o timeout")) {
+		t.Error("tls connect errors should be expected")
+	}
+}
+
+func TestIsExpectedError_InfraError_NotExpected(t *testing.T) {
+	if isExpectedError(errors.New("pq: connection refused")) {
+		t.Error("database errors should NOT be expected")
+	}
+	if isExpectedError(errors.New("redis: broken pipe")) {
+		t.Error("redis errors should NOT be expected")
+	}
+	if isExpectedError(errors.New("unexpected EOF")) {
+		t.Error("unexpected EOF should NOT be expected")
+	}
+}
+
+func TestIsExpectedError_BlockedError_NotExpected(t *testing.T) {
+	// SSRF blocks are unexpected — they indicate a domain resolved to a private IP,
+	// which may warrant investigation.
+	err := &safenet.BlockedError{IP: net.ParseIP("127.0.0.1")}
+	if isExpectedError(err) {
+		t.Error("safenet.BlockedError should NOT be expected")
 	}
 }
