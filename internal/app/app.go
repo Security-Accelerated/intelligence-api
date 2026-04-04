@@ -37,11 +37,12 @@ func Run(logger *zap.Logger, version string) error {
 
 	// DNS resolver — use external resolvers to avoid platform DNS issues (e.g., Fly.io)
 	dnsServers := cfg.GetStringSlice("dns.servers")
-	domain.InitResolver(dnsServers)
+	dnsTimeout := cfg.GetDuration("dns.timeout")
+	domain.InitResolver(dnsServers, dnsTimeout)
 	if len(dnsServers) == 0 {
 		dnsServers = domain.DefaultDNSServers
 	}
-	logger.Info("dns resolver configured", zap.Strings("servers", dnsServers))
+	logger.Info("dns resolver configured", zap.Strings("servers", dnsServers), zap.Duration("dial_timeout", domain.DefaultDNSDialTimeout))
 
 	logger.Info("initializing application",
 		zap.Any("system", status.System),

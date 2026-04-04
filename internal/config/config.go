@@ -108,6 +108,7 @@ func init() {
 	config.SetDefault("ip.max_ips.basic", 5)
 	config.SetDefault("ip.max_ips.pro", 20)
 	config.SetDefault("dns.servers", []string{})
+	config.SetDefault("dns.timeout", "2s")
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
