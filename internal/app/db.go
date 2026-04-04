@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -11,15 +12,15 @@ import (
 )
 
 func openDB(ctx context.Context, cfg *viper.Viper) (*sql.DB, error) {
-	// Build a postgres:// URL so pgx can parse it natively.
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s",
-		cfg.GetString("postgres.user"),
-		cfg.GetString("postgres.password"),
-		cfg.GetString("postgres.host"),
-		cfg.GetInt("postgres.port"),
-		cfg.GetString("postgres.dbname"),
-		cfg.GetString("postgres.sslmode"),
-	)
+	// Build a postgres:// URL with proper percent-encoding so credentials
+	// containing reserved URI characters (@, /, #, %, etc.) are handled safely.
+	dsn := (&url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.GetString("postgres.user"), cfg.GetString("postgres.password")),
+		Host:     fmt.Sprintf("%s:%d", cfg.GetString("postgres.host"), cfg.GetInt("postgres.port")),
+		Path:     cfg.GetString("postgres.dbname"),
+		RawQuery: "sslmode=" + url.QueryEscape(cfg.GetString("postgres.sslmode")),
+	}).String()
 
 	// Parse the DSN into a pgx config so we can set simple protocol mode.
 	// Simple protocol avoids prepared statements, which Neon's serverless
