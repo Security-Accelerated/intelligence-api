@@ -2,16 +2,22 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 )
 
 // LookupReverseDNS performs a PTR lookup for the given IP address and returns
-// the associated hostnames.
+// the associated hostnames. Returns an empty result (not an error) when no PTR
+// record exists, since many IPs legitimately lack reverse DNS.
 func LookupReverseDNS(ctx context.Context, ip string) (*ReverseDNSInfo, error) {
 	names, err := net.DefaultResolver.LookupAddr(ctx, ip)
 	if err != nil {
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+			return &ReverseDNSInfo{Hostnames: []string{}}, nil
+		}
 		return nil, fmt.Errorf("ptr lookup: %w", err)
 	}
 
