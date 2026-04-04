@@ -1,6 +1,14 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.50.1
+  date: 2026-04-04
+  changes:
+    - text: "Domain normalization now strips any URL scheme (ftp, ssh, etc.), not just http/https"
+      audience: public
+    - text: "Fixed normalization ordering to prevent path @-sign from poisoning hostname extraction"
+      audience: internal
+
 - version: v0.50.0
   date: 2026-04-04
   changes:
