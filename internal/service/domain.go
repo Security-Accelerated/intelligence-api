@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -30,6 +31,50 @@ func sanitizeErr(err error) string {
 		msg = msg[i+2:]
 	}
 	return msg
+}
+
+// isExpectedError returns true for errors caused by upstream services or
+// invalid input rather than infrastructure problems on our end. These errors
+// are logged but should not trigger Pushover alerts.
+func isExpectedError(err error) bool {
+	// Context deadline/cancellation — slow upstream, not our failure.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+
+	// DNS errors (NXDOMAIN, SERVFAIL, timeout) — upstream DNS issues.
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+
+	// Match common upstream error messages that aren't wrapped as typed errors.
+	msg := err.Error()
+	expectedPatterns := []string{
+		"domain is not found",       // WHOIS parser: domain doesn't exist
+		"no whois server found",     // no WHOIS server for this TLD
+		"i/o timeout",               // upstream network timeout
+		"no such host",              // DNS resolution failure
+		"server misbehaving",        // DNS SERVFAIL
+		"tls connect",               // TLS handshake failure on target
+		"certificate",               // cert errors on target domain
+		"context deadline exceeded", // nested context timeout strings
+	}
+	for _, p := range expectedPatterns {
+		if strings.Contains(msg, p) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// recordIfUnexpected records a lookup error for alerting only if it represents
+// an infrastructure problem (not a routine upstream failure).
+func recordIfUnexpected(alerter notifications.ErrorRecorder, lookupName string, err error) {
+	if !isExpectedError(err) {
+		alerter.RecordLookupError(lookupName)
+	}
 }
 
 type DomainService struct {
@@ -224,7 +269,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "whois",
 				Message: sanitizeErr(err),
 			})
-			s.alerter.RecordLookupError("whois")
+			recordIfUnexpected(s.alerter, "whois", err)
 			return
 		}
 		resp.Whois = result
@@ -240,7 +285,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "dns",
 				Message: sanitizeErr(err),
 			})
-			s.alerter.RecordLookupError("dns")
+			recordIfUnexpected(s.alerter, "dns", err)
 			return
 		}
 		resp.DNS = result
@@ -256,7 +301,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "ssl",
 				Message: sanitizeErr(err),
 			})
-			s.alerter.RecordLookupError("ssl")
+			recordIfUnexpected(s.alerter, "ssl", err)
 			return
 		}
 		resp.SSL = result
@@ -272,7 +317,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 				Lookup:  "headers",
 				Message: sanitizeErr(err),
 			})
-			s.alerter.RecordLookupError("headers")
+			recordIfUnexpected(s.alerter, "headers", err)
 			return
 		}
 		resp.Headers = result
@@ -289,7 +334,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "screenshot",
 					Message: sanitizeErr(err),
 				})
-				s.alerter.RecordLookupError("screenshot")
+				recordIfUnexpected(s.alerter, "screenshot", err)
 				return
 			}
 			resp.Screenshot = result
@@ -320,7 +365,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "email_security",
 					Message: sanitizeErr(err),
 				})
-				s.alerter.RecordLookupError("email_security")
+				recordIfUnexpected(s.alerter, "email_security", err)
 				return
 			}
 			resp.EmailSecurity = result
@@ -340,7 +385,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "subdomains",
 					Message: sanitizeErr(err),
 				})
-				s.alerter.RecordLookupError("subdomains")
+				recordIfUnexpected(s.alerter, "subdomains", err)
 				return
 			}
 			resp.Subdomains = result
@@ -358,7 +403,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "ct_logs",
 					Message: sanitizeErr(err),
 				})
-				s.alerter.RecordLookupError("ct_logs")
+				recordIfUnexpected(s.alerter, "ct_logs", err)
 				return
 			}
 			resp.CTLogs = result
@@ -376,7 +421,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 					Lookup:  "bgp",
 					Message: sanitizeErr(err),
 				})
-				s.alerter.RecordLookupError("bgp")
+				recordIfUnexpected(s.alerter, "bgp", err)
 				return
 			}
 			resp.BGP = result
