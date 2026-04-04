@@ -8,8 +8,15 @@
 #   ./scripts/load-test.sh                          # localhost
 #   ./scripts/load-test.sh https://api.securityaccelerated.com   # production
 #
-# Requires: curl
+# Requires: curl, bc
 set -euo pipefail
+
+for cmd in curl bc; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "ERROR: $cmd is required but not installed." >&2
+        exit 1
+    fi
+done
 
 HOST="${1:-http://localhost:8080}"
 
@@ -139,7 +146,7 @@ IPS=(
     "8.8.8.8" "8.8.4.4" "1.1.1.1" "1.0.0.1" "9.9.9.9" "9.9.9.10"
     "208.67.222.222" "208.67.220.220" "4.2.2.1" "4.2.2.2" "64.6.64.6" "64.6.65.6"
     "77.88.8.8" "77.88.8.1" "156.154.70.1" "156.154.71.1" "94.140.14.14" "94.140.15.15"
-    "185.228.168.9" "185.228.169.9" "45.90.28.0" "45.90.30.0" "76.76.19.19"
+    "185.228.168.9" "185.228.169.9" "45.90.28.1" "45.90.30.1" "76.76.19.19"
     "8.26.56.26" "8.20.247.20" "195.46.39.39" "80.80.80.80" "91.239.100.100" "89.233.43.71"
     "149.112.112.112" "76.223.122.150"
     # Well-known services (curated)
