@@ -16,13 +16,18 @@ func normalizeDomain(raw string) (string, bool) {
 	d := strings.TrimSpace(raw)
 	d = strings.TrimPrefix(d, "http://")
 	d = strings.TrimPrefix(d, "https://")
-	d = strings.TrimRight(d, "/")
 
-	// Reject anything that still looks like a URL (paths, query strings, fragments, ports).
-	if strings.ContainsAny(d, "/:?#@") {
-		return d, false
+	// Extract hostname — strip userinfo, path, query, fragment, port.
+	if at := strings.Index(d, "@"); at != -1 {
+		d = d[at+1:]
+	}
+	for _, sep := range []string{"/", "?", "#", ":"} {
+		if i := strings.Index(d, sep); i != -1 {
+			d = d[:i]
+		}
 	}
 
+	d = strings.TrimRight(d, ".")
 	d = strings.ToLower(d)
 
 	if d == "" || !strings.Contains(d, ".") {
@@ -35,8 +40,8 @@ func normalizeDomain(raw string) (string, bool) {
 	if len(d) > 253 {
 		return d, false
 	}
-	// Reject trailing dots and consecutive dots (e.g. "example..com").
-	if strings.HasSuffix(d, ".") || strings.Contains(d, "..") {
+	// Reject consecutive dots (e.g. "example..com").
+	if strings.Contains(d, "..") {
 		return d, false
 	}
 	return d, true
