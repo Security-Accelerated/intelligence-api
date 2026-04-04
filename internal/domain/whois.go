@@ -39,6 +39,10 @@ func LookupWhois(ctx context.Context, domain string) (*WhoisInfo, error) {
 		return nil, err
 	}
 
+	return whoisInfoFromParsed(parsed), nil
+}
+
+func whoisInfoFromParsed(parsed whoisparser.WhoisInfo) *WhoisInfo {
 	info := &WhoisInfo{}
 
 	if parsed.Domain != nil {
@@ -63,7 +67,7 @@ func LookupWhois(ctx context.Context, domain string) (*WhoisInfo, error) {
 		info.Tech = c
 	}
 
-	return info, nil
+	return info
 }
 
 func contactFromWhois(c *whoisparser.Contact) *Contact {
