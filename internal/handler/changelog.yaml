@@ -1,6 +1,38 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.44.0
+  date: 2026-04-03
+  changes:
+    - text: "DNS lookups now use external resolvers (Google, Cloudflare, OpenDNS) with automatic fallback"
+      audience: public
+    - text: "RDAP abuse contact queries go directly to regional RIR endpoints instead of rdap.org bootstrap"
+      audience: internal
+    - text: "Global RDAP rate limiter (10 req/s) prevents upstream abuse under load"
+      audience: internal
+    - text: "RIR endpoint routing by IP range (ARIN, RIPE, APNIC, LACNIC, AFRINIC)"
+      audience: internal
+    - text: "DNS resolver initializes after DB/Redis connections to preserve platform hostname resolution"
+      audience: internal
+    - text: "Docs pages redesigned with new visual theme"
+      audience: internal
+
+- version: v0.42.0
+  date: 2026-04-01
+  changes:
+    - text: "Fixed SQL operator precedence bug in stale account deactivation"
+      audience: internal
+    - text: "Stripe checkout handler validates session fields to prevent panics on malformed webhooks"
+      audience: internal
+    - text: "Reputation and threat intelligence provider errors are now sanitized before reaching API responses"
+      audience: internal
+    - text: "Fingerprint update errors distinguish validation (400) from database failures (500)"
+      audience: internal
+    - text: "Template rendering errors are now logged instead of silently discarded"
+      audience: internal
+    - text: "WHOIS lookup handles missing registrar/domain data without panicking"
+      audience: internal
+
 - version: v0.41.0
   date: 2026-03-29
   changes:
