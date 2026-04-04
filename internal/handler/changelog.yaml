@@ -1,6 +1,18 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.46.0
+  date: 2026-04-04
+  changes:
+    - text: "Auth middleware rejects inactive accounts as defense-in-depth"
+      audience: internal
+    - text: "Billing checkout flow fully unit-tested (9 test cases covering idempotency, validation, and error paths)"
+      audience: internal
+    - text: "Docs changelog filtering and data injection tested (internal entries, version, payment links)"
+      audience: internal
+    - text: "Billing route integration tests added (webhook and success page wiring)"
+      audience: internal
+
 - version: v0.45.0
   date: 2026-04-04
   changes:
