@@ -1,6 +1,14 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.48.0
+  date: 2026-04-04
+  changes:
+    - text: "Checkout success page no longer hardcodes plan name"
+      audience: internal
+    - text: "README, api.http, sales slick, and CLAUDE.md synced with current route surface and config"
+      audience: internal
+
 - version: v0.47.0
   date: 2026-04-04
   changes:
