@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// DefaultDNSServers is the ordered list of external DNS resolvers used when
-// the system resolver is unavailable or misconfigured (e.g., Fly.io internal DNS).
+// DefaultDNSServers is the ordered list of external DNS resolvers used as
+// fallback when the system resolver fails (e.g., Fly.io internal DNS).
 var DefaultDNSServers = []string{
 	"8.8.8.8:53",        // Google
 	"1.1.1.1:53",        // Cloudflare
@@ -18,9 +18,11 @@ var DefaultDNSServers = []string{
 // fallback to the next server happens quickly within the caller's context deadline.
 var DefaultDNSDialTimeout = 2 * time.Second
 
-// NewExternalResolver creates a net.Resolver that uses the given DNS servers
-// in order, falling back to the next if the current one fails. The caller's
-// context controls the total deadline across all attempts.
+// NewExternalResolver creates a net.Resolver that tries the system resolver
+// first, then falls back to the given external DNS servers in order. This
+// preserves Docker/platform internal DNS (e.g., resolving "postgres" or
+// "redis" container names) while providing external fallback for domains
+// that the platform resolver can't handle.
 func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resolver {
 	if len(servers) == 0 {
 		return net.DefaultResolver
@@ -33,6 +35,14 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			d := net.Dialer{Timeout: dialTimeout}
+
+			// Try the system/platform resolver first (preserves Docker DNS, etc.)
+			conn, err := d.DialContext(ctx, "udp", address)
+			if err == nil {
+				return conn, nil
+			}
+
+			// Fall back to external resolvers
 			var lastErr error
 			for _, server := range servers {
 				if ctx.Err() != nil {
@@ -49,8 +59,9 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 	}
 }
 
-// InitResolver overrides net.DefaultResolver with an external resolver using
-// the provided DNS servers. Call this early in application startup.
+// InitResolver overrides net.DefaultResolver with a resolver that tries the
+// system DNS first, then falls back to external servers. Call this early in
+// application startup.
 func InitResolver(servers []string, dialTimeout time.Duration) {
 	if len(servers) == 0 {
 		servers = DefaultDNSServers
