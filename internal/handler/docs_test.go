@@ -117,6 +117,9 @@ func TestDocs_ChangelogFiltersInternalEntries(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
 	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
 	body := w.Body.String()
 	if !strings.Contains(body, "Public feature added") {
 		t.Error("expected public changelog entry to appear in docs")
@@ -150,6 +153,9 @@ func TestDocs_ChangelogExcludesAllInternalVersions(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
 	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
 	body := w.Body.String()
 	if !strings.Contains(body, "v2.0.0") {
 		t.Error("expected v2.0.0 version with public changes to appear")
@@ -169,6 +175,9 @@ func TestDocs_RendersVersion(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
 	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
 	body := w.Body.String()
 	if !strings.Contains(body, "v99.0.0-test") {
 		t.Error("expected version string to appear in docs page")
@@ -186,6 +195,9 @@ func TestDocs_RendersPaymentLinks(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
 	r.ServeHTTP(w, req)
 
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
 	body := w.Body.String()
 	if !strings.Contains(body, "https://buy.stripe.com/test_basic") {
 		t.Error("expected basic payment link in docs")
