@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"time"
+
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 // DefaultDNSServers is the ordered list of external DNS resolvers used as
@@ -34,10 +36,13 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := net.Dialer{Timeout: dialTimeout}
+			d := net.Dialer{
+				Timeout: dialTimeout,
+				Control: safenet.DialControl,
+			}
 
 			// Try the system/platform resolver first (preserves Docker DNS, etc.)
-			conn, err := d.DialContext(ctx, "udp", address)
+			conn, err := d.DialContext(ctx, network, address)
 			if err == nil {
 				return conn, nil
 			}
@@ -48,7 +53,7 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				conn, err := d.DialContext(ctx, "udp", server)
+				conn, err := d.DialContext(ctx, network, server)
 				if err == nil {
 					return conn, nil
 				}
