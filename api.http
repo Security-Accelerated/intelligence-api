@@ -9,8 +9,14 @@
 @proKey = test-pro-key
 @freeKey = test-free-key
 
-### API docs (no auth required)
-GET {{host}}/
+### API docs landing page (no auth required)
+GET {{host}}/docs
+
+### Domain Intelligence docs (no auth required)
+GET {{host}}/docs/domain
+
+### IP Intelligence docs (no auth required)
+GET {{host}}/docs/ip
 
 ### Health check (no auth required)
 GET {{host}}/v1/hello
@@ -249,3 +255,84 @@ X-API-Key: {{adminKey}}
   {"name":"PHP","category":"language","headers":{"X-Powered-By":"PHP"},"cookies":["PHPSESSID"]},
   {"name":"Cloudflare","category":"cdn","headers":{"Server":"cloudflare","CF-RAY":""},"cookies":["__cflb"]}
 ]
+
+### IP lookup (admin key)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "ips": ["8.8.8.8"]
+}
+
+### IP lookup with threat intel (pro key)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+X-API-Key: {{proKey}}
+
+{
+  "ips": ["8.8.8.8"],
+  "threat_intel": true
+}
+
+### IP lookup - should return 403 (free key, threat intel)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+X-API-Key: {{freeKey}}
+
+{
+  "ips": ["8.8.8.8"],
+  "threat_intel": true
+}
+
+### IP lookup - should return 401 (no key)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+
+{
+  "ips": ["8.8.8.8"]
+}
+
+### IP lookup - should return 400 (private IP)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "ips": ["192.168.1.1"]
+}
+
+### IP lookup - multiple IPs (admin key)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "ips": ["8.8.8.8", "1.1.1.1"]
+}
+
+### Usage statistics (admin only)
+GET {{host}}/v1/admin/usage
+X-API-Key: {{adminKey}}
+
+### Usage statistics with filters (admin only)
+GET {{host}}/v1/admin/usage?days=7&customer_id=1
+X-API-Key: {{adminKey}}
+
+### Changelog (admin only)
+GET {{host}}/v1/admin/changelog
+X-API-Key: {{adminKey}}
+
+### Refresh GeoIP databases (admin only)
+POST {{host}}/v1/admin/geoip/refresh
+X-API-Key: {{adminKey}}
+
+### Billing webhook (no auth, requires Stripe signature)
+POST {{host}}/billing/webhook
+Content-Type: application/json
+Stripe-Signature: t=123,v1=test
+
+{}
+
+### Billing success page (no auth, requires session_id)
+GET {{host}}/billing/success?session_id=cs_test_123

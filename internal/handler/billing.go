@@ -84,7 +84,6 @@ func (h *Handler) CheckoutSuccess(c *gin.Context) {
 
 	renderHTML(c, http.StatusOK, checkoutSuccessTmpl, checkoutSuccessData{
 		APIKey:     rawKey,
-		Plan:       "paid",
 		PortalLink: portalLink,
 	}, map[string]string{
 		"Content-Type":  "text/html; charset=utf-8",

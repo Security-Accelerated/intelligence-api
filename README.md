@@ -7,7 +7,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header,
 
 ## Authentication
 
-All endpoints except `/v1/hello` require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan.
+Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/v1/hello`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
 
 ### Customer Plans
 
@@ -45,7 +45,10 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 
 | Method | Path | Plan | Description |
 |--------|------|------|-------------|
-| GET | `/` | None | API reference documentation (HTML) |
+| GET | `/` | None | Redirects to `/docs` |
+| GET | `/docs` | None | API documentation landing page |
+| GET | `/docs/domain` | None | Domain Intelligence API docs |
+| GET | `/docs/ip` | None | IP Intelligence API docs |
 | GET | `/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
 | POST | `/billing/webhook` | None (Stripe signature) | Stripe webhook endpoint |
 | GET | `/billing/success` | None (session_id token) | Post-checkout API key retrieval page |
@@ -518,6 +521,7 @@ Returns aggregated API usage statistics for a configurable time window.
   "cache_hit_rate": 25.02,
   "avg_latency_ms": 842.5,
   "total_domains": 1580,
+  "total_ips": 420,
   "status_codes": {"200": 1190, "400": 32, "403": 15, "429": 10},
   "feature_usage": {
     "screenshot": 45, "reputation": 120, "threat_intel": 95, "email_security": 310,
@@ -547,7 +551,7 @@ Returns application configuration, service status, and live runtime metrics. The
 
 ### `GET /v1/admin/changelog` — Changelog (Admin Only)
 
-Returns the full changelog with audience tags. Each entry includes `version`, `date`, and `changes` (array of `{text, audience}`). The public API docs page at `GET /` automatically shows only `public` entries in a "What's New" section.
+Returns the full changelog with audience tags. Each entry includes `version`, `date`, and `changes` (array of `{text, audience}`). The public docs pages at `/docs`, `/docs/domain`, and `/docs/ip` automatically show only `public` entries in a "What's New" section.
 
 The changelog is maintained in `changelog.yaml` at the project root (symlink to `internal/handler/changelog.yaml`). Update it with every release.
 
@@ -610,6 +614,8 @@ Config values:
 | `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
 | `gin.mode` | `""` | Gin framework mode (`debug`, `release`, `test`) |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
+| `auth.last_used_buffer_size` | `256` | Buffer size for batched last_used_at updates |
+| `auth.last_used_flush_interval` | `10s` | How often last_used_at updates are flushed to PostgreSQL |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `screenshot.max_png_bytes` | `5242880` | Maximum screenshot PNG size in bytes (5 MB) |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
@@ -617,6 +623,16 @@ Config values:
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
 | `threat_intel.virustotal_api_key` | `""` | VirusTotal API key (enables VirusTotal provider) |
 | `threat_intel.alienvault_api_key` | `""` | AlienVault OTX API key (enables AlienVault provider) |
+| `dns.servers` | `[]` | External DNS resolvers (default: Google, Cloudflare, OpenDNS) |
+| `dns.timeout` | `30s` | Per-server DNS dial timeout |
+| `maxmind.license_key` | `""` | MaxMind license key for GeoIP database downloads |
+| `maxmind.db_path` | `/data/maxmind` | Directory path for MaxMind GeoLite2 database files |
+| `maxmind.city_db` | `GeoLite2-City.mmdb` | MaxMind city database filename |
+| `maxmind.asn_db` | `GeoLite2-ASN.mmdb` | MaxMind ASN database filename |
+| `ip.lookup_timeout` | `30s` | Overall timeout for all concurrent IP lookups |
+| `ip.max_ips.free` | `1` | Maximum IPs per request for free plan |
+| `ip.max_ips.basic` | `5` | Maximum IPs per request for basic plan |
+| `ip.max_ips.pro` | `20` | Maximum IPs per request for pro plan |
 | `domain.lookup_timeout` | `30s` | Overall timeout for all concurrent lookups per domain |
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |

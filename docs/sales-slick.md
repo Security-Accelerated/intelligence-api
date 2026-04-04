@@ -1,20 +1,20 @@
 # Security Accelerated Intelligence API
 
-## Know more about any domain in seconds.
+## Know more about any domain or IP in seconds.
 
-The Intelligence API gives your team instant, comprehensive visibility into any domain's security posture, infrastructure, and risk profile — all from a single API call.
+The Intelligence API gives your team instant, comprehensive visibility into any domain's or IP address's security posture, infrastructure, and risk profile — all from a single API call.
 
 ---
 
 ### The Problem
 
-Security teams waste hours manually checking domains across dozens of disconnected tools. When a suspicious link lands in an employee's inbox, when a new vendor needs vetting, or when a brand impersonation attempt surfaces — the clock is ticking and the answers are scattered.
+Security teams waste hours manually checking domains and IPs across dozens of disconnected tools. When a suspicious link lands in an employee's inbox, when a new vendor needs vetting, when a suspicious IP appears in your logs, or when a brand impersonation attempt surfaces — the clock is ticking and the answers are scattered.
 
 ### The Solution
 
 One API. One call. Every signal that matters.
 
-Submit a domain and get back a complete intelligence profile in seconds: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, what technologies it runs, whether it's linked to known malware campaigns, and even a visual screenshot of the page. Batch multiple domains in a single request. Results are cached for fast repeat lookups.
+Submit a domain or IP address and get back a complete intelligence profile in seconds. For domains: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, what technologies it runs, whether it's linked to known malware campaigns, and even a visual screenshot of the page. For IPs: geolocation, ASN ownership, reverse DNS, abuse contacts, and threat intelligence. Batch multiple domains or IPs in a single request. Results are cached for fast repeat lookups.
 
 ---
 
@@ -52,11 +52,14 @@ Map domains to their hosting infrastructure via IP-to-ASN lookups. Identify host
 ### Technology Fingerprinting
 Detect web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers — with zero extra network requests. Identify technology stacks for vulnerability assessment and attack surface mapping.
 
+### IP Intelligence
+Profile any public IP address with a single call. Get geolocation (country, city, coordinates), ASN ownership, reverse DNS hostnames, and abuse contact information via RDAP. Add threat intelligence to check if an IP is associated with known malicious activity across VirusTotal, URLhaus, and AlienVault OTX. Powered by MaxMind GeoLite2 databases with hot-reload support.
+
 ---
 
 ## How It Works
 
-```
+```http
 POST /v1/domain/lookup
 {
   "domains": ["example.com"],
@@ -67,6 +70,14 @@ POST /v1/domain/lookup
   "ct_logs": true,
   "bgp": true,
   "fingerprint": true,
+  "threat_intel": true
+}
+```
+
+```http
+POST /v1/ip/lookup
+{
+  "ips": ["8.8.8.8"],
   "threat_intel": true
 }
 ```
@@ -91,6 +102,7 @@ That's it. One request, one comprehensive response.
 | Capability | Free | Basic | Pro |
 |-----------|------|-------|-----|
 | Domain lookup (WHOIS, DNS, SSL, headers) | Included | Included | Included |
+| IP lookup (GeoIP, ASN, reverse DNS, abuse contact) | Included | Included | Included |
 | Email security (SPF, DMARC, DKIM) | Included | Included | Included |
 | Subdomain enumeration | Included | Included | Included |
 | Certificate transparency logs | Included | Included | Included |
@@ -98,9 +110,10 @@ That's it. One request, one comprehensive response.
 | Technology fingerprinting | Included | Included | Included |
 | Page screenshots | — | — | Included |
 | Domain reputation scoring | — | — | Included |
-| Threat intelligence | — | — | Included |
+| Threat intelligence (domain + IP) | — | — | Included |
 | Rate limit | 5 req/min | 30 req/min | 120 req/min |
-| Batch size (domain lookup) | 1 domain | 5 domains | 20 domains |
+| Batch size (domains) | 1 | 5 | 20 |
+| Batch size (IPs) | 1 | 5 | 20 |
 
 ---
 
