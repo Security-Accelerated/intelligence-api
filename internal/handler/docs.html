@@ -31,6 +31,7 @@
     --accent-strong: #4454dc;
     --accent-soft: rgba(91, 108, 255, 0.14);
     --warm: #8c7cff;
+    --topbar-height: 72px;
     --border: rgba(16, 32, 43, 0.1);
     --panel: rgba(255, 255, 255, 0.84);
     --panel-muted: rgba(16, 32, 43, 0.04);
@@ -181,11 +182,12 @@
     position: sticky;
     top: 0;
     z-index: 20;
+    height: var(--topbar-height);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 20px;
-    padding: 18px 32px;
+    padding: 16px 32px;
     border-bottom: 1px solid var(--topbar-border);
     background: var(--topbar-bg);
     backdrop-filter: blur(14px);
