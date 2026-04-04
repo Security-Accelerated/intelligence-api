@@ -14,11 +14,22 @@ func TestNewExternalResolver_EmptyServers_ReturnsDefault(t *testing.T) {
 	}
 }
 
-func TestNewExternalResolver_ClampsTimeout(t *testing.T) {
-	// Negative timeout should be clamped to default
+func TestNewExternalResolver_NegativeTimeout_ReturnsValidResolver(t *testing.T) {
+	// Negative timeout is clamped internally to DefaultDNSDialTimeout.
+	// We verify the resolver is usable, not the exact timeout value.
 	r := NewExternalResolver([]string{"8.8.8.8:53"}, -1*time.Second)
 	if r == nil {
 		t.Fatal("expected non-nil resolver")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	addrs, err := r.LookupHost(ctx, "localhost")
+	if err != nil {
+		t.Fatalf("resolver with clamped timeout should work: %v", err)
+	}
+	if len(addrs) == 0 {
+		t.Error("expected at least one address")
 	}
 }
 
