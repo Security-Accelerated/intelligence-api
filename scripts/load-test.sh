@@ -2,7 +2,7 @@
 # Load test — hits domain and IP endpoints concurrently with enough unique
 # targets to avoid cache hits. Measures response times and error rates.
 #
-# With ~500 domains and ~300 IPs running concurrently, this runs 30-60 minutes.
+# With ~500 domains and ~1500 IPs running concurrently, this runs 30-60 minutes.
 #
 # Usage:
 #   ./scripts/load-test.sh                          # localhost
