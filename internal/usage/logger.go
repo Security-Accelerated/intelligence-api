@@ -3,6 +3,8 @@ package usage
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -102,45 +104,36 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Use a transaction with a prepared statement for the batch. This keeps all
-	// inserts on one connection with a single prepared statement, avoiding the
-	// "unnamed prepared statement does not exist" error on serverless Postgres
-	// (Neon) where the pooler can invalidate prepared statements across calls.
-	tx, err := ul.db.BeginTx(ctx, nil)
-	if err != nil {
-		ul.logger.Error("failed to begin usage flush tx", zap.Error(err), zap.Int("count", len(entries)))
-		return
-	}
-
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO request_log
-		(customer_id, api_key_id, plan, method, path, status_code, latency_ms,
-		 domain_count, ip_count, cache_hit, screenshot, reputation, email_security,
-		 subdomains, ct_logs, bgp, fingerprint, threat_intel, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`)
-	if err != nil {
-		tx.Rollback()
-		ul.logger.Error("failed to prepare usage flush stmt", zap.Error(err), zap.Int("count", len(entries)))
-		return
-	}
-	defer stmt.Close()
+	// Build a multi-row INSERT for efficiency.
+	const cols = 19
+	valueStrings := make([]string, 0, len(entries))
+	args := make([]any, 0, len(entries)*cols)
 
 	now := time.Now().UTC()
-	for _, e := range entries {
-		if _, err := stmt.ExecContext(ctx,
+	for i, e := range entries {
+		base := i * cols
+		valueStrings = append(valueStrings, fmt.Sprintf(
+			"($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9,
+			base+10, base+11, base+12, base+13, base+14, base+15, base+16, base+17, base+18, base+19,
+		))
+		args = append(args,
 			nilIfZero(e.CustomerID), nilIfZero(e.APIKeyID), nilIfEmpty(e.Plan),
 			e.Method, e.Path, e.StatusCode, e.LatencyMs, e.DomainCount, e.IPCount,
 			e.CacheHit, e.Screenshot, e.Reputation, e.EmailSecurity,
 			e.Subdomains, e.CTLogs, e.BGP, e.Fingerprint, e.ThreatIntel,
 			now,
-		); err != nil {
-			tx.Rollback()
-			ul.logger.Error("failed to flush usage entry", zap.Error(err), zap.Int("count", len(entries)))
-			return
-		}
+		)
 	}
 
-	if err := tx.Commit(); err != nil {
-		ul.logger.Error("failed to commit usage flush", zap.Error(err), zap.Int("count", len(entries)))
+	query := fmt.Sprintf(`INSERT INTO request_log
+		(customer_id, api_key_id, plan, method, path, status_code, latency_ms,
+		 domain_count, ip_count, cache_hit, screenshot, reputation, email_security,
+		 subdomains, ct_logs, bgp, fingerprint, threat_intel, created_at)
+		VALUES %s`, strings.Join(valueStrings, ","))
+
+	if _, err := ul.db.ExecContext(ctx, query, args...); err != nil {
+		ul.logger.Error("failed to flush usage entries", zap.Error(err), zap.Int("count", len(entries)))
 	}
 }
 
