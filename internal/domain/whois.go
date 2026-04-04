@@ -39,18 +39,14 @@ func LookupWhois(ctx context.Context, domain string) (*WhoisInfo, error) {
 		return nil, err
 	}
 
-	info := &WhoisInfo{}
-
-	if parsed.Domain != nil {
-		info.DomainName = parsed.Domain.Domain
-		info.CreatedDate = parsed.Domain.CreatedDate
-		info.UpdatedDate = parsed.Domain.UpdatedDate
-		info.ExpiryDate = parsed.Domain.ExpirationDate
-		info.Status = parsed.Domain.Status
-		info.NameServers = parsed.Domain.NameServers
-	}
-	if parsed.Registrar != nil {
-		info.Registrar = parsed.Registrar.Name
+	info := &WhoisInfo{
+		DomainName:  parsed.Domain.Domain,
+		Registrar:   parsed.Registrar.Name,
+		CreatedDate: parsed.Domain.CreatedDate,
+		UpdatedDate: parsed.Domain.UpdatedDate,
+		ExpiryDate:  parsed.Domain.ExpirationDate,
+		Status:      parsed.Domain.Status,
+		NameServers: parsed.Domain.NameServers,
 	}
 
 	if c := contactFromWhois(parsed.Registrant); c != nil {
