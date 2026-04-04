@@ -1,6 +1,14 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.49.0
+  date: 2026-04-04
+  changes:
+    - text: "Switched PostgreSQL driver from lib/pq to pgx with simple protocol mode — eliminates prepared statement errors on Neon"
+      audience: internal
+    - text: "DSN construction uses net/url for proper percent-encoding of credentials"
+      audience: internal
+
 - version: v0.48.0
   date: 2026-04-04
   changes:
