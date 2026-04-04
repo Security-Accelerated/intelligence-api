@@ -22,7 +22,7 @@ type URLhausProvider struct {
 func NewURLhausProvider() *URLhausProvider {
 	return &URLhausProvider{
 		client: &http.Client{
-			Transport: safeTransport,
+			Transport: trustedTransport,
 			Timeout:   10 * time.Second,
 		},
 		limiter: rate.NewLimiter(rate.Limit(5), 1),

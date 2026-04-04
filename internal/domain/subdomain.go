@@ -34,7 +34,7 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 	req.Header.Set("User-Agent", "IntelligenceAPI/1.0")
 
 	client := &http.Client{
-		Transport: safeTransport,
+		Transport: trustedTransport,
 	}
 
 	resp, err := client.Do(req)

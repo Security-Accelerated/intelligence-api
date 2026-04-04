@@ -22,7 +22,7 @@ func NewAlienVaultProvider(apiKey string) *AlienVaultProvider {
 	return &AlienVaultProvider{
 		apiKey: apiKey,
 		client: &http.Client{
-			Transport: safeTransport,
+			Transport: trustedTransport,
 			Timeout:   10 * time.Second,
 		},
 		limiter: rate.NewLimiter(rate.Limit(10), 1),
