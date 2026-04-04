@@ -35,6 +35,14 @@ func Run(logger *zap.Logger, version string) error {
 		Pro:   cfg.GetInt("rate_limit.pro"),
 	}
 
+	// DNS resolver — use external resolvers to avoid platform DNS issues (e.g., Fly.io)
+	dnsServers := cfg.GetStringSlice("dns.servers")
+	domain.InitResolver(dnsServers)
+	if len(dnsServers) == 0 {
+		dnsServers = domain.DefaultDNSServers
+	}
+	logger.Info("dns resolver configured", zap.Strings("servers", dnsServers))
+
 	logger.Info("initializing application",
 		zap.Any("system", status.System),
 		zap.Any("lookups", status.Lookups),
