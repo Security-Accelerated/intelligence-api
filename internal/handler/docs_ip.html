@@ -101,10 +101,6 @@
     --theme-icon-light: #f8fbff;
     --theme-icon-ring: rgba(125, 140, 168, 0.46);
     --theme-icon-divider: rgba(125, 140, 168, 0.58);
-    --theme-icon-moon: #93a4ff;
-    --theme-icon-sun: #ffd76b;
-    --theme-icon-sun-ray: #d89514;
-    --theme-icon-star: #ffffff;
   }
 
   html[data-theme="dark"] {
@@ -303,12 +299,12 @@
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
-    transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
   }
 
   .theme-toggle:hover {
-    transform: translateY(-1px);
     border-color: var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--accent-soft), var(--theme-toggle-shadow);
   }
 
   .theme-toggle-glyph {
@@ -768,15 +764,6 @@
           <circle cx="12" cy="12" r="9" fill="transparent" stroke="var(--theme-icon-ring)" stroke-width="1.5"></circle>
           <path d="M12 4.5A7.5 7.5 0 0 0 12 19.5Z" fill="var(--theme-icon-dark)"></path>
           <path d="M12 4.5A7.5 7.5 0 0 1 12 19.5Z" fill="var(--theme-icon-light)"></path>
-          <path d="M9.8 15.6a3.8 3.8 0 1 1 0-7.2a4.7 4.7 0 1 0 0 7.2Z" fill="var(--theme-icon-moon)"></path>
-          <circle cx="15.8" cy="8.2" r="2.2" fill="var(--theme-icon-sun)"></circle>
-          <g stroke="var(--theme-icon-sun-ray)" stroke-width="1.2" stroke-linecap="round">
-            <path d="M15.8 4.5v1"></path>
-            <path d="M15.8 10.9v1"></path>
-            <path d="M12.1 8.2h1"></path>
-            <path d="M18.5 8.2h1"></path>
-          </g>
-          <circle cx="8.4" cy="8.3" r="0.85" fill="var(--theme-icon-star)"></circle>
           <path d="M12 4.6v14.8" stroke="var(--theme-icon-divider)" stroke-width="1"></path>
         </svg>
       </span>
