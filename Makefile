@@ -14,8 +14,6 @@ clean:
 
 deps:
 	go get -u ./...
-	# TODO: remove pin once chromedp supports the latest cdproto (chromedp v0.15.0+ broke on cdproto 2025-03-21)
-	go get github.com/chromedp/cdproto@v0.0.0-20250724212937-08a3db8b4327
 	go mod tidy
 
 test:
