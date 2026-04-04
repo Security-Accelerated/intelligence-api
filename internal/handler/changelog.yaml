@@ -1,6 +1,12 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.50.0
+  date: 2026-04-04
+  changes:
+    - text: "Domain inputs with paths, ports, query strings, and fragments are now normalized instead of rejected"
+      audience: public
+
 - version: v0.49.2
   date: 2026-04-04
   changes:
