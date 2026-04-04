@@ -1,6 +1,14 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.49.2
+  date: 2026-04-04
+  changes:
+    - text: "Renamed misleading billing integration tests to reflect actual coverage"
+      audience: internal
+    - text: "Added admin changelog and info positive-path integration tests"
+      audience: internal
+
 - version: v0.49.1
   date: 2026-04-04
   changes:
