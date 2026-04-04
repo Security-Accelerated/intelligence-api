@@ -20,6 +20,12 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 	}
 
 	router := gin.New()
+	// On Fly.io, Fly-Client-IP is set at the edge and cannot be spoofed.
+	// This ensures c.ClientIP() returns the real client IP in logs and
+	// rate limiting rather than a spoofed X-Forwarded-For value.
+	if mode == "production" {
+		router.TrustedPlatform = "Fly-Client-IP"
+	}
 	router.Use(gin.Recovery())
 	router.Use(middleware.SecurityHeaders())
 	router.Use(middleware.BodyLimit(bodyLimit))

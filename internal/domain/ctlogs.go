@@ -40,7 +40,7 @@ func LookupCTLogs(ctx context.Context, domainName string, maxEntries int) (*CTLo
 	req.Header.Set("User-Agent", "IntelligenceAPI/1.0")
 
 	client := &http.Client{
-		Transport: safeTransport,
+		Transport: trustedTransport,
 	}
 
 	resp, err := client.Do(req)

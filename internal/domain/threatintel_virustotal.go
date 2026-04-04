@@ -23,7 +23,7 @@ func NewVirusTotalProvider(apiKey string) *VirusTotalProvider {
 	return &VirusTotalProvider{
 		apiKey: apiKey,
 		client: &http.Client{
-			Transport: safeTransport,
+			Transport: trustedTransport,
 			Timeout:   15 * time.Second,
 		},
 		limiter: rate.NewLimiter(rate.Every(15*time.Second), 1),

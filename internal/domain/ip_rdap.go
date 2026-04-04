@@ -52,7 +52,7 @@ func LookupAbuseContact(ctx context.Context, ip string) (*AbuseContactInfo, erro
 	}
 
 	endpoint := rirEndpointForIP(ip)
-	client := &http.Client{Transport: safeTransport}
+	client := &http.Client{Transport: trustedTransport}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+ip, nil)
 	if err != nil {

@@ -147,7 +147,6 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 		zap.Int("customer_id", customerID),
 		zap.String("plan", plan),
 		zap.String("stripe_customer_id", stripeCustomerID),
-		zap.String("session_id", sess.ID),
 	)
 
 	s.notify(ctx, "New Subscriber", fmt.Sprintf("%s signed up for the %s plan", email, plan))

@@ -71,7 +71,6 @@ func (h *Handler) CheckoutSuccess(c *gin.Context) {
 	if err != nil {
 		logging.Logger().Warn("provisioned key retrieval failed",
 			zap.Error(err),
-			zap.String("session_id", sessionID),
 		)
 		renderCheckoutError(c, "This API key has already been retrieved or the session has expired. If you did not save your key, please contact support@securityaccelerated.com.")
 		return
