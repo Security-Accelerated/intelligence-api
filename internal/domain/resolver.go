@@ -4,8 +4,6 @@ import (
 	"context"
 	"net"
 	"time"
-
-	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 // DefaultDNSServers is the ordered list of external DNS resolvers used as
@@ -36,10 +34,10 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			d := net.Dialer{
-				Timeout: dialTimeout,
-				Control: safenet.DialControl,
-			}
+			// No safenet.DialControl here — DNS resolvers are often on private/loopback
+			// addresses (Docker's 127.0.0.11, Fly's fdaa::3) which DialControl would block.
+			// SSRF protection is enforced at the HTTP transport layer, not DNS.
+			d := net.Dialer{Timeout: dialTimeout}
 
 			// Try the system/platform resolver first (preserves Docker DNS, etc.)
 			conn, err := d.DialContext(ctx, network, address)
