@@ -17,6 +17,10 @@ HOST="${1:-http://localhost:8080}"
 if [[ "$HOST" != *"localhost"* && "$HOST" != *"127.0.0.1"* ]]; then
     ENV_FILE="$(dirname "$0")/../.env"
     [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
+    if [ -z "${SMOKE_ADMIN_KEY:-}" ]; then
+        echo "ERROR: SMOKE_ADMIN_KEY is required for non-localhost targets. Set it in .env or environment." >&2
+        exit 1
+    fi
 fi
 
 KEY="${SMOKE_ADMIN_KEY:-test-admin-key}"
