@@ -59,7 +59,7 @@ Profile any public IP address with a single call. Get geolocation (country, city
 
 ## How It Works
 
-```
+```http
 POST /v1/domain/lookup
 {
   "domains": ["example.com"],
@@ -74,7 +74,7 @@ POST /v1/domain/lookup
 }
 ```
 
-```
+```http
 POST /v1/ip/lookup
 {
   "ips": ["8.8.8.8"],

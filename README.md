@@ -615,7 +615,7 @@ Config values:
 | `gin.mode` | `""` | Gin framework mode (`debug`, `release`, `test`) |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
 | `auth.last_used_buffer_size` | `256` | Buffer size for batched last_used_at updates |
-| `auth.last_used_flush_interval` | `30s` | How often last_used_at updates are flushed to PostgreSQL |
+| `auth.last_used_flush_interval` | `10s` | How often last_used_at updates are flushed to PostgreSQL |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `screenshot.max_png_bytes` | `5242880` | Maximum screenshot PNG size in bytes (5 MB) |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
@@ -626,7 +626,7 @@ Config values:
 | `dns.servers` | `[]` | External DNS resolvers (default: Google, Cloudflare, OpenDNS) |
 | `dns.timeout` | `30s` | Per-server DNS dial timeout |
 | `maxmind.license_key` | `""` | MaxMind license key for GeoIP database downloads |
-| `maxmind.db_path` | `""` | Directory path for MaxMind GeoLite2 database files |
+| `maxmind.db_path` | `/data/maxmind` | Directory path for MaxMind GeoLite2 database files |
 | `maxmind.city_db` | `GeoLite2-City.mmdb` | MaxMind city database filename |
 | `maxmind.asn_db` | `GeoLite2-ASN.mmdb` | MaxMind ASN database filename |
 | `ip.lookup_timeout` | `30s` | Overall timeout for all concurrent IP lookups |
