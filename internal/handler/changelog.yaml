@@ -1,6 +1,12 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.50.2
+  date: 2026-04-06
+  changes:
+    - text: "Updated indirect dependencies (cdproto, validator, maxminddb-golang, go-toml)"
+      audience: internal
+
 - version: v0.50.1
   date: 2026-04-04
   changes:
