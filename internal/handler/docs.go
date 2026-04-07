@@ -76,9 +76,8 @@ func (h *Handler) renderDocs(c *gin.Context, tmpl *template.Template) {
 }
 
 func (h *Handler) DocsCSS(c *gin.Context) {
-	c.Header("Content-Type", "text/css; charset=utf-8")
 	c.Header("Cache-Control", "public, max-age=3600")
-	c.String(http.StatusOK, docsCSS)
+	c.Data(http.StatusOK, "text/css; charset=utf-8", []byte(docsCSS))
 }
 
 func (h *Handler) Docs(c *gin.Context) {
