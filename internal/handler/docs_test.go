@@ -86,6 +86,29 @@ func TestDocs_IPPage(t *testing.T) {
 	}
 }
 
+func TestDocs_CSSEndpoint(t *testing.T) {
+	r := docsRouter()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/styles.css", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	ct := w.Header().Get("Content-Type")
+	if !strings.Contains(ct, "text/css") {
+		t.Errorf("Content-Type = %q, want text/css", ct)
+	}
+	cc := w.Header().Get("Cache-Control")
+	if cc != "public, max-age=3600" {
+		t.Errorf("Cache-Control = %q, want %q", cc, "public, max-age=3600")
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "--accent") {
+		t.Error("expected CSS to contain custom properties")
+	}
+}
+
 // --- Changelog filtering and data injection tests ---
 
 func docsRouterWithData(changelog []ChangelogVersion, cfg *viper.Viper, status *config.StatusSnapshot) *gin.Engine {
@@ -207,5 +230,52 @@ func TestDocs_RendersPaymentLinks(t *testing.T) {
 	}
 	if !strings.Contains(body, "https://billing.stripe.com/test_portal") {
 		t.Error("expected portal link in docs")
+	}
+}
+
+func TestDocs_OverviewRendersFooter(t *testing.T) {
+	r := docsRouter()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	body := w.Body.String()
+	for _, want := range []string{
+		"<footer class=\"docs-footer docs-footer-overview\">",
+		"&copy; 2026 Security Accelerated",
+		"https://x.com/SecAccelerated",
+		"support@securityaccelerated.com",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expected %q to appear in overview footer", want)
+		}
+	}
+}
+
+func TestDocs_DetailPagesNoFooter(t *testing.T) {
+	r := docsRouter()
+
+	for _, path := range []string{"/docs/domain", "/docs/ip"} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+			}
+
+			body := w.Body.String()
+			if strings.Contains(body, "sidebar-footer") {
+				t.Error("detail pages should not have a sidebar footer")
+			}
+			if strings.Contains(body, "docs-footer") {
+				t.Error("detail pages should not have a standalone footer")
+			}
+		})
 	}
 }
