@@ -129,6 +129,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/docs", h.Docs)
 	router.GET("/docs/domain", h.DocsDomain)
 	router.GET("/docs/ip", h.DocsIP)
+	router.GET("/docs/styles.css", h.DocsCSS)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
 

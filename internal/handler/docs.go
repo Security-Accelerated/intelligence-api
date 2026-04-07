@@ -8,6 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+//go:embed docs_styles.css
+var docsCSS string
+
 //go:embed docs.html
 var docsHTML string
 
@@ -70,6 +73,12 @@ func (h *Handler) renderDocs(c *gin.Context, tmpl *template.Template) {
 	renderHTML(c, http.StatusOK, tmpl, data, map[string]string{
 		"Content-Type": "text/html; charset=utf-8",
 	})
+}
+
+func (h *Handler) DocsCSS(c *gin.Context) {
+	c.Header("Content-Type", "text/css; charset=utf-8")
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.String(http.StatusOK, docsCSS)
 }
 
 func (h *Handler) Docs(c *gin.Context) {
