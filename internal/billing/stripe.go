@@ -20,6 +20,11 @@ type StripeService struct {
 	repo          BillingRepository
 	authCache     AuthCacheInvalidator
 	notifier      notifications.Notifier
+
+	// getSession fetches a checkout session from Stripe. Separated from the
+	// SDK-level package function so tests can inject a stub and verify the
+	// handler's behavior without network calls.
+	getSession func(ctx context.Context, sessionID string, expandLineItems bool) (*stripe.CheckoutSession, error)
 }
 
 // NewStripeService creates a billing service backed by Stripe.
@@ -34,7 +39,21 @@ func NewStripeService(secretKey, webhookSecret string, priceMap map[string]strin
 		repo:          repo,
 		authCache:     authCache,
 		notifier:      notifier,
+		getSession:    realGetSession,
 	}
+}
+
+// realGetSession is the production checkout-session fetcher. It calls the
+// Stripe SDK and, when expandLineItems is true, expands the line_items field
+// so the plan can be resolved from the purchased price IDs.
+func realGetSession(ctx context.Context, sessionID string, expandLineItems bool) (*stripe.CheckoutSession, error) {
+	params := &stripe.CheckoutSessionParams{
+		Params: stripe.Params{Context: ctx},
+	}
+	if expandLineItems {
+		params.AddExpand("line_items")
+	}
+	return session.Get(sessionID, params)
 }
 
 // HandleWebhook verifies a Stripe webhook signature and processes the event.
@@ -62,15 +81,19 @@ func (s *StripeService) HandleWebhook(ctx context.Context, payload []byte, sigHe
 }
 
 func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stripe.Event, logger *zap.Logger) error {
-	sess, err := session.Get(event.GetObjectValue("id"), &stripe.CheckoutSessionParams{
-		Params: stripe.Params{Context: ctx},
-	})
+	sess, err := s.getSession(ctx, event.GetObjectValue("id"), false)
 	if err != nil {
 		return fmt.Errorf("retrieve checkout session: %w", err)
 	}
+	if sess.Customer == nil {
+		return fmt.Errorf("checkout session %s missing customer", sess.ID)
+	}
 
 	stripeCustomerID := sess.Customer.ID
-	email := sess.CustomerDetails.Email
+	var email string
+	if sess.CustomerDetails != nil {
+		email = sess.CustomerDetails.Email
+	}
 
 	// Idempotency: customer creation, api_key, and provisioned_key are all in one
 	// transaction (ProvisionCustomer), so if the customer exists, everything succeeded.
@@ -88,11 +111,7 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 	// Determine plan from the checkout session's line items.
 	// This fetch must succeed — a failure here would silently default a paid
 	// customer to the wrong plan. Returning an error causes Stripe to retry.
-	expandedParams := &stripe.CheckoutSessionParams{
-		Params: stripe.Params{Context: ctx},
-	}
-	expandedParams.AddExpand("line_items")
-	expandedSess, err := session.Get(sess.ID, expandedParams)
+	expandedSess, err := s.getSession(ctx, sess.ID, true)
 	if err != nil {
 		return fmt.Errorf("retrieve checkout line items: %w", err)
 	}
@@ -121,7 +140,7 @@ func (s *StripeService) handleCheckoutCompleted(ctx context.Context, event *stri
 
 	// Use email as name if no name provided
 	name := email
-	if sess.CustomerDetails.Name != "" {
+	if sess.CustomerDetails != nil && sess.CustomerDetails.Name != "" {
 		name = sess.CustomerDetails.Name
 	}
 

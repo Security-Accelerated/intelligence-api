@@ -60,6 +60,14 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many domains: maximum %d allowed for %s plan", max, planStr)})
 		return
 	}
+	// Subdomain enumeration is more expensive (per-domain crt.sh fanout), so
+	// enforce a tighter per-plan cap when subdomains are requested.
+	if req.Subdomains {
+		if max := h.maxDomains("subdomain", planStr); max > 0 && len(req.Domains) > max {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many domains: maximum %d allowed for %s plan when subdomains is requested", max, planStr)})
+			return
+		}
+	}
 
 	opts := domain.LookupOptions{Screenshot: req.Screenshot, Reputation: req.Reputation, EmailSecurity: req.EmailSecurity, Subdomains: req.Subdomains, CTLogs: req.CTLogs, BGP: req.BGP, Fingerprint: req.Fingerprint, ThreatIntel: req.ThreatIntel}
 	c.Set("domain_count", len(req.Domains))

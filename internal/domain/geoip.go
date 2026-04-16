@@ -3,12 +3,15 @@ package domain
 import (
 	"compress/gzip"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -257,11 +260,11 @@ func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath, cityFile, asnFile st
 // the .mmdb file to a temp file in dbPath. Returns the temp file path, SHA-256
 // hash, and file size.
 func downloadMMDB(client *http.Client, edition, licenseKey, dbPath string) (string, string, int64, error) {
-	url := fmt.Sprintf(maxmindDownloadURL, edition, licenseKey)
+	dlURL := fmt.Sprintf(maxmindDownloadURL, edition, licenseKey)
 
-	resp, err := client.Get(url)
+	resp, err := client.Get(dlURL)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("fetch %s: %w", edition, err)
+		return "", "", 0, fmt.Errorf("fetch %s: %w", edition, scrubLicenseKey(err))
 	}
 	defer resp.Body.Close()
 
@@ -305,4 +308,36 @@ func downloadMMDB(client *http.Client, edition, licenseKey, dbPath string) (stri
 
 	hash := fmt.Sprintf("%x", hasher.Sum(nil))
 	return tmp.Name(), hash, int64(n), nil
+}
+
+// scrubLicenseKey rewrites any *url.Error in the chain so its URL field has the
+// license_key query parameter redacted. The Go HTTP client puts the full request
+// URL into url.Error.URL, which would otherwise leak the MaxMind license key
+// into wrapped error messages and logs.
+func scrubLicenseKey(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		urlErr.URL = redactLicenseKeyParam(urlErr.URL)
+	}
+	return err
+}
+
+// redactLicenseKeyParam replaces the value of the license_key query parameter
+// with "REDACTED". Returns the input unchanged if the parameter is not present
+// or the URL is unparseable.
+func redactLicenseKeyParam(s string) string {
+	if !strings.Contains(s, "license_key=") {
+		return s
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return s
+	}
+	q := u.Query()
+	if !q.Has("license_key") {
+		return s
+	}
+	q.Set("license_key", "REDACTED")
+	u.RawQuery = q.Encode()
+	return u.String()
 }

@@ -1,6 +1,20 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.42.0
+  date: 2026-04-16
+  changes:
+    - text: "Subdomain enumeration is now subject to a tighter per-plan domain cap (subdomain.max_domains.*) — previously this config was defined but never enforced"
+      audience: internal
+    - text: "MaxMind license key is now redacted from any wrapped error originating from the database download client"
+      audience: internal
+    - text: "Embedded changelog parser now panics on malformed YAML at startup instead of silently returning an empty changelog"
+      audience: internal
+    - text: "Added unit tests for the Stripe checkout.session.completed webhook handler covering the happy path, idempotency, plan resolution failures, and provisioning failures"
+      audience: internal
+    - text: "Replaced time.Sleep-based test synchronization in billing and notification tests with channel-driven waits"
+      audience: internal
+
 - version: v0.41.0
   date: 2026-03-29
   changes:

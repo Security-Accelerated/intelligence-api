@@ -34,9 +34,14 @@ type ChangelogChange struct {
 	Audience string `json:"audience" yaml:"audience"`
 }
 
+// parseChangelog parses the embedded changelog. The YAML is embedded at compile
+// time, so an unmarshal failure indicates a malformed changelog.yaml that must
+// be fixed before the binary can ship — panic so it surfaces immediately.
 func parseChangelog() []ChangelogVersion {
 	var entries []ChangelogVersion
-	yaml.Unmarshal(changelogYAML, &entries)
+	if err := yaml.Unmarshal(changelogYAML, &entries); err != nil {
+		panic(fmt.Sprintf("malformed embedded changelog.yaml: %v", err))
+	}
 	return entries
 }
 

@@ -10,6 +10,7 @@ import (
 type mockNotifier struct {
 	mu    sync.Mutex
 	calls []mockCall
+	sent  chan struct{}
 }
 
 type mockCall struct {
@@ -18,10 +19,19 @@ type mockCall struct {
 	priority int
 }
 
+func newMockNotifier() *mockNotifier {
+	return &mockNotifier{sent: make(chan struct{}, 64)}
+}
+
 func (m *mockNotifier) Send(_ context.Context, title, message string, priority int) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.calls = append(m.calls, mockCall{title, message, priority})
+	m.mu.Unlock()
+	// Non-blocking signal so the mock never deadlocks if a test doesn't drain.
+	select {
+	case m.sent <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -31,6 +41,23 @@ func (m *mockNotifier) getCalls() []mockCall {
 	cp := make([]mockCall, len(m.calls))
 	copy(cp, m.calls)
 	return cp
+}
+
+// waitForCalls blocks until n notifications have been received in total since
+// startCount, or fails the test on timeout. Returns the full call list.
+func (m *mockNotifier) waitForCalls(t *testing.T, startCount, n int) []mockCall {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		if len(m.getCalls())-startCount >= n {
+			return m.getCalls()
+		}
+		select {
+		case <-m.sent:
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d notifications, got %d", n, len(m.getCalls())-startCount)
+		}
+	}
 }
 
 func testConfig() AlerterConfig {
@@ -44,17 +71,15 @@ func testConfig() AlerterConfig {
 }
 
 func TestAlerter_ThrottleThreshold_NotReached(t *testing.T) {
-	mock := &mockNotifier{}
+	mock := newMockNotifier()
 	a := NewAlerter(mock, testConfig())
 	now := time.Now()
 	a.now = func() time.Time { return now }
 
-	// Record 2 errors (below threshold of 3)
+	// Record 2 errors (below threshold of 3) — no goroutines spawn, so any
+	// in-flight work has already completed by the time RecordLookupError returns.
 	a.RecordLookupError("whois")
 	a.RecordLookupError("whois")
-
-	// Allow async goroutines to complete
-	time.Sleep(50 * time.Millisecond)
 
 	if len(mock.getCalls()) != 0 {
 		t.Errorf("expected no notifications, got %d", len(mock.getCalls()))
@@ -62,7 +87,7 @@ func TestAlerter_ThrottleThreshold_NotReached(t *testing.T) {
 }
 
 func TestAlerter_ThrottleThreshold_Reached(t *testing.T) {
-	mock := &mockNotifier{}
+	mock := newMockNotifier()
 	a := NewAlerter(mock, testConfig())
 	now := time.Now()
 	a.now = func() time.Time { return now }
@@ -71,9 +96,7 @@ func TestAlerter_ThrottleThreshold_Reached(t *testing.T) {
 	a.RecordLookupError("whois")
 	a.RecordLookupError("whois")
 
-	time.Sleep(50 * time.Millisecond)
-
-	calls := mock.getCalls()
+	calls := mock.waitForCalls(t, 0, 1)
 	found := false
 	for _, c := range calls {
 		if c.title == "Upstream Throttle" {
@@ -86,7 +109,7 @@ func TestAlerter_ThrottleThreshold_Reached(t *testing.T) {
 }
 
 func TestAlerter_ThrottleCooldown(t *testing.T) {
-	mock := &mockNotifier{}
+	mock := newMockNotifier()
 	a := NewAlerter(mock, testConfig())
 	now := time.Now()
 	a.now = func() time.Time { return now }
@@ -95,16 +118,14 @@ func TestAlerter_ThrottleCooldown(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		a.RecordLookupError("dns")
 	}
-	time.Sleep(50 * time.Millisecond)
-
+	mock.waitForCalls(t, 0, 1)
 	initialCalls := len(mock.getCalls())
 
-	// Record more errors immediately — cooldown should suppress
+	// Record more errors immediately — cooldown should suppress, no goroutines
+	// spawn so we can assert immediately.
 	for i := 0; i < 3; i++ {
 		a.RecordLookupError("dns")
 	}
-	time.Sleep(50 * time.Millisecond)
-
 	if len(mock.getCalls()) != initialCalls {
 		t.Errorf("expected cooldown to suppress duplicate, got %d calls (was %d)", len(mock.getCalls()), initialCalls)
 	}
@@ -114,7 +135,7 @@ func TestAlerter_ThrottleCooldown(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		a.RecordLookupError("dns")
 	}
-	time.Sleep(50 * time.Millisecond)
+	mock.waitForCalls(t, initialCalls, 1)
 
 	calls := mock.getCalls()
 	throttleCount := 0
@@ -129,21 +150,18 @@ func TestAlerter_ThrottleCooldown(t *testing.T) {
 }
 
 func TestAlerter_PerLookupIsolation(t *testing.T) {
-	mock := &mockNotifier{}
+	mock := newMockNotifier()
 	a := NewAlerter(mock, testConfig())
 	now := time.Now()
 	a.now = func() time.Time { return now }
 
-	// 2 whois errors + 2 dns errors = below threshold for each
+	// 2 whois errors + 2 dns errors = below threshold for each — no goroutines spawn.
 	a.RecordLookupError("whois")
 	a.RecordLookupError("whois")
 	a.RecordLookupError("dns")
 	a.RecordLookupError("dns")
 
-	time.Sleep(50 * time.Millisecond)
-
-	calls := mock.getCalls()
-	for _, c := range calls {
+	for _, c := range mock.getCalls() {
 		if c.title == "Upstream Throttle" {
 			t.Error("expected no throttle notification when each lookup is below threshold")
 		}
@@ -151,7 +169,7 @@ func TestAlerter_PerLookupIsolation(t *testing.T) {
 }
 
 func TestAlerter_SpikeThreshold(t *testing.T) {
-	mock := &mockNotifier{}
+	mock := newMockNotifier()
 	cfg := testConfig()
 	cfg.SpikeThreshold = 5 // override for this test
 	a := NewAlerter(mock, cfg)
@@ -165,9 +183,7 @@ func TestAlerter_SpikeThreshold(t *testing.T) {
 	a.RecordLookupError("headers")
 	a.RecordLookupError("bgp")
 
-	time.Sleep(50 * time.Millisecond)
-
-	calls := mock.getCalls()
+	calls := mock.waitForCalls(t, 0, 1)
 	found := false
 	for _, c := range calls {
 		if c.title == "Error Spike" {
@@ -180,7 +196,7 @@ func TestAlerter_SpikeThreshold(t *testing.T) {
 }
 
 func TestAlerter_WindowExpiry(t *testing.T) {
-	mock := &mockNotifier{}
+	mock := newMockNotifier()
 	a := NewAlerter(mock, testConfig())
 	now := time.Now()
 	a.now = func() time.Time { return now }
@@ -192,13 +208,10 @@ func TestAlerter_WindowExpiry(t *testing.T) {
 	// Advance past the window so those errors expire
 	now = now.Add(6 * time.Minute)
 
-	// Record 1 more — total in window is 1, below threshold
+	// Record 1 more — total in window is 1, below threshold, no goroutine spawns.
 	a.RecordLookupError("whois")
 
-	time.Sleep(50 * time.Millisecond)
-
-	calls := mock.getCalls()
-	for _, c := range calls {
+	for _, c := range mock.getCalls() {
 		if c.title == "Upstream Throttle" {
 			t.Error("expected no throttle notification after window expiry")
 		}
