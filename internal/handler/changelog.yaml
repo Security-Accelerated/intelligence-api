@@ -12,6 +12,8 @@
       audience: internal
     - text: "Added GetProvisionedKey unit tests covering success and ErrKeyRetrieved propagation"
       audience: internal
+    - text: "MaxMind database download now honors request-scoped cancellation — admin disconnects abort the in-flight download instead of waiting for the 5-minute http.Client timeout"
+      audience: internal
 
 - version: v0.50.2
   date: 2026-04-06

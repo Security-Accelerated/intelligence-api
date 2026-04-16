@@ -1,10 +1,14 @@
 package domain
 
 import (
+	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRedactLicenseKeyParam(t *testing.T) {
@@ -79,5 +83,41 @@ func TestScrubLicenseKey_NilAndUnrelatedErrors(t *testing.T) {
 	plain := errors.New("plain error")
 	if got := scrubLicenseKey(plain); got != plain {
 		t.Errorf("scrubLicenseKey(plain) returned a different error: %v", got)
+	}
+}
+
+func TestDownloadMMDB_CancelsOnContextCancel(t *testing.T) {
+	// Server holds the response open until the connection drops, simulating a
+	// slow MaxMind download. The test cancels ctx; downloadMMDB must abort
+	// promptly via the request context, not wait for the http.Client timeout.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	saved := maxmindDownloadURL
+	maxmindDownloadURL = srv.URL + "/?edition_id=%s&license_key=%s&suffix=tar.gz"
+	t.Cleanup(func() { maxmindDownloadURL = saved })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before the call so the request is born already-dead
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	done := make(chan error, 1)
+	go func() {
+		_, _, _, err := downloadMMDB(ctx, client, "GeoLite2-City", "test-key", t.TempDir())
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected an error from cancelled context")
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("err = %v, want errors.Is(context.Canceled)", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("downloadMMDB did not honor cancelled context within 2s")
 	}
 }

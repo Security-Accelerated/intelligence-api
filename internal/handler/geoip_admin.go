@@ -33,7 +33,7 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 		return
 	}
 
-	result, err := h.geoRefresher.DownloadAndReload(licenseKey, dbPath, cityFile, asnFile)
+	result, err := h.geoRefresher.DownloadAndReload(c.Request.Context(), licenseKey, dbPath, cityFile, asnFile)
 	if err != nil {
 		logging.Logger().Error("geoip refresh failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "geoip refresh failed"})
