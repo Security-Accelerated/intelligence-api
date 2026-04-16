@@ -15,6 +15,7 @@ import (
 type mockNotifier struct {
 	mu    sync.Mutex
 	calls []notifyCall
+	sent  chan struct{}
 }
 
 type notifyCall struct {
@@ -23,10 +24,18 @@ type notifyCall struct {
 	priority int
 }
 
+func newMockNotifier() *mockNotifier {
+	return &mockNotifier{sent: make(chan struct{}, 64)}
+}
+
 func (m *mockNotifier) Send(_ context.Context, title, message string, priority int) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.calls = append(m.calls, notifyCall{title, message, priority})
+	m.mu.Unlock()
+	select {
+	case m.sent <- struct{}{}:
+	default:
+	}
 	return nil
 }
 
@@ -38,16 +47,30 @@ func (m *mockNotifier) getCalls() []notifyCall {
 	return cp
 }
 
+// waitForCalls blocks until n notifications have arrived in total, or fails the
+// test on timeout. Returns the full call list.
+func (m *mockNotifier) waitForCalls(t *testing.T, n int) []notifyCall {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		if len(m.getCalls()) >= n {
+			return m.getCalls()
+		}
+		select {
+		case <-m.sent:
+		case <-deadline:
+			t.Fatalf("timed out waiting for %d notifications, got %d", n, len(m.getCalls()))
+		}
+	}
+}
+
 func TestStripeService_Notify(t *testing.T) {
-	n := &mockNotifier{}
+	n := newMockNotifier()
 	svc := &StripeService{notifier: n}
 
 	svc.notify(context.Background(), "Test Title", "Test message")
 
-	// notify is async, give it a moment
-	time.Sleep(50 * time.Millisecond)
-
-	calls := n.getCalls()
+	calls := n.waitForCalls(t, 1)
 	if len(calls) != 1 {
 		t.Fatalf("got %d notify calls, want 1", len(calls))
 	}
@@ -63,15 +86,13 @@ func TestStripeService_Notify(t *testing.T) {
 }
 
 func TestStripeService_NotifyMultiple(t *testing.T) {
-	n := &mockNotifier{}
+	n := newMockNotifier()
 	svc := &StripeService{notifier: n}
 
 	svc.notify(context.Background(), "New Subscriber", "user@example.com signed up for basic")
 	svc.notify(context.Background(), "Subscription Cancelled", "Customer cus_123 cancelled")
 
-	time.Sleep(50 * time.Millisecond)
-
-	calls := n.getCalls()
+	calls := n.waitForCalls(t, 2)
 	if len(calls) != 2 {
 		t.Fatalf("got %d notify calls, want 2", len(calls))
 	}
@@ -137,7 +158,7 @@ func newTestStripeService(repo *mockBillingRepo, authCache *mockAuthCache, notif
 func TestHandleSubscriptionUpdated_HappyPath(t *testing.T) {
 	repo := &mockBillingRepo{}
 	authCache := &mockAuthCache{}
-	notifier := &mockNotifier{}
+	notifier := newMockNotifier()
 	svc := newTestStripeService(repo, authCache, notifier)
 
 	event := &stripe.Event{
@@ -171,8 +192,7 @@ func TestHandleSubscriptionUpdated_HappyPath(t *testing.T) {
 		t.Error("expected auth cache to be invalidated")
 	}
 
-	time.Sleep(50 * time.Millisecond)
-	calls := notifier.getCalls()
+	calls := notifier.waitForCalls(t, 1)
 	if len(calls) != 1 {
 		t.Fatalf("expected 1 notify call, got %d", len(calls))
 	}
@@ -182,7 +202,7 @@ func TestHandleSubscriptionUpdated_HappyPath(t *testing.T) {
 }
 
 func TestHandleSubscriptionUpdated_MissingCustomerID(t *testing.T) {
-	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, newMockNotifier())
 
 	event := &stripe.Event{
 		Data: &stripe.EventData{
@@ -198,7 +218,7 @@ func TestHandleSubscriptionUpdated_MissingCustomerID(t *testing.T) {
 
 func TestHandleSubscriptionUpdated_UnknownPriceSkips(t *testing.T) {
 	repo := &mockBillingRepo{}
-	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(repo, &mockAuthCache{}, newMockNotifier())
 
 	event := &stripe.Event{
 		Data: &stripe.EventData{
@@ -228,7 +248,7 @@ func TestHandleSubscriptionUpdated_UnknownPriceSkips(t *testing.T) {
 
 func TestHandleSubscriptionUpdated_RepoError(t *testing.T) {
 	repo := &mockBillingRepo{updatePlanErr: errors.New("db down")}
-	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(repo, &mockAuthCache{}, newMockNotifier())
 
 	event := &stripe.Event{
 		Data: &stripe.EventData{
@@ -256,7 +276,7 @@ func TestHandleSubscriptionUpdated_RepoError(t *testing.T) {
 func TestHandleSubscriptionDeleted_HappyPath(t *testing.T) {
 	repo := &mockBillingRepo{}
 	authCache := &mockAuthCache{}
-	notifier := &mockNotifier{}
+	notifier := newMockNotifier()
 	svc := newTestStripeService(repo, authCache, notifier)
 
 	event := &stripe.Event{
@@ -278,15 +298,14 @@ func TestHandleSubscriptionDeleted_HappyPath(t *testing.T) {
 		t.Error("expected auth cache to be invalidated")
 	}
 
-	time.Sleep(50 * time.Millisecond)
-	calls := notifier.getCalls()
+	calls := notifier.waitForCalls(t, 1)
 	if len(calls) != 1 || calls[0].title != "Subscription Cancelled" {
 		t.Errorf("notify = %v, want title %q", calls, "Subscription Cancelled")
 	}
 }
 
 func TestHandleSubscriptionDeleted_MissingCustomerID(t *testing.T) {
-	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, newMockNotifier())
 
 	event := &stripe.Event{
 		Data: &stripe.EventData{
@@ -303,7 +322,7 @@ func TestHandleSubscriptionDeleted_MissingCustomerID(t *testing.T) {
 func TestHandlePaymentFailed_HappyPath(t *testing.T) {
 	repo := &mockBillingRepo{}
 	authCache := &mockAuthCache{}
-	notifier := &mockNotifier{}
+	notifier := newMockNotifier()
 	svc := newTestStripeService(repo, authCache, notifier)
 
 	event := &stripe.Event{
@@ -325,15 +344,14 @@ func TestHandlePaymentFailed_HappyPath(t *testing.T) {
 		t.Error("expected auth cache to be invalidated")
 	}
 
-	time.Sleep(50 * time.Millisecond)
-	calls := notifier.getCalls()
+	calls := notifier.waitForCalls(t, 1)
 	if len(calls) != 1 || calls[0].title != "Payment Failed" {
 		t.Errorf("notify = %v, want title %q", calls, "Payment Failed")
 	}
 }
 
 func TestHandlePaymentFailed_MissingCustomerID(t *testing.T) {
-	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, newMockNotifier())
 
 	event := &stripe.Event{
 		Data: &stripe.EventData{
@@ -349,7 +367,7 @@ func TestHandlePaymentFailed_MissingCustomerID(t *testing.T) {
 
 func TestHandlePaymentFailed_RepoError(t *testing.T) {
 	repo := &mockBillingRepo{downgradeErr: errors.New("db down")}
-	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(repo, &mockAuthCache{}, newMockNotifier())
 
 	event := &stripe.Event{
 		Data: &stripe.EventData{
@@ -366,7 +384,7 @@ func TestHandlePaymentFailed_RepoError(t *testing.T) {
 }
 
 func TestNewStripeService_SetsNotifier(t *testing.T) {
-	n := &mockNotifier{}
+	n := newMockNotifier()
 	svc := NewStripeService("sk_test_123", "whsec_123", map[string]string{"price_1": "basic"}, nil, nil, n)
 
 	if svc.notifier == nil {
@@ -404,7 +422,7 @@ func mockSession(id, customerID, email, name string, lineItems []*stripe.LineIte
 
 func newCheckoutTestService(repo *mockBillingRepo, sess *stripe.CheckoutSession, expandedSess *stripe.CheckoutSession) *StripeService {
 	callCount := 0
-	svc := newTestStripeService(repo, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(repo, &mockAuthCache{}, newMockNotifier())
 	svc.fetchSession = func(id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
 		callCount++
 		if callCount == 1 {
@@ -605,7 +623,7 @@ func TestHandleCheckoutCompleted_CustomerExistsCheckError_ReturnsError(t *testin
 }
 
 func TestHandleCheckoutCompleted_SessionFetchError_ReturnsError(t *testing.T) {
-	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, &mockNotifier{})
+	svc := newTestStripeService(&mockBillingRepo{}, &mockAuthCache{}, newMockNotifier())
 	svc.fetchSession = func(string, *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
 		return nil, errors.New("stripe unavailable")
 	}
@@ -622,5 +640,45 @@ func TestHandleCheckoutCompleted_SessionFetchError_ReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "retrieve checkout session") {
 		t.Errorf("error = %q, want to contain 'retrieve checkout session'", err.Error())
+	}
+}
+
+// --- GetProvisionedKey ---
+
+type retrievingRepo struct {
+	mockBillingRepo
+	key string
+	err error
+}
+
+func (r *retrievingRepo) RetrieveProvisionedKey(_ context.Context, sessionID string) (string, error) {
+	if sessionID == "" {
+		return "", errors.New("empty session id")
+	}
+	return r.key, r.err
+}
+
+func TestGetProvisionedKey_ReturnsRepoResult(t *testing.T) {
+	repo := &retrievingRepo{key: "raw_secret_key"}
+	svc := newTestStripeService(&repo.mockBillingRepo, &mockAuthCache{}, newMockNotifier())
+	svc.repo = repo
+
+	key, err := svc.GetProvisionedKey(context.Background(), "cs_123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if key != "raw_secret_key" {
+		t.Errorf("key = %q, want %q", key, "raw_secret_key")
+	}
+}
+
+func TestGetProvisionedKey_PropagatesRepoError(t *testing.T) {
+	repo := &retrievingRepo{err: ErrKeyRetrieved}
+	svc := newTestStripeService(&repo.mockBillingRepo, &mockAuthCache{}, newMockNotifier())
+	svc.repo = repo
+
+	_, err := svc.GetProvisionedKey(context.Background(), "cs_123")
+	if !errors.Is(err, ErrKeyRetrieved) {
+		t.Errorf("err = %v, want ErrKeyRetrieved", err)
 	}
 }

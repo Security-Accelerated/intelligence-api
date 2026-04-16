@@ -637,9 +637,9 @@ Config values:
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
-| `subdomain.max_domains.free` | `1` | Maximum domains per request for free plan (subdomains) |
-| `subdomain.max_domains.basic` | `3` | Maximum domains per request for basic plan (subdomains) |
-| `subdomain.max_domains.pro` | `5` | Maximum domains per request for pro plan (subdomains) |
+| `subdomain.max_domains.free` | `1` | Maximum domains per request when `subdomains: true` (free plan) |
+| `subdomain.max_domains.basic` | `3` | Maximum domains per request when `subdomains: true` (basic plan) |
+| `subdomain.max_domains.pro` | `5` | Maximum domains per request when `subdomains: true` (pro plan) |
 | `rate_limit.free` | `5` | Requests per minute for free plan customers |
 | `rate_limit.basic` | `30` | Requests per minute for basic plan customers |
 | `rate_limit.pro` | `120` | Requests per minute for pro plan customers |

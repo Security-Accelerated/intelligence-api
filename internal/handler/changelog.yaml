@@ -1,6 +1,20 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.51.0
+  date: 2026-04-16
+  changes:
+    - text: "Subdomain enumeration is now subject to a tighter per-plan domain cap (subdomain.max_domains.*). The config keys and defaults shipped earlier; this is the missing enforcement"
+      audience: public
+    - text: "MaxMind license key is now redacted from any wrapped error originating from the database download client"
+      audience: internal
+    - text: "Replaced time.Sleep-based test synchronization in billing and notification tests with channel-driven waits"
+      audience: internal
+    - text: "Added GetProvisionedKey unit tests covering success and ErrKeyRetrieved propagation"
+      audience: internal
+    - text: "MaxMind database download now honors request-scoped cancellation — admin disconnects abort the in-flight download instead of waiting for the 5-minute http.Client timeout"
+      audience: internal
+
 - version: v0.50.2
   date: 2026-04-06
   changes:

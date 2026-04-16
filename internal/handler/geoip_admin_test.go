@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +17,7 @@ type mockGeoRefresher struct {
 	result *domain.RefreshResult
 }
 
-func (m *mockGeoRefresher) DownloadAndReload(_, _, _, _ string) (*domain.RefreshResult, error) {
+func (m *mockGeoRefresher) DownloadAndReload(_ context.Context, _, _, _, _ string) (*domain.RefreshResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
