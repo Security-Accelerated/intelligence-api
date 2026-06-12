@@ -65,10 +65,11 @@ type DatabaseConfig struct {
 }
 
 type CacheConfig struct {
-	Addr         string `json:"addr"`
-	DB           int    `json:"db"`
-	CacheTTL     string `json:"cache_ttl"`
-	AuthCacheTTL string `json:"auth_cache_ttl"`
+	Addr             string `json:"addr"`
+	DB               int    `json:"db"`
+	CacheTTL         string `json:"cache_ttl"`
+	NegativeCacheTTL string `json:"negative_cache_ttl"`
+	AuthCacheTTL     string `json:"auth_cache_ttl"`
 }
 
 type LookupConfig struct {
@@ -176,8 +177,9 @@ func NewStatusSnapshot(version string) *StatusSnapshot {
 		Cache: CacheConfig{
 			Addr:         cfg.GetString("redis.addr"),
 			DB:           cfg.GetInt("redis.db"),
-			CacheTTL:     cfg.GetDuration("redis.cache_ttl").String(),
-			AuthCacheTTL: cfg.GetDuration("auth.cache_ttl").String(),
+			CacheTTL:         cfg.GetDuration("redis.cache_ttl").String(),
+			NegativeCacheTTL: cfg.GetDuration("redis.negative_cache_ttl").String(),
+			AuthCacheTTL:     cfg.GetDuration("auth.cache_ttl").String(),
 		},
 		Lookups: LookupConfig{
 			Timeout:              cfg.GetDuration("domain.lookup_timeout").String(),

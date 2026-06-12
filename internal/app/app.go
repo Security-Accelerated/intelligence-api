@@ -132,6 +132,7 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Services
 	cacheTTL := cfg.GetDuration("redis.cache_ttl")
+	negativeCacheTTL := cfg.GetDuration("redis.negative_cache_ttl")
 
 	fpService := service.NewFingerprintService(db)
 	fpSource := "database"
@@ -177,7 +178,7 @@ func Run(logger *zap.Logger, version string) error {
 		domain.MaxResponseBody = v
 	}
 
-	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
+	domainService := service.NewDomainService(redisCache, cacheTTL, negativeCacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
 	var billingSvc billing.Service
@@ -265,7 +266,7 @@ func Run(logger *zap.Logger, version string) error {
 	}
 
 	// IP intelligence service
-	ipService := service.NewIPService(redisCache, cacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
+	ipService := service.NewIPService(redisCache, cacheTTL, negativeCacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
 
 	// HTTP
 	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, geoReader, cfg, redisCache, cachedRepo, db, status)

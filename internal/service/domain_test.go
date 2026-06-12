@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,12 +18,13 @@ import (
 type mockCache struct {
 	mu       sync.Mutex
 	store    map[string][]byte
+	ttls     map[string]time.Duration
 	getErr   error
 	setCalls int
 }
 
 func newMockCache() *mockCache {
-	return &mockCache{store: make(map[string][]byte)}
+	return &mockCache{store: make(map[string][]byte), ttls: make(map[string]time.Duration)}
 }
 
 func (m *mockCache) Get(_ context.Context, key string) ([]byte, error) {
@@ -34,12 +36,19 @@ func (m *mockCache) Get(_ context.Context, key string) ([]byte, error) {
 	return m.store[key], nil
 }
 
-func (m *mockCache) Set(_ context.Context, key string, data []byte, _ time.Duration) error {
+func (m *mockCache) Set(_ context.Context, key string, data []byte, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.store[key] = data
+	m.ttls[key] = ttl
 	m.setCalls++
 	return nil
+}
+
+func (m *mockCache) ttlFor(key string) time.Duration {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ttls[key]
 }
 
 // helpers to build a testable DomainService with stub lookups.
@@ -174,6 +183,7 @@ func newTestService(mc *mockCache) *DomainService {
 	return &DomainService{
 		cache:               mc,
 		cacheTTL:            5 * time.Minute,
+		negativeCacheTTL:    time.Minute,
 		screenshotTimeout:   15 * time.Second,
 		subdomainMaxResults: 500,
 		ctLogsMaxEntries:    100,
@@ -262,6 +272,7 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 	svc := &DomainService{
 		cache:               mc,
 		cacheTTL:            5 * time.Minute,
+		negativeCacheTTL:    time.Minute,
 		screenshotTimeout:   15 * time.Second,
 		ctLogsMaxEntries:    100,
 		alerter:             &notifications.NoopRecorder{},
@@ -285,11 +296,16 @@ func TestLookup_CacheMiss_AllFail(t *testing.T) {
 	if len(resp.Errors) != 4 {
 		t.Errorf("expected 4 errors, got %d: %v", len(resp.Errors), resp.Errors)
 	}
+	// All-failed responses are negative-cached so a dead domain doesn't
+	// trigger a fresh fan-out on every request.
 	mc.mu.Lock()
-	if mc.setCalls != 0 {
-		t.Errorf("expected 0 cache Set calls when all lookups fail, got %d", mc.setCalls)
+	if mc.setCalls != 1 {
+		t.Errorf("expected 1 cache Set call when all lookups fail (negative cache), got %d", mc.setCalls)
 	}
 	mc.mu.Unlock()
+	if got := mc.ttlFor("fail.com"); got != time.Minute {
+		t.Errorf("ttl = %v, want negativeCacheTTL 1m", got)
+	}
 }
 
 func TestLookup_CacheMiss_PartialSuccess(t *testing.T) {
@@ -1362,7 +1378,7 @@ func TestLookup_AppliesLookupTimeout(t *testing.T) {
 	}
 }
 
-func TestLookup_RespectsParentDeadline(t *testing.T) {
+func TestLookup_DetachedFromParentCancellation(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)
 	svc.lookupTimeout = 30 * time.Second
@@ -1370,18 +1386,27 @@ func TestLookup_RespectsParentDeadline(t *testing.T) {
 	var capturedDeadline time.Time
 	svc.lookupWhois = func(ctx context.Context, _ string) (*domain.WhoisInfo, error) {
 		capturedDeadline, _ = ctx.Deadline()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
 		return &domain.WhoisInfo{DomainName: "example.com"}, nil
 	}
 
-	// Set a tighter parent deadline (500ms << 30s)
+	// The lookup runs detached from the caller's cancellation (singleflight
+	// shares its result with coalesced callers), so a tight parent deadline
+	// must NOT propagate — only lookupTimeout applies.
 	tightDeadline := time.Now().Add(500 * time.Millisecond)
 	ctx, cancel := context.WithDeadline(context.Background(), tightDeadline)
 	defer cancel()
 
-	svc.Lookup(ctx, "example.com", noOpts())
-	// The captured deadline should be close to the tight deadline, not 30s from now
-	if capturedDeadline.After(tightDeadline.Add(50 * time.Millisecond)) {
-		t.Errorf("deadline = %v, want close to %v (parent's tighter deadline should be respected)", capturedDeadline, tightDeadline)
+	resp, _ := svc.Lookup(ctx, "example.com", noOpts())
+	if !capturedDeadline.After(tightDeadline.Add(time.Second)) {
+		t.Errorf("deadline = %v, want ~30s from now (detached from parent's tight deadline)", capturedDeadline)
+	}
+	if resp.Whois == nil {
+		t.Error("expected whois result despite tight parent deadline")
 	}
 }
 
@@ -1438,10 +1463,106 @@ func TestLookup_ScreenshotTimeout_Passed(t *testing.T) {
 	}
 }
 
+func TestLookup_SuccessUsesFullCacheTTL(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	svc.Lookup(context.Background(), "example.com", noOpts())
+	if got := mc.ttlFor("example.com"); got != 5*time.Minute {
+		t.Errorf("ttl = %v, want full cacheTTL 5m", got)
+	}
+}
+
+func TestLookup_PartialFailureUsesNegativeCacheTTL(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupWhois = failWhois
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if len(resp.Errors) == 0 {
+		t.Fatal("expected lookup errors in response")
+	}
+	if got := mc.ttlFor("example.com"); got != time.Minute {
+		t.Errorf("ttl = %v, want negativeCacheTTL 1m", got)
+	}
+}
+
+func TestLookup_AllFailedStillCachedWithNegativeTTL(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupWhois = failWhois
+	svc.lookupDNS = failDNS
+	svc.lookupSSL = failSSL
+	svc.lookupHeaders = failHeaders
+
+	resp, _ := svc.Lookup(context.Background(), "down.example", noOpts())
+	if len(resp.Errors) != 4 {
+		t.Fatalf("errors = %d, want 4", len(resp.Errors))
+	}
+	if mc.setCalls != 1 {
+		t.Errorf("setCalls = %d, want 1 (all-failed response should be negative-cached)", mc.setCalls)
+	}
+	if got := mc.ttlFor("down.example"); got != time.Minute {
+		t.Errorf("ttl = %v, want negativeCacheTTL 1m", got)
+	}
+
+	// Second lookup should be served from the negative cache.
+	_, hit := svc.Lookup(context.Background(), "down.example", noOpts())
+	if !hit {
+		t.Error("expected second lookup to hit the negative cache")
+	}
+}
+
+func TestLookup_SingleflightCoalescesConcurrentLookups(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	var calls atomic.Int32
+	gate := make(chan struct{})
+	svc.lookupWhois = func(_ context.Context, d string) (*domain.WhoisInfo, error) {
+		calls.Add(1)
+		<-gate
+		return &domain.WhoisInfo{DomainName: d}, nil
+	}
+
+	const n = 5
+	started := make(chan struct{}, n)
+	responses := make([]*domain.DomainResponse, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			started <- struct{}{}
+			responses[i], _ = svc.Lookup(context.Background(), "example.com", noOpts())
+		})
+	}
+	for range n {
+		<-started
+	}
+	// Give the goroutines time to reach singleflight before releasing the gate.
+	time.Sleep(100 * time.Millisecond)
+	close(gate)
+	wg.Wait()
+
+	if got := calls.Load(); got != 1 {
+		t.Errorf("whois lookup calls = %d, want 1 (coalesced)", got)
+	}
+	for i, resp := range responses {
+		if resp == nil || resp.Whois == nil {
+			t.Fatalf("response %d missing whois data", i)
+		}
+	}
+	if mc.setCalls != 1 {
+		t.Errorf("setCalls = %d, want 1", mc.setCalls)
+	}
+}
+
 func TestNewDomainService_Defaults(t *testing.T) {
-	svc := NewDomainService(newMockCache(), 5*time.Minute, 0, 15*time.Second, 0, 0, nil, &notifications.NoopRecorder{}, nil)
+	svc := NewDomainService(newMockCache(), 5*time.Minute, 0, 0, 15*time.Second, 0, 0, nil, &notifications.NoopRecorder{}, nil)
 	if svc.lookupTimeout != 30*time.Second {
 		t.Errorf("lookupTimeout = %v, want 30s", svc.lookupTimeout)
+	}
+	if svc.negativeCacheTTL != 5*time.Minute {
+		t.Errorf("negativeCacheTTL = %v, want fallback to cacheTTL (5m)", svc.negativeCacheTTL)
 	}
 	if svc.subdomainMaxResults != 500 {
 		t.Errorf("subdomainMaxResults = %d, want 500", svc.subdomainMaxResults)
