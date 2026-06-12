@@ -12,24 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/docs/styles.css">
-<script>
-  (function() {
-    var storageKey = "sa-docs-theme";
-    var root = document.documentElement;
-    var theme = null;
-
-    try {
-      theme = localStorage.getItem(storageKey);
-    } catch (err) {}
-
-    if (theme !== "light" && theme !== "dark") {
-      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-
-    root.setAttribute("data-theme", theme);
-    root.style.colorScheme = theme;
-  })();
-</script>
+<script src="/docs/theme.js"></script>
 <style>
   /* Overview layout overrides */
   .topbar { position: sticky; left: auto; right: auto; z-index: 20; }
@@ -476,57 +459,6 @@
   </div>
 </footer>
 
-<script>
-  (function() {
-    var storageKey = "sa-docs-theme";
-    var root = document.documentElement;
-    var toggle = document.querySelector("[data-theme-toggle]");
-    if (!toggle) return;
-
-    var label = toggle.querySelector(".theme-toggle-label");
-
-    function setTheme(theme) {
-      var nextTheme = theme === "dark" ? "light" : "dark";
-      root.setAttribute("data-theme", theme);
-      root.style.colorScheme = theme;
-      toggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
-      toggle.setAttribute("aria-label", "Theme: " + theme + " mode. Activate to switch to " + nextTheme + " mode.");
-      toggle.setAttribute("title", "Switch to " + nextTheme + " mode");
-      label.textContent = theme === "dark" ? "Dark mode" : "Light mode";
-    }
-
-    function storedTheme() {
-      try {
-        return localStorage.getItem(storageKey);
-      } catch (err) {
-        return null;
-      }
-    }
-
-    setTheme(root.getAttribute("data-theme") || "light");
-
-    toggle.addEventListener("click", function() {
-      var nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      setTheme(nextTheme);
-      try {
-        localStorage.setItem(storageKey, nextTheme);
-      } catch (err) {}
-    });
-
-    if (!window.matchMedia) return;
-    var media = window.matchMedia("(prefers-color-scheme: dark)");
-    var syncTheme = function(event) {
-      var savedTheme = storedTheme();
-      if (savedTheme === "light" || savedTheme === "dark") return;
-      setTheme(event.matches ? "dark" : "light");
-    };
-
-    if (media.addEventListener) {
-      media.addEventListener("change", syncTheme);
-    } else if (media.addListener) {
-      media.addListener(syncTheme);
-    }
-  })();
-</script>
+<script src="/docs/docs.js" defer></script>
 </body>
 </html>

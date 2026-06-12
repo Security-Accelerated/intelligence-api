@@ -12,24 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/docs/styles.css">
-<script>
-  (function() {
-    var storageKey = "sa-docs-theme";
-    var root = document.documentElement;
-    var theme = null;
-
-    try {
-      theme = localStorage.getItem(storageKey);
-    } catch (err) {}
-
-    if (theme !== "light" && theme !== "dark") {
-      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-
-    root.setAttribute("data-theme", theme);
-    root.style.colorScheme = theme;
-  })();
-</script>
+<script src="/docs/theme.js"></script>
 </head>
 <body>
 
@@ -55,9 +38,9 @@
   </div>
 </header>
 
-<button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle navigation">&#9776;</button>
+<button class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle navigation">&#9776;</button>
 
-<div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+<div class="sidebar-backdrop" data-sidebar-close></div>
 
 <nav class="sidebar">
   <div class="sidebar-brand">
@@ -291,9 +274,9 @@
 
   <h3 id="example-request">Example</h3>
   <div class="lang-tabs">
-    <button class="lang-tab active" onclick="switchTab(event, 'curl')">curl</button>
-    <button class="lang-tab" onclick="switchTab(event, 'python')">Python</button>
-    <button class="lang-tab" onclick="switchTab(event, 'go')">Go</button>
+    <button class="lang-tab active" data-lang="curl">curl</button>
+    <button class="lang-tab" data-lang="python">Python</button>
+    <button class="lang-tab" data-lang="go">Go</button>
   </div>
   <div id="tab-curl" class="lang-panel active">
   <pre><code><span class="flag">curl</span> <span class="flag">-X</span> POST <span class="url">https://api.securityaccelerated.com/v1/domain/lookup</span> \
@@ -996,120 +979,7 @@ resp = requests.post(
 
 </main>
 
-<script>
-function switchTab(event, lang) {
-  var tabs = event.target.parentElement.querySelectorAll('.lang-tab');
-  tabs.forEach(function(t) { t.classList.remove('active'); });
-  event.target.classList.add('active');
-
-  var container = event.target.parentElement.parentElement;
-  container.querySelectorAll('.lang-panel').forEach(function(p) { p.classList.remove('active'); });
-  container.querySelector('#tab-' + lang).classList.add('active');
-}
-
-var sidebar = document.querySelector('.sidebar');
-
-function closeSidebar() {
-  sidebar.classList.remove('open');
-  document.body.classList.remove('shell-open');
-}
-
-function toggleSidebar() {
-  var isOpen = sidebar.classList.toggle('open');
-  document.body.classList.toggle('shell-open', isOpen);
-}
-
-document.querySelectorAll('.sidebar a').forEach(function(link) {
-  link.addEventListener('click', function() {
-    if (window.innerWidth <= 860) {
-      closeSidebar();
-    }
-  });
-});
-
-window.addEventListener('resize', function() {
-  if (window.innerWidth > 860) {
-    closeSidebar();
-  }
-});
-
-(function() {
-  var storageKey = "sa-docs-theme";
-  var root = document.documentElement;
-  var toggle = document.querySelector('[data-theme-toggle]');
-  if (!toggle) return;
-
-  var label = toggle.querySelector('.theme-toggle-label');
-
-  function setTheme(theme) {
-    var nextTheme = theme === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', theme);
-    root.style.colorScheme = theme;
-    toggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
-    toggle.setAttribute('aria-label', 'Theme: ' + theme + ' mode. Activate to switch to ' + nextTheme + ' mode.');
-    toggle.setAttribute('title', 'Switch to ' + nextTheme + ' mode');
-    label.textContent = theme === 'dark' ? 'Dark mode' : 'Light mode';
-  }
-
-  function storedTheme() {
-    try {
-      return localStorage.getItem(storageKey);
-    } catch (err) {
-      return null;
-    }
-  }
-
-  setTheme(root.getAttribute('data-theme') || 'light');
-
-  toggle.addEventListener('click', function() {
-    var nextTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    try {
-      localStorage.setItem(storageKey, nextTheme);
-    } catch (err) {}
-  });
-
-  if (!window.matchMedia) return;
-  var media = window.matchMedia('(prefers-color-scheme: dark)');
-  var syncTheme = function(event) {
-    var savedTheme = storedTheme();
-    if (savedTheme === 'light' || savedTheme === 'dark') return;
-    setTheme(event.matches ? 'dark' : 'light');
-  };
-
-  if (media.addEventListener) {
-    media.addEventListener('change', syncTheme);
-  } else if (media.addListener) {
-    media.addListener(syncTheme);
-  }
-})();
-
-(function() {
-  var links = document.querySelectorAll('.sidebar a[href^="#"]');
-  var sections = [];
-  links.forEach(function(link) {
-    var id = link.getAttribute('href').slice(1);
-    var el = document.getElementById(id);
-    if (el) sections.push({ el: el, link: link });
-  });
-
-  function onScroll() {
-    var scrollY = window.scrollY + 140;
-    var active = null;
-    for (var i = sections.length - 1; i >= 0; i--) {
-      if (sections[i].el.offsetTop <= scrollY) {
-        active = sections[i];
-        break;
-      }
-    }
-    links.forEach(function(l) { l.classList.remove('active'); });
-    if (active) active.link.classList.add('active');
-  }
-
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-})();
-</script>
+<script src="/docs/docs.js" defer></script>
 
 </body>
 </html>

@@ -1,6 +1,14 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.51.0
+  date: 2026-06-11
+  changes:
+    - text: "All responses now include Strict-Transport-Security, Referrer-Policy, and Content-Security-Policy headers"
+      audience: public
+    - text: "Removed all inline JavaScript from docs and checkout pages; scripts are now served as external files under a strict page CSP"
+      audience: internal
+
 - version: v0.50.2
   date: 2026-04-06
   changes:

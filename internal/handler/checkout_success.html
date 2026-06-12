@@ -11,19 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/docs/styles.css">
-<script>
-  (function() {
-    var storageKey = "sa-docs-theme";
-    var root = document.documentElement;
-    var theme = null;
-    try { theme = localStorage.getItem(storageKey); } catch (err) {}
-    if (theme !== "light" && theme !== "dark") {
-      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-    root.setAttribute("data-theme", theme);
-    root.style.colorScheme = theme;
-  })();
-</script>
+<script src="/docs/theme.js"></script>
 <style>
   body {
     display: flex;
@@ -171,7 +159,7 @@
 
     <div class="key-block">
       <span id="api-key">{{.APIKey}}</span>
-      <button class="copy-btn" onclick="copyKey()">Copy</button>
+      <button class="copy-btn" id="copy-key">Copy</button>
     </div>
 
     <div class="warning">
@@ -189,32 +177,7 @@
   </div>
 </div>
 
-<script>
-function copyKey() {
-  var key = document.getElementById('api-key').textContent;
-  navigator.clipboard.writeText(key).then(function() {
-    var btn = document.querySelector('.copy-btn');
-    btn.textContent = 'Copied!';
-    setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
-  });
-}
-</script>
-
-<script>
-(function() {
-  var storageKey = "sa-docs-theme";
-  var root = document.documentElement;
-  if (!window.matchMedia) return;
-  var media = window.matchMedia("(prefers-color-scheme: dark)");
-  media.addEventListener("change", function(event) {
-    var saved;
-    try { saved = localStorage.getItem(storageKey); } catch (e) {}
-    if (saved === "light" || saved === "dark") return;
-    root.setAttribute("data-theme", event.matches ? "dark" : "light");
-    root.style.colorScheme = event.matches ? "dark" : "light";
-  });
-})();
-</script>
+<script src="/docs/checkout_success.js" defer></script>
 
 </body>
 </html>

@@ -83,7 +83,7 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 ## Middleware Chain (order matters)
 
 1. `gin.Recovery()` — catches panics, returns 500
-2. `SecurityHeaders()` — adds defensive headers (X-Content-Type-Options, X-Frame-Options, Cache-Control: no-store)
+2. `SecurityHeaders()` — adds defensive headers (X-Content-Type-Options, X-Frame-Options, Cache-Control: no-store, Strict-Transport-Security, Referrer-Policy, and a strict `default-src 'none'` Content-Security-Policy for the JSON API; HTML pages override the CSP with `htmlPageCSP` in the handler package — no inline JS, page scripts are served externally at `/docs/*.js`)
 3. `BodyLimit(1MB)` — rejects oversized request bodies
 4. `ClientRequestID()` — validates/echoes X-Client-Request-ID header, sets context key
 5. `RequestLogger()` — structured request logging with context keys (runs after `c.Next()` returns)
