@@ -56,6 +56,7 @@ func init() {
 	config.SetDefault("auth.last_used_buffer_size", 256)
 	config.SetDefault("auth.last_used_flush_interval", "10s")
 	config.SetDefault("screenshot.timeout", "15s")
+	config.SetDefault("screenshot.max_concurrent", 4)
 	config.SetDefault("domain.max_domains.free", 1)
 	config.SetDefault("domain.max_domains.basic", 5)
 	config.SetDefault("domain.max_domains.pro", 20)

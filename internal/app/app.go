@@ -178,7 +178,7 @@ func Run(logger *zap.Logger, version string) error {
 		domain.MaxResponseBody = v
 	}
 
-	domainService := service.NewDomainService(redisCache, cacheTTL, negativeCacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
+	domainService := service.NewDomainService(redisCache, cacheTTL, negativeCacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("screenshot.max_concurrent"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
 	billingRepo := billing.NewRepository(db)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1537,6 +1538,61 @@ func keysOf(mc *mockCache) []string {
 	return keys
 }
 
+func TestLookup_ScreenshotSemaphoreCapsConcurrency(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.screenshotSem = make(chan struct{}, 2)
+
+	var current, peak atomic.Int32
+	svc.lookupScreenshot = func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
+		n := current.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		time.Sleep(30 * time.Millisecond)
+		current.Add(-1)
+		return &domain.ScreenshotInfo{StatusCode: 200}, nil
+	}
+
+	var wg sync.WaitGroup
+	for i := range 6 {
+		wg.Go(func() {
+			// Distinct domains so singleflight doesn't coalesce them.
+			svc.Lookup(context.Background(), fmt.Sprintf("example%d.com", i), screenshotOpts())
+		})
+	}
+	wg.Wait()
+
+	if got := peak.Load(); got > 2 {
+		t.Errorf("peak concurrent screenshots = %d, want <= 2", got)
+	}
+}
+
+func TestLookup_ScreenshotQueueTimeout(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupTimeout = 50 * time.Millisecond
+	svc.screenshotSem = make(chan struct{}, 1)
+	svc.screenshotSem <- struct{}{} // hold the only slot
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", screenshotOpts())
+	if resp.Screenshot != nil {
+		t.Error("expected no screenshot when the queue is saturated")
+	}
+	var found bool
+	for _, e := range resp.Errors {
+		if e.Lookup == "screenshot" && strings.Contains(e.Message, "queue timed out") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected screenshot queue timeout error, got %v", resp.Errors)
+	}
+}
+
 func TestLookup_PanickingLookupDegradesToError(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)
@@ -1695,7 +1751,7 @@ func TestLookup_SingleflightCoalescesConcurrentLookups(t *testing.T) {
 }
 
 func TestNewDomainService_Defaults(t *testing.T) {
-	svc := NewDomainService(newMockCache(), 5*time.Minute, 0, 0, 15*time.Second, 0, 0, nil, &notifications.NoopRecorder{}, nil)
+	svc := NewDomainService(newMockCache(), 5*time.Minute, 0, 0, 15*time.Second, 0, 0, 0, nil, &notifications.NoopRecorder{}, nil)
 	if svc.lookupTimeout != 30*time.Second {
 		t.Errorf("lookupTimeout = %v, want 30s", svc.lookupTimeout)
 	}

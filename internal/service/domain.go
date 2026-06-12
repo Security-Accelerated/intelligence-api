@@ -124,6 +124,7 @@ type DomainService struct {
 	sf                  singleflight.Group
 	lookupTimeout       time.Duration
 	screenshotTimeout   time.Duration
+	screenshotSem       chan struct{} // caps concurrent Chromium across ALL in-flight requests
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
 	fingerprintEngine   *domain.FingerprintEngine
@@ -143,7 +144,7 @@ type DomainService struct {
 	lookupDNSSecurity   func(ctx context.Context, d string) (*domain.DNSSecurityInfo, error)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, negativeCacheTTL, lookupTimeout, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, negativeCacheTTL, lookupTimeout, screenshotTimeout time.Duration, screenshotMaxConcurrent, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -156,6 +157,9 @@ func NewDomainService(c cache.Cache, cacheTTL, negativeCacheTTL, lookupTimeout, 
 	if negativeCacheTTL <= 0 {
 		negativeCacheTTL = cacheTTL
 	}
+	if screenshotMaxConcurrent <= 0 {
+		screenshotMaxConcurrent = 4
+	}
 	if alerter == nil {
 		alerter = &notifications.NoopRecorder{}
 	}
@@ -165,6 +169,7 @@ func NewDomainService(c cache.Cache, cacheTTL, negativeCacheTTL, lookupTimeout, 
 		negativeCacheTTL:    negativeCacheTTL,
 		lookupTimeout:       lookupTimeout,
 		screenshotTimeout:   screenshotTimeout,
+		screenshotSem:       make(chan struct{}, screenshotMaxConcurrent),
 		subdomainMaxResults: subdomainMaxResults,
 		ctLogsMaxEntries:    ctLogsMaxEntries,
 		fingerprintEngine:   fpEngine,
@@ -411,6 +416,23 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 
 	if opts.Screenshot {
 		goLookup(&wg, &mu, &resp.Errors, s.alerter, "screenshot", domainName, func() {
+			// Acquire the global screenshot slot — Chromium is the most
+			// expensive lookup and must not fork-bomb under load.
+			if s.screenshotSem != nil {
+				select {
+				case s.screenshotSem <- struct{}{}:
+					defer func() { <-s.screenshotSem }()
+				case <-ctx.Done():
+					mu.Lock()
+					defer mu.Unlock()
+					logger.Warn("screenshot queue timed out", zap.String("domain", domainName))
+					resp.Errors = append(resp.Errors, domain.LookupError{
+						Lookup:  "screenshot",
+						Message: "screenshot queue timed out, please retry",
+					})
+					return
+				}
+			}
 			result, err := s.lookupScreenshot(ctx, domainName, s.screenshotTimeout)
 			mu.Lock()
 			defer mu.Unlock()
