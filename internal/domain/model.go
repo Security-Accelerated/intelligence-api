@@ -12,6 +12,7 @@ type DomainRequest struct {
 	BGP           bool     `json:"bgp,omitempty"`
 	Fingerprint   bool     `json:"fingerprint,omitempty"`
 	ThreatIntel   bool     `json:"threat_intel,omitempty"`
+	DNSSecurity   bool     `json:"dns_security,omitempty"`
 }
 
 type LookupOptions struct {
@@ -23,6 +24,7 @@ type LookupOptions struct {
 	BGP           bool
 	Fingerprint   bool
 	ThreatIntel   bool
+	DNSSecurity   bool
 }
 
 type DomainResponse struct {
@@ -40,8 +42,34 @@ type DomainResponse struct {
 	BGP           *BGPInfo           `json:"bgp,omitempty"`
 	Fingerprint   *FingerprintInfo   `json:"fingerprint,omitempty"`
 	ThreatIntel   *ThreatIntelInfo   `json:"threat_intel,omitempty"`
+	DNSSecurity   *DNSSecurityInfo   `json:"dns_security,omitempty"`
 	Risk          *RiskSummary       `json:"risk,omitempty"`
 	Errors        []LookupError      `json:"errors,omitempty"`
+}
+
+// --- DNS Security: DNSSEC + CAA (optional field on domain lookup) ---
+
+type DNSSecurityInfo struct {
+	DNSSEC *DNSSECInfo `json:"dnssec,omitempty"`
+	CAA    *CAAInfo    `json:"caa,omitempty"`
+}
+
+type DNSSECInfo struct {
+	Enabled       bool     `json:"enabled"` // DS at parent and DNSKEY at zone both present
+	DSRecords     int      `json:"ds_records"`
+	DNSKEYRecords int      `json:"dnskey_records"`
+	Algorithms    []string `json:"algorithms,omitempty"` // signing algorithms from DS records
+}
+
+type CAAInfo struct {
+	Present bool        `json:"present"`
+	Records []CAARecord `json:"records,omitempty"`
+}
+
+type CAARecord struct {
+	Flag  uint8  `json:"flag"`
+	Tag   string `json:"tag"` // issue, issuewild, iodef
+	Value string `json:"value"`
 }
 
 // --- Aggregate Risk Score (computed post-processing, no extra lookups) ---
@@ -147,9 +175,32 @@ type LookupError struct {
 // --- Email Security (optional field on domain lookup) ---
 
 type EmailSecurityInfo struct {
-	SPF   *SPFRecord   `json:"spf,omitempty"`
-	DMARC *DMARCRecord `json:"dmarc,omitempty"`
-	DKIM  []DKIMRecord `json:"dkim,omitempty"`
+	SPF    *SPFRecord    `json:"spf,omitempty"`
+	DMARC  *DMARCRecord  `json:"dmarc,omitempty"`
+	DKIM   []DKIMRecord  `json:"dkim,omitempty"`
+	MTASTS *MTASTSRecord `json:"mta_sts,omitempty"`
+	TLSRPT *TLSRPTRecord `json:"tls_rpt,omitempty"`
+	BIMI   *BIMIRecord   `json:"bimi,omitempty"`
+}
+
+type MTASTSRecord struct {
+	Raw           string   `json:"raw"`          // TXT record at _mta-sts.<domain>
+	ID            string   `json:"id,omitempty"` // id= tag
+	PolicyFetched bool     `json:"policy_fetched"`
+	Mode          string   `json:"mode,omitempty"` // enforce, testing, none (from policy file)
+	MaxAge        int      `json:"max_age,omitempty"`
+	MXPatterns    []string `json:"mx_patterns,omitempty"`
+}
+
+type TLSRPTRecord struct {
+	Raw string `json:"raw"` // TXT record at _smtp._tls.<domain>
+	RUA string `json:"rua,omitempty"`
+}
+
+type BIMIRecord struct {
+	Raw       string `json:"raw"`                 // TXT record at default._bimi.<domain>
+	Location  string `json:"location,omitempty"`  // l= logo SVG URL
+	Authority string `json:"authority,omitempty"` // a= verified mark certificate URL
 }
 
 type SPFRecord struct {

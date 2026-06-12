@@ -23,6 +23,7 @@ var ContextKeys = []string{
 	"fingerprint_requested",
 	"threat_intel_requested",
 	"ip_threat_intel_requested",
+	"dns_security_requested",
 }
 
 // IntContextKeys lists integer gin context keys logged per request.

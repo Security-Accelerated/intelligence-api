@@ -115,6 +115,7 @@ type DomainService struct {
 	lookupCTLogs        func(ctx context.Context, d string, maxEntries int) (*domain.CTLogsInfo, error)
 	lookupBGP           func(ctx context.Context, d string) (*domain.BGPInfo, error)
 	lookupThreatIntel   func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError)
+	lookupDNSSecurity   func(ctx context.Context, d string) (*domain.DNSSecurityInfo, error)
 }
 
 func NewDomainService(c cache.Cache, cacheTTL, negativeCacheTTL, lookupTimeout, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
@@ -158,6 +159,7 @@ func NewDomainService(c cache.Cache, cacheTTL, negativeCacheTTL, lookupTimeout, 
 		lookupThreatIntel: func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError) {
 			return domain.LookupThreatIntel(ctx, d, tiProviders)
 		},
+		lookupDNSSecurity: domain.LookupDNSSecurity,
 	}
 }
 
@@ -212,6 +214,13 @@ func (s *DomainService) SetThreatIntelLookup(
 	s.lookupThreatIntel = fn
 }
 
+// SetDNSSecurityLookup replaces the DNS security lookup function (for testing).
+func (s *DomainService) SetDNSSecurityLookup(
+	fn func(context.Context, string) (*domain.DNSSecurityInfo, error),
+) {
+	s.lookupDNSSecurity = fn
+}
+
 // SetFingerprintEngine replaces the fingerprint engine (for testing).
 func (s *DomainService) SetFingerprintEngine(engine *domain.FingerprintEngine) {
 	s.fingerprintEngine = engine
@@ -224,6 +233,9 @@ func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	}
 	if opts.CTLogs {
 		suffixes = append(suffixes, "ct_logs")
+	}
+	if opts.DNSSecurity {
+		suffixes = append(suffixes, "dns_security")
 	}
 	if opts.EmailSecurity {
 		suffixes = append(suffixes, "email_security")
@@ -469,6 +481,24 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 		})
 	}
 
+	if opts.DNSSecurity {
+		wg.Go(func() {
+			result, err := s.lookupDNSSecurity(ctx, domainName)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "dns_security"), zap.String("domain", domainName), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{
+					Lookup:  "dns_security",
+					Message: sanitizeErr(err),
+				})
+				recordIfUnexpected(s.alerter, "dns_security", err)
+				return
+			}
+			resp.DNSSecurity = result
+		})
+	}
+
 	if opts.ThreatIntel {
 		wg.Go(func() {
 			result, errs := s.lookupThreatIntel(ctx, domainName)
@@ -493,7 +523,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	// zero extra network calls, computed from whichever lookups are present.
 	resp.Risk = domain.ComputeRiskScore(resp, time.Now())
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil || resp.ThreatIntel != nil
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil || resp.ThreatIntel != nil || resp.DNSSecurity != nil
 	// Responses with failures get a shorter TTL so transient upstream errors
 	// aren't served from cache for the full window — but they ARE cached, so a
 	// nonexistent domain doesn't trigger a fresh fan-out on every request.

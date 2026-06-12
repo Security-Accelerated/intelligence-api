@@ -1463,6 +1463,80 @@ func TestLookup_ScreenshotTimeout_Passed(t *testing.T) {
 	}
 }
 
+func okDNSSecurity(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+	return &domain.DNSSecurityInfo{
+		DNSSEC: &domain.DNSSECInfo{Enabled: true, DSRecords: 1, DNSKEYRecords: 2, Algorithms: []string{"RSASHA256"}},
+		CAA:    &domain.CAAInfo{Present: true, Records: []domain.CAARecord{{Tag: "issue", Value: "letsencrypt.org"}}},
+	}, nil
+}
+
+func failDNSSecurity(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+	return nil, errors.New("dns_security failed")
+}
+
+func TestLookup_DNSSecurity_OptIn(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.SetDNSSecurityLookup(okDNSSecurity)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", domain.LookupOptions{DNSSecurity: true})
+	if resp.DNSSecurity == nil || resp.DNSSecurity.DNSSEC == nil || !resp.DNSSecurity.DNSSEC.Enabled {
+		t.Fatalf("DNSSecurity = %+v, want enabled DNSSEC", resp.DNSSecurity)
+	}
+	// Caches under a feature-specific key.
+	if _, ok := mc.store["example.com:dns_security"]; !ok {
+		t.Errorf("expected cache key example.com:dns_security, have %v", keysOf(mc))
+	}
+}
+
+func TestLookup_DNSSecurity_NotRequested(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	called := false
+	svc.SetDNSSecurityLookup(func(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+		called = true
+		return nil, nil
+	})
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if called {
+		t.Error("dns_security lookup ran without being requested")
+	}
+	if resp.DNSSecurity != nil {
+		t.Error("DNSSecurity should be nil when not requested")
+	}
+}
+
+func TestLookup_DNSSecurity_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.SetDNSSecurityLookup(failDNSSecurity)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", domain.LookupOptions{DNSSecurity: true})
+	if resp.DNSSecurity != nil {
+		t.Error("DNSSecurity should be nil on failure")
+	}
+	found := false
+	for _, e := range resp.Errors {
+		if e.Lookup == "dns_security" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected dns_security error, got %v", resp.Errors)
+	}
+}
+
+func keysOf(mc *mockCache) []string {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+	keys := make([]string, 0, len(mc.store))
+	for k := range mc.store {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func TestLookup_RiskSummaryComputed(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)

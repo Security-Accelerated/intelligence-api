@@ -76,7 +76,7 @@ func aggColumns() []string {
 	return []string{
 		"total_requests", "cache_hits", "avg_latency", "total_domains", "total_ips",
 		"screenshot", "reputation", "email_security", "subdomains",
-		"ct_logs", "bgp", "fingerprint", "threat_intel",
+		"ct_logs", "bgp", "fingerprint", "threat_intel", "dns_security",
 	}
 }
 
@@ -94,7 +94,7 @@ func TestQueryUsage_HappyPath(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(100, 30, 45.678, 80, 15, 10, 20, 15, 12, 8, 5, 25, 3))
+			AddRow(100, 30, 45.678, 80, 15, 10, 20, 15, 12, 8, 5, 25, 3, 2))
 
 	// Status code query
 	mock.ExpectQuery("SELECT status_code").
@@ -140,7 +140,7 @@ func TestQueryUsage_HappyPath(t *testing.T) {
 	features := map[string]int{
 		"screenshot": 10, "reputation": 20, "email_security": 15,
 		"subdomains": 12, "ct_logs": 8, "bgp": 5,
-		"fingerprint": 25, "threat_intel": 3,
+		"fingerprint": 25, "threat_intel": 3, "dns_security": 2,
 	}
 	for k, want := range features {
 		if got := summary.FeatureUsage[k]; got != want {
@@ -194,7 +194,7 @@ func TestQueryUsage_NoData(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
 	// Status codes: no rows
 	mock.ExpectQuery("SELECT status_code").
@@ -283,7 +283,7 @@ func TestQueryUsage_StatusCodeQueryError(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(10, 3, 12.5, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(10, 3, 12.5, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
 	// Status code query fails
 	mock.ExpectQuery("SELECT status_code").
@@ -315,7 +315,7 @@ func TestQueryUsage_PathQueryError(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(10, 3, 12.5, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(10, 3, 12.5, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
 	// Status code query succeeds
 	mock.ExpectQuery("SELECT status_code").
@@ -353,7 +353,7 @@ func TestQueryUsage_WithCustomerFilter(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until, 42).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(5, 2, 20.0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(5, 2, 20.0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0))
 
 	mock.ExpectQuery("SELECT status_code").
 		WithArgs(since, until, 42).
@@ -397,7 +397,7 @@ func TestQueryUsage_CacheHitRateCalculation(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(10, 3, 50.0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(10, 3, 50.0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
 
 	mock.ExpectQuery("SELECT status_code").
 		WithArgs(since, until).
