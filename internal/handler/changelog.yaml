@@ -1,6 +1,24 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.53.0
+  date: 2026-06-12
+  changes:
+    - text: "Improved reliability under load: heavy lookups are now bounded and isolated so one slow or failing lookup can't affect other requests"
+      audience: public
+    - text: "Panic recovery in all lookup goroutines — a panicking lookup degrades to a per-lookup error instead of killing the process"
+      audience: internal
+    - text: "Provisioned API key plaintext is blanked on retrieval and expired rows are swept on an interval (billing.cleanup_interval, default 10m)"
+      audience: internal
+    - text: "Global semaphore caps concurrent Chromium screenshots (screenshot.max_concurrent, default 4)"
+      audience: internal
+    - text: "crt.sh requests (subdomains, CT logs) now have end-to-end HTTP timeouts (subdomain.http_timeout / ct_logs.http_timeout, default 15s)"
+      audience: internal
+    - text: "safenet blocks TEST-NET, benchmarking, 240/4, 0/8, 192.0.0.0/24, and IPv6 documentation ranges; IPv4-mapped IPv6 unmapped before checks; migrated to netip.Addr"
+      audience: internal
+    - text: "Singleflight copy failures return an isolated error response instead of a shared pointer (CodeRabbit finding)"
+      audience: internal
+
 - version: v0.52.0
   date: 2026-06-11
   changes:
