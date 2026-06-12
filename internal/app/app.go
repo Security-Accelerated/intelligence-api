@@ -181,6 +181,7 @@ func Run(logger *zap.Logger, version string) error {
 	domainService := service.NewDomainService(redisCache, cacheTTL, negativeCacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
+	billingRepo := billing.NewRepository(db)
 	var billingSvc billing.Service
 	stripeKey := cfg.GetString("stripe.secret_key")
 	webhookSecret := cfg.GetString("stripe.webhook_secret")
@@ -192,7 +193,6 @@ func Run(logger *zap.Logger, version string) error {
 		if p := cfg.GetString("stripe.prices.pro_monthly"); p != "" {
 			priceMap[p] = "pro"
 		}
-		billingRepo := billing.NewRepository(db)
 		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo, notifier)
 		status.Services.Billing = config.BillingStatus{
 			Enabled:              true,
@@ -205,10 +205,14 @@ func Run(logger *zap.Logger, version string) error {
 		logger.Info("stripe billing disabled (no credentials configured)")
 	}
 
+	// Expired provisioned keys hold plaintext for never-retrieved sessions —
+	// sweep them on an interval regardless of whether Stripe is configured.
+	billing.StartProvisionedKeyCleanup(ctx, billingRepo, cfg.GetDuration("billing.cleanup_interval"))
+
 	// API key self-service rotation — depends only on the database, so it
 	// works whether or not Stripe billing is configured.
 	keyRotationSvc := billing.NewKeyRotationService(
-		billing.NewRepository(db),
+		billingRepo,
 		cfg.GetDuration("auth.rotation_grace"),
 		cachedRepo,
 	)

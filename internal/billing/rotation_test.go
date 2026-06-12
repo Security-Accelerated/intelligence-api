@@ -78,6 +78,56 @@ func TestKeyRotationService_DefaultGrace(t *testing.T) {
 	}
 }
 
+func TestRepository_RetrieveProvisionedKey_BlanksPlaintext(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// The retrieval statement must blank the stored plaintext while returning
+	// the pre-update value via the CTE.
+	mock.ExpectQuery(`SET retrieved = true, raw_key = ''`).
+		WithArgs("sess_123").
+		WillReturnRows(sqlmock.NewRows([]string{"raw_key"}).AddRow("the-raw-key"))
+
+	repo := NewRepository(db)
+	key, err := repo.RetrieveProvisionedKey(context.Background(), "sess_123")
+	if err != nil {
+		t.Fatalf("RetrieveProvisionedKey: %v", err)
+	}
+	if key != "the-raw-key" {
+		t.Errorf("key = %q, want the-raw-key", key)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestStartProvisionedKeyCleanup_RunsImmediately(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectExec("DELETE FROM provisioned_keys").
+		WillReturnResult(sqlmock.NewResult(0, 2))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	StartProvisionedKeyCleanup(ctx, NewRepository(db), time.Hour)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if mock.ExpectationsWereMet() == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("cleanup did not run: %v", mock.ExpectationsWereMet())
+}
+
 func TestRepository_RotateKey(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

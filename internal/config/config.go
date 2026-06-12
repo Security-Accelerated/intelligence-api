@@ -87,6 +87,7 @@ func init() {
 	config.SetDefault("stripe.payment_link.pro", "")
 	config.SetDefault("stripe.portal_link", "")
 	config.SetDefault("billing.stale_key_days", 365)
+	config.SetDefault("billing.cleanup_interval", "10m")
 	config.SetDefault("usage.buffer_size", 256)
 	config.SetDefault("usage.flush_interval", "5s")
 	config.SetDefault("threat_intel.virustotal_api_key", "")

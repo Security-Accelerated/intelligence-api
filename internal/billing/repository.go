@@ -76,17 +76,28 @@ func (r *Repository) ProvisionCustomer(ctx context.Context, name, email, plan, s
 	return customerID, nil
 }
 
-// RetrieveProvisionedKey atomically marks a provisioned key as retrieved and returns it.
-// Returns an error if the key has already been retrieved, has expired, or does not exist.
+// RetrieveProvisionedKey atomically marks a provisioned key as retrieved,
+// blanks the stored plaintext, and returns it. The row is kept (with an empty
+// raw_key) so a second attempt still classifies as "already retrieved"; the
+// cleanup ticker deletes it once expired. Returns an error if the key has
+// already been retrieved, has expired, or does not exist.
 func (r *Repository) RetrieveProvisionedKey(ctx context.Context, sessionID string) (string, error) {
 	var rawKey string
+	// The CTE captures the pre-update raw_key — RETURNING on its own would
+	// yield the post-update (blanked) value.
 	err := r.db.QueryRowContext(ctx,
-		`UPDATE provisioned_keys
-		    SET retrieved = true
-		  WHERE session_id = $1
-		    AND retrieved = false
-		    AND expires_at > now()
-		  RETURNING raw_key`,
+		`WITH claimed AS (
+		    SELECT id, raw_key FROM provisioned_keys
+		     WHERE session_id = $1
+		       AND retrieved = false
+		       AND expires_at > now()
+		       FOR UPDATE
+		 )
+		 UPDATE provisioned_keys p
+		    SET retrieved = true, raw_key = ''
+		   FROM claimed
+		  WHERE p.id = claimed.id
+		  RETURNING claimed.raw_key`,
 		sessionID,
 	).Scan(&rawKey)
 	if err != nil {
