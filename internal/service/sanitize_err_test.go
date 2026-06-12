@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 func TestSanitizeErr_BlockedError(t *testing.T) {
-	err := &safenet.BlockedError{IP: net.ParseIP("127.0.0.1")}
+	err := &safenet.BlockedError{IP: netip.MustParseAddr("127.0.0.1")}
 	got := sanitizeErr(err)
 	want := "domain resolves to a private/reserved IP address"
 	if got != want {
@@ -20,7 +21,7 @@ func TestSanitizeErr_BlockedError(t *testing.T) {
 }
 
 func TestSanitizeErr_WrappedBlockedError(t *testing.T) {
-	inner := &safenet.BlockedError{IP: net.ParseIP("10.0.0.1")}
+	inner := &safenet.BlockedError{IP: netip.MustParseAddr("10.0.0.1")}
 	wrapped := errors.Join(errors.New("dial failed"), inner)
 	got := sanitizeErr(wrapped)
 	want := "domain resolves to a private/reserved IP address"
@@ -69,7 +70,7 @@ func TestSanitizeErr_ColonStripping(t *testing.T) {
 
 func TestSanitizeErr_BlockedErrorTakesPrecedence(t *testing.T) {
 	// Even if the error message contains colons, BlockedError should match first.
-	inner := &safenet.BlockedError{IP: net.ParseIP("192.168.1.1")}
+	inner := &safenet.BlockedError{IP: netip.MustParseAddr("192.168.1.1")}
 	wrapped := fmt.Errorf("lookup: headers: %w", inner)
 	got := sanitizeErr(wrapped)
 	want := "domain resolves to a private/reserved IP address"
@@ -144,7 +145,7 @@ func TestIsExpectedError_InfraError_NotExpected(t *testing.T) {
 func TestIsExpectedError_BlockedError_NotExpected(t *testing.T) {
 	// SSRF blocks are unexpected — they indicate a domain resolved to a private IP,
 	// which may warrant investigation.
-	err := &safenet.BlockedError{IP: net.ParseIP("127.0.0.1")}
+	err := &safenet.BlockedError{IP: netip.MustParseAddr("127.0.0.1")}
 	if isExpectedError(err) {
 		t.Error("safenet.BlockedError should NOT be expected")
 	}

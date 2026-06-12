@@ -763,9 +763,12 @@ Config values:
 | `auth.last_used_flush_interval` | `10s` | How often last_used_at updates are flushed to PostgreSQL |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `screenshot.max_png_bytes` | `5242880` | Maximum screenshot PNG size in bytes (5 MB) |
+| `screenshot.max_concurrent` | `4` | Global cap on concurrent Chromium screenshot processes |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
 | `subdomain.max_response_bytes` | `10485760` | Maximum crt.sh response body size in bytes (10 MB) |
+| `subdomain.http_timeout` | `15s` | End-to-end timeout for the crt.sh subdomain request |
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
+| `ct_logs.http_timeout` | `15s` | End-to-end timeout for the crt.sh CT logs request |
 | `threat_intel.virustotal_api_key` | `""` | VirusTotal API key (enables VirusTotal provider) |
 | `threat_intel.alienvault_api_key` | `""` | AlienVault OTX API key (enables AlienVault provider) |
 | `dns.servers` | `[]` | External DNS resolvers (default: Google, Cloudflare, OpenDNS) |
@@ -815,6 +818,7 @@ Config values:
 | `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
 | `stripe.portal_link` | `""` | Stripe Customer Portal URL for subscription management |
 | `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
+| `billing.cleanup_interval` | `10m` | Sweep cadence for expired provisioned keys |
 | `usage.buffer_size` | `256` | Channel buffer size for async usage logging |
 | `usage.flush_interval` | `5s` | How often buffered usage entries are flushed to PostgreSQL |
 

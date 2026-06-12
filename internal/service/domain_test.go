@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -99,15 +100,15 @@ func okReputation(_ context.Context, _ string) (*domain.ReputationResult, []doma
 }
 func failReputation(_ context.Context, _ string) (*domain.ReputationResult, []domain.LookupError) {
 	return &domain.ReputationResult{
-		Score:     0,
-		Risk:      "clean",
-		Providers: nil,
-	}, []domain.LookupError{
-		{Lookup: "reputation:spamhaus_dbl", Message: "spamhaus_dbl lookup: connection refused"},
-		{Lookup: "reputation:surbl", Message: "surbl lookup: connection refused"},
-		{Lookup: "reputation:uribl", Message: "uribl lookup: connection refused"},
-		{Lookup: "reputation:spamhaus_zen", Message: "spamhaus_zen lookup: connection refused"},
-	}
+			Score:     0,
+			Risk:      "clean",
+			Providers: nil,
+		}, []domain.LookupError{
+			{Lookup: "reputation:spamhaus_dbl", Message: "spamhaus_dbl lookup: connection refused"},
+			{Lookup: "reputation:surbl", Message: "surbl lookup: connection refused"},
+			{Lookup: "reputation:uribl", Message: "uribl lookup: connection refused"},
+			{Lookup: "reputation:spamhaus_zen", Message: "spamhaus_zen lookup: connection refused"},
+		}
 }
 
 func okEmailSecurity(_ context.Context, _ string) (*domain.EmailSecurityInfo, error) {
@@ -158,8 +159,8 @@ func failBGP(_ context.Context, _ string) (*domain.BGPInfo, error) {
 
 func okThreatIntel(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
 	return &domain.ThreatIntelInfo{
-		RiskLevel: "medium",
-		Score:     45,
+		RiskLevel:  "medium",
+		Score:      45,
 		Categories: []string{"malware"},
 		Providers: []*domain.ThreatIntelProviderResult{
 			{Provider: "virustotal", Detected: true, Score: 5, Categories: []string{"malware"}, Details: "3/70 engines detected this domain"},
@@ -170,13 +171,13 @@ func okThreatIntel(_ context.Context, _ string) (*domain.ThreatIntelInfo, []doma
 }
 func failThreatIntel(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
 	return &domain.ThreatIntelInfo{
-		RiskLevel: "none",
-		Score:     0,
-		Providers: []*domain.ThreatIntelProviderResult{},
-	}, []domain.LookupError{
-		{Lookup: "threat_intel:virustotal", Message: "virustotal: rate limit"},
-		{Lookup: "threat_intel:urlhaus", Message: "urlhaus: connection refused"},
-	}
+			RiskLevel: "none",
+			Score:     0,
+			Providers: []*domain.ThreatIntelProviderResult{},
+		}, []domain.LookupError{
+			{Lookup: "threat_intel:virustotal", Message: "virustotal: rate limit"},
+			{Lookup: "threat_intel:urlhaus", Message: "urlhaus: connection refused"},
+		}
 }
 
 func newTestService(mc *mockCache) *DomainService {
@@ -538,16 +539,16 @@ func TestLookup_Reputation_PartialProviderFailure(t *testing.T) {
 	svc := newTestService(mc)
 	svc.lookupReputation = func(_ context.Context, _ string) (*domain.ReputationResult, []domain.LookupError) {
 		return &domain.ReputationResult{
-			Score: 35,
-			Risk:  "medium",
-			Providers: []*domain.ProviderResult{
-				{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"},
-				{Listed: false, Provider: "spamhaus_zen"},
-			},
-		}, []domain.LookupError{
-			{Lookup: "reputation:surbl", Message: "surbl lookup: timeout"},
-			{Lookup: "reputation:uribl", Message: "uribl lookup: rate limited"},
-		}
+				Score: 35,
+				Risk:  "medium",
+				Providers: []*domain.ProviderResult{
+					{Listed: true, Category: "phishing", Provider: "spamhaus_dbl", ReturnCode: "127.0.1.4"},
+					{Listed: false, Provider: "spamhaus_zen"},
+				},
+			}, []domain.LookupError{
+				{Lookup: "reputation:surbl", Message: "surbl lookup: timeout"},
+				{Lookup: "reputation:uribl", Message: "uribl lookup: rate limited"},
+			}
 	}
 
 	resp, _ := svc.Lookup(context.Background(), "example.com", reputationOpts())
@@ -1537,6 +1538,113 @@ func keysOf(mc *mockCache) []string {
 	return keys
 }
 
+func TestLookup_ScreenshotSemaphoreCapsConcurrency(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	// newTestService leaves lookupTimeout at 0 (already-expired context) —
+	// without a real timeout the semaphore select could take the ctx.Done()
+	// path and the peak assertion would pass vacuously.
+	svc.lookupTimeout = 30 * time.Second
+	svc.screenshotSem = make(chan struct{}, 2)
+
+	var current, peak atomic.Int32
+	svc.lookupScreenshot = func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
+		n := current.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		time.Sleep(30 * time.Millisecond)
+		current.Add(-1)
+		return &domain.ScreenshotInfo{StatusCode: 200}, nil
+	}
+
+	var wg sync.WaitGroup
+	for i := range 6 {
+		wg.Go(func() {
+			// Distinct domains so singleflight doesn't coalesce them.
+			svc.Lookup(context.Background(), fmt.Sprintf("example%d.com", i), screenshotOpts())
+		})
+	}
+	wg.Wait()
+
+	if got := peak.Load(); got > 2 {
+		t.Errorf("peak concurrent screenshots = %d, want <= 2", got)
+	}
+}
+
+func TestLookup_ScreenshotQueueTimeout(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupTimeout = 50 * time.Millisecond
+	svc.screenshotSem = make(chan struct{}, 1)
+	svc.screenshotSem <- struct{}{} // hold the only slot
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", screenshotOpts())
+	if resp.Screenshot != nil {
+		t.Error("expected no screenshot when the queue is saturated")
+	}
+	var found bool
+	for _, e := range resp.Errors {
+		if e.Lookup == "screenshot" && strings.Contains(e.Message, "queue timed out") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected screenshot queue timeout error, got %v", resp.Errors)
+	}
+}
+
+func TestLookup_PanickingLookupDegradesToError(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupWhois = func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
+		panic("malformed input blew up the parser")
+	}
+
+	resp, hit := svc.Lookup(context.Background(), "example.com", noOpts())
+	if hit {
+		t.Error("expected cache miss")
+	}
+	// Other lookups must still succeed.
+	if resp.DNS == nil || resp.SSL == nil || resp.Headers == nil {
+		t.Error("expected other lookups to complete despite whois panic")
+	}
+	var found bool
+	for _, e := range resp.Errors {
+		if e.Lookup == "whois" && e.Message == "internal error" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected sanitized whois panic error, got %v", resp.Errors)
+	}
+}
+
+func TestLookup_PanicInOptionalLookup(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.SetDNSSecurityLookup(func(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+		panic("dnssec parser panic")
+	})
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", domain.LookupOptions{DNSSecurity: true})
+	if resp.DNSSecurity != nil {
+		t.Error("DNSSecurity should be nil after panic")
+	}
+	var found bool
+	for _, e := range resp.Errors {
+		if e.Lookup == "dns_security" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected dns_security error after panic, got %v", resp.Errors)
+	}
+}
+
 func TestLookup_RiskSummaryComputed(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)
@@ -1647,7 +1755,7 @@ func TestLookup_SingleflightCoalescesConcurrentLookups(t *testing.T) {
 }
 
 func TestNewDomainService_Defaults(t *testing.T) {
-	svc := NewDomainService(newMockCache(), 5*time.Minute, 0, 0, 15*time.Second, 0, 0, nil, &notifications.NoopRecorder{}, nil)
+	svc := NewDomainService(newMockCache(), 5*time.Minute, 0, 0, 15*time.Second, 0, 0, 0, nil, &notifications.NoopRecorder{}, nil)
 	if svc.lookupTimeout != 30*time.Second {
 		t.Errorf("lookupTimeout = %v, want 30s", svc.lookupTimeout)
 	}

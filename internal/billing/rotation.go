@@ -10,6 +10,36 @@ import (
 	"go.uber.org/zap"
 )
 
+// StartProvisionedKeyCleanup launches a background goroutine that deletes
+// expired provisioned keys (including retrieved-and-blanked rows) every
+// interval until ctx is cancelled. Without it, never-retrieved plaintext keys
+// would sit in the database forever.
+func StartProvisionedKeyCleanup(ctx context.Context, repo *Repository, interval time.Duration) {
+	if interval <= 0 {
+		interval = 10 * time.Minute
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		run := func() {
+			cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			if err := repo.CleanupExpiredKeys(cctx); err != nil {
+				logging.Logger().Error("provisioned key cleanup failed", zap.Error(err))
+			}
+		}
+		run()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				run()
+			}
+		}
+	}()
+}
+
 // KeyRotationRepository is the subset of Repository used for key rotation.
 type KeyRotationRepository interface {
 	RotateKey(ctx context.Context, customerID int, newKeyHash string, graceExpiry time.Time) error

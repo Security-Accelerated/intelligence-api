@@ -73,12 +73,15 @@ type CacheConfig struct {
 }
 
 type LookupConfig struct {
-	Timeout              string `json:"timeout"`
-	ScreenshotTimeout    string `json:"screenshot_timeout"`
-	ScreenshotMaxPNG     int    `json:"screenshot_max_png_bytes"`
-	SubdomainMaxResults  int    `json:"subdomain_max_results"`
-	SubdomainMaxResponse int    `json:"subdomain_max_response_bytes"`
-	CTLogsMaxEntries     int    `json:"ct_logs_max_entries"`
+	Timeout                 string `json:"timeout"`
+	ScreenshotTimeout       string `json:"screenshot_timeout"`
+	ScreenshotMaxPNG        int    `json:"screenshot_max_png_bytes"`
+	ScreenshotMaxConcurrent int    `json:"screenshot_max_concurrent"`
+	SubdomainMaxResults     int    `json:"subdomain_max_results"`
+	SubdomainMaxResponse    int    `json:"subdomain_max_response_bytes"`
+	SubdomainHTTPTimeout    string `json:"subdomain_http_timeout"`
+	CTLogsMaxEntries        int    `json:"ct_logs_max_entries"`
+	CTLogsHTTPTimeout       string `json:"ct_logs_http_timeout"`
 	RateLimitFree        int    `json:"rate_limit_free"`
 	RateLimitBasic       int    `json:"rate_limit_basic"`
 	RateLimitPro         int    `json:"rate_limit_pro"`
@@ -182,22 +185,25 @@ func NewStatusSnapshot(version string) *StatusSnapshot {
 			AuthCacheTTL:     cfg.GetDuration("auth.cache_ttl").String(),
 		},
 		Lookups: LookupConfig{
-			Timeout:              cfg.GetDuration("domain.lookup_timeout").String(),
-			ScreenshotTimeout:    cfg.GetDuration("screenshot.timeout").String(),
-			ScreenshotMaxPNG:     cfg.GetInt("screenshot.max_png_bytes"),
-			SubdomainMaxResults:  cfg.GetInt("subdomain.max_results"),
-			SubdomainMaxResponse: cfg.GetInt("subdomain.max_response_bytes"),
-			CTLogsMaxEntries:     cfg.GetInt("ct_logs.max_entries"),
-			RateLimitFree:        cfg.GetInt("rate_limit.free"),
-			RateLimitBasic:       cfg.GetInt("rate_limit.basic"),
-			RateLimitPro:         cfg.GetInt("rate_limit.pro"),
-			MaxDomainsFree:       cfg.GetInt("domain.max_domains.free"),
-			MaxDomainsBasic:      cfg.GetInt("domain.max_domains.basic"),
-			MaxDomainsPro:        cfg.GetInt("domain.max_domains.pro"),
-			IPTimeout:            cfg.GetDuration("ip.lookup_timeout").String(),
-			MaxIPsFree:           cfg.GetInt("ip.max_ips.free"),
-			MaxIPsBasic:          cfg.GetInt("ip.max_ips.basic"),
-			MaxIPsPro:            cfg.GetInt("ip.max_ips.pro"),
+			Timeout:                 cfg.GetDuration("domain.lookup_timeout").String(),
+			ScreenshotTimeout:       cfg.GetDuration("screenshot.timeout").String(),
+			ScreenshotMaxPNG:        cfg.GetInt("screenshot.max_png_bytes"),
+			ScreenshotMaxConcurrent: cfg.GetInt("screenshot.max_concurrent"),
+			SubdomainMaxResults:     cfg.GetInt("subdomain.max_results"),
+			SubdomainMaxResponse:    cfg.GetInt("subdomain.max_response_bytes"),
+			SubdomainHTTPTimeout:    cfg.GetDuration("subdomain.http_timeout").String(),
+			CTLogsMaxEntries:        cfg.GetInt("ct_logs.max_entries"),
+			CTLogsHTTPTimeout:       cfg.GetDuration("ct_logs.http_timeout").String(),
+			RateLimitFree:           cfg.GetInt("rate_limit.free"),
+			RateLimitBasic:          cfg.GetInt("rate_limit.basic"),
+			RateLimitPro:            cfg.GetInt("rate_limit.pro"),
+			MaxDomainsFree:          cfg.GetInt("domain.max_domains.free"),
+			MaxDomainsBasic:         cfg.GetInt("domain.max_domains.basic"),
+			MaxDomainsPro:           cfg.GetInt("domain.max_domains.pro"),
+			IPTimeout:               cfg.GetDuration("ip.lookup_timeout").String(),
+			MaxIPsFree:              cfg.GetInt("ip.max_ips.free"),
+			MaxIPsBasic:             cfg.GetInt("ip.max_ips.basic"),
+			MaxIPsPro:               cfg.GetInt("ip.max_ips.pro"),
 		},
 	}
 }

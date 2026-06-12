@@ -25,7 +25,7 @@ func validateIP(raw string) (string, bool) {
 	canonical := addr.String()
 
 	// Reject non-globally-routable IPs
-	if safenet.IsPrivateIP(addr.AsSlice()) {
+	if safenet.IsPrivateAddr(addr) {
 		return canonical, false
 	}
 
