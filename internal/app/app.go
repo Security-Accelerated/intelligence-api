@@ -205,6 +205,14 @@ func Run(logger *zap.Logger, version string) error {
 		logger.Info("stripe billing disabled (no credentials configured)")
 	}
 
+	// API key self-service rotation — depends only on the database, so it
+	// works whether or not Stripe billing is configured.
+	keyRotationSvc := billing.NewKeyRotationService(
+		billing.NewRepository(db),
+		cfg.GetDuration("auth.rotation_grace"),
+		cachedRepo,
+	)
+
 	// Usage tracking
 	usageLogger := usage.NewUsageLogger(
 		db,
@@ -269,7 +277,7 @@ func Run(logger *zap.Logger, version string) error {
 	ipService := service.NewIPService(redisCache, cacheTTL, negativeCacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
 
 	// HTTP
-	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, geoReader, cfg, redisCache, cachedRepo, db, status)
+	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, keyRotationSvc, geoReader, cfg, redisCache, cachedRepo, db, status)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
 	serverCfg := httpapi.ServerConfig{
 		Port:            status.System.Port,

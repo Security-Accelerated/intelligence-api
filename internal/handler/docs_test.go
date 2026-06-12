@@ -14,7 +14,7 @@ import (
 func docsRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h.RegisterRoutes(r)
 	return r
 }

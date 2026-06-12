@@ -29,7 +29,7 @@ func doHealthRequest(r *gin.Engine) (*httptest.ResponseRecorder, map[string]any)
 }
 
 func TestHealth_NothingConfigured(t *testing.T) {
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	w, body := doHealthRequest(newHealthRouter(h))
 
 	if w.Code != http.StatusOK {
@@ -49,7 +49,7 @@ func TestHealth_NothingConfigured(t *testing.T) {
 func TestHealth_RedisUp(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
-	h := New(nil, nil, nil, nil, nil, nil, nil, rc, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, rc, nil, nil, nil)
 
 	w, body := doHealthRequest(newHealthRouter(h))
 	if w.Code != http.StatusOK {
@@ -65,7 +65,7 @@ func TestHealth_RedisDown(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rc := cache.NewRedisCache(mr.Addr(), "", 0)
 	mr.Close()
-	h := New(nil, nil, nil, nil, nil, nil, nil, rc, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, rc, nil, nil, nil)
 
 	w, body := doHealthRequest(newHealthRouter(h))
 	if w.Code != http.StatusServiceUnavailable {
@@ -82,7 +82,7 @@ func TestHealth_RedisDown(t *testing.T) {
 
 func TestHealth_GeoIPNotLoadedDoesNotDegrade(t *testing.T) {
 	geo := domain.NewEmptyGeoIPReader()
-	h := New(nil, nil, nil, nil, nil, geo, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, geo, nil, nil, nil, nil, nil)
 
 	w, body := doHealthRequest(newHealthRouter(h))
 	if w.Code != http.StatusOK {

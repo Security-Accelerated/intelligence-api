@@ -28,7 +28,7 @@ func (m *mockUsageQueryer) QueryUsage(customerID, apiKeyID int, since, until tim
 func newUsageRouter(uq usage.Queryer) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, uq, nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, uq, nil, nil, nil, nil, nil, nil, nil)
 	admin := r.Group("/v1/admin")
 	admin.Use(func(c *gin.Context) {
 		c.Set("api_key_plan", "admin")
@@ -143,7 +143,7 @@ func TestGetUsage_InvalidCustomerID(t *testing.T) {
 func newMyUsageRouter(uq usage.Queryer, customerID any) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, uq, nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, uq, nil, nil, nil, nil, nil, nil, nil)
 	r.GET("/v1/usage", func(c *gin.Context) {
 		if customerID != nil {
 			c.Set("customer_id", customerID)

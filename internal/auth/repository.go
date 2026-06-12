@@ -25,7 +25,8 @@ func (r *PostgresRepository) GetByKey(ctx context.Context, key string) (*Custome
 		`SELECT ak.id, c.id, c.name, c.active, c.plan, c.created_at
 		   FROM api_keys ak
 		   JOIN customers c ON c.id = ak.customer_id
-		  WHERE ak.key_hash = $1 AND c.active = true`,
+		  WHERE ak.key_hash = $1 AND c.active = true
+		    AND (ak.expires_at IS NULL OR ak.expires_at > now())`,
 		keyHash,
 	).Scan(&c.APIKeyID, &c.ID, &c.Name, &c.Active, &c.Plan, &c.CreatedAt)
 	if err != nil {

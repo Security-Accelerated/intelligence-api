@@ -52,6 +52,7 @@ func init() {
 	config.SetDefault("redis.cache_ttl", "60m")
 	config.SetDefault("redis.negative_cache_ttl", "5m")
 	config.SetDefault("auth.cache_ttl", "5m")
+	config.SetDefault("auth.rotation_grace", "24h")
 	config.SetDefault("auth.last_used_buffer_size", 256)
 	config.SetDefault("auth.last_used_flush_interval", "10s")
 	config.SetDefault("screenshot.timeout", "15s")

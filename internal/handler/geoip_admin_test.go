@@ -29,7 +29,7 @@ func (m *mockGeoRefresher) DownloadAndReload(_, _, _, _ string) (*domain.Refresh
 func newGeoIPAdminRouter(refresher GeoIPRefresher, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, nil, refresher, cfg, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, refresher, cfg, nil, nil, nil, nil)
 	admin := r.Group("/v1/admin")
 	admin.POST("/geoip/refresh", h.RefreshGeoIP)
 	return r

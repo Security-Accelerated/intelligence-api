@@ -23,6 +23,7 @@ redis:
 
 auth:
   cache_ttl: 5m
+  rotation_grace: 24h   # how long old keys keep working after /v1/keys/rotate
   last_used_buffer_size: 256
   last_used_flush_interval: 10s
 

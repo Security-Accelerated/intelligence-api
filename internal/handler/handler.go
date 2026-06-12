@@ -74,6 +74,7 @@ type Handler struct {
 	fingerprintService FingerprintAdminService
 	billingService     billing.Service
 	usageService       usage.Queryer
+	keyRotationService KeyRotationService
 	geoRefresher       GeoIPRefresher
 	cfg                *viper.Viper
 	redisCache         *cache.RedisCache
@@ -83,7 +84,7 @@ type Handler struct {
 	changelog          []ChangelogVersion
 }
 
-func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
+func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, keyRotationService KeyRotationService, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
 	changelog, err := parseChangelog()
 	if err != nil {
 		logging.Logger().Error("failed to parse changelog", zap.Error(err))
@@ -95,6 +96,7 @@ func New(domainService DomainLookupService, ipService IPLookupService, fingerpri
 		fingerprintService: fingerprintService,
 		billingService:     billingService,
 		usageService:       usageService,
+		keyRotationService: keyRotationService,
 		geoRefresher:       geoRefresher,
 		cfg:                cfg,
 		redisCache:         redisCache,
@@ -153,4 +155,5 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin
 	v1.POST("/domain/lookup", h.DomainLookup)
 	v1.POST("/ip/lookup", h.IPLookup)
 	v1.GET("/usage", h.MyUsage)
+	v1.POST("/keys/rotate", h.RotateKey)
 }
