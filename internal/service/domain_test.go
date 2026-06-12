@@ -1463,6 +1463,22 @@ func TestLookup_ScreenshotTimeout_Passed(t *testing.T) {
 	}
 }
 
+func TestLookup_RiskSummaryComputed(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", noOpts())
+	if resp.Risk == nil {
+		t.Fatal("expected aggregate risk summary on response")
+	}
+	if resp.Risk.Level == "" {
+		t.Error("expected risk level to be set")
+	}
+	if len(resp.Risk.Components) == 0 {
+		t.Error("expected risk components from base lookups")
+	}
+}
+
 func TestLookup_SuccessUsesFullCacheTTL(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)

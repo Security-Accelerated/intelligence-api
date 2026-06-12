@@ -489,6 +489,10 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 		resp.Fingerprint = s.fingerprintEngine.Match(resp.Headers)
 	}
 
+	// Aggregate risk score is post-processing over already-fetched data —
+	// zero extra network calls, computed from whichever lookups are present.
+	resp.Risk = domain.ComputeRiskScore(resp, time.Now())
+
 	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil || resp.ThreatIntel != nil
 	// Responses with failures get a shorter TTL so transient upstream errors
 	// aren't served from cache for the full window — but they ARE cached, so a

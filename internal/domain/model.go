@@ -40,7 +40,23 @@ type DomainResponse struct {
 	BGP           *BGPInfo           `json:"bgp,omitempty"`
 	Fingerprint   *FingerprintInfo   `json:"fingerprint,omitempty"`
 	ThreatIntel   *ThreatIntelInfo   `json:"threat_intel,omitempty"`
+	Risk          *RiskSummary       `json:"risk,omitempty"`
 	Errors        []LookupError      `json:"errors,omitempty"`
+}
+
+// --- Aggregate Risk Score (computed post-processing, no extra lookups) ---
+
+type RiskSummary struct {
+	Score      int             `json:"score"`      // 0–100 weighted aggregate
+	Level      string          `json:"risk_level"` // none, low, medium, high, critical
+	Components []RiskComponent `json:"components"`
+}
+
+type RiskComponent struct {
+	Component string  `json:"component"`
+	Score     int     `json:"score"`
+	Weight    float64 `json:"weight"`
+	Detail    string  `json:"detail,omitempty"`
 }
 
 type ProviderResult struct {
