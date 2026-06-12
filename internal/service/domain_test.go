@@ -1541,6 +1541,10 @@ func keysOf(mc *mockCache) []string {
 func TestLookup_ScreenshotSemaphoreCapsConcurrency(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)
+	// newTestService leaves lookupTimeout at 0 (already-expired context) —
+	// without a real timeout the semaphore select could take the ctx.Done()
+	// path and the peak assertion would pass vacuously.
+	svc.lookupTimeout = 30 * time.Second
 	svc.screenshotSem = make(chan struct{}, 2)
 
 	var current, peak atomic.Int32

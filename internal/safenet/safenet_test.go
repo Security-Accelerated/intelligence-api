@@ -36,6 +36,7 @@ func TestIsPrivateIP(t *testing.T) {
 		{"2001:db8::1", true},     // IPv6 documentation
 		{"::ffff:10.0.0.1", true}, // IPv4-mapped IPv6 must not bypass v4 rules
 		{"::ffff:192.0.2.1", true},
+		{"239.255.255.255", true}, // multicast top
 
 		// Should allow
 		{"8.8.8.8", false},
@@ -48,9 +49,8 @@ func TestIsPrivateIP(t *testing.T) {
 		{"2606:4700::1", false},   // public IPv6
 		{"198.17.255.255", false}, // just below benchmarking range
 		{"198.20.0.0", false},     // just above benchmarking range
-		{"192.0.3.1", false},      // just above TEST-NET-1
-		{"239.255.255.255", true}, // multicast top (still blocked)
-		{"203.0.114.0", false},    // just above TEST-NET-3
+		{"192.0.3.1", false},   // just above TEST-NET-1
+		{"203.0.114.0", false}, // just above TEST-NET-3
 	}
 
 	for _, tt := range tests {
