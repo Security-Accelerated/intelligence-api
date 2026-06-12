@@ -135,6 +135,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/docs/theme.js", h.DocsThemeJS)
 	router.GET("/docs/docs.js", h.DocsJS)
 	router.GET("/docs/checkout_success.js", h.CheckoutSuccessJS)
+	router.GET("/docs/openapi.yaml", h.OpenAPISpec)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
 	v1.GET("/health", h.Health)

@@ -49,10 +49,11 @@ type poolStats struct {
 }
 
 type cacheStats struct {
-	Addr          string   `json:"addr"`
-	DB            int      `json:"db"`
-	CacheTTL      string   `json:"cache_ttl"`
-	AuthCacheTTL  string   `json:"auth_cache_ttl"`
+	Addr             string   `json:"addr"`
+	DB               int      `json:"db"`
+	CacheTTL         string   `json:"cache_ttl"`
+	NegativeCacheTTL string   `json:"negative_cache_ttl"`
+	AuthCacheTTL     string   `json:"auth_cache_ttl"`
 	PingMs        *float64 `json:"ping_ms,omitempty"`
 	KeyCount      *int64   `json:"key_count,omitempty"`
 	MemoryUsed    string   `json:"memory_used,omitempty"`
@@ -121,10 +122,11 @@ func (h *Handler) Info(c *gin.Context) {
 
 	// Cache — static config + live data
 	cs := cacheStats{
-		Addr:         s.Cache.Addr,
-		DB:           s.Cache.DB,
-		CacheTTL:     s.Cache.CacheTTL,
-		AuthCacheTTL: s.Cache.AuthCacheTTL,
+		Addr:             s.Cache.Addr,
+		DB:               s.Cache.DB,
+		CacheTTL:         s.Cache.CacheTTL,
+		NegativeCacheTTL: s.Cache.NegativeCacheTTL,
+		AuthCacheTTL:     s.Cache.AuthCacheTTL,
 	}
 
 	if h.redisCache != nil {
