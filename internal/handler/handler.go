@@ -132,6 +132,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/docs/styles.css", h.DocsCSS)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
+	v1.GET("/health", h.Health)
 
 	billingGroup := router.Group("/billing")
 	billingGroup.POST("/webhook", h.StripeWebhook)
