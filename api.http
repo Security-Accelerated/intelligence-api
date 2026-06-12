@@ -18,8 +18,14 @@ GET {{host}}/docs/domain
 ### IP Intelligence docs (no auth required)
 GET {{host}}/docs/ip
 
+### OpenAPI specification (no auth required)
+GET {{host}}/docs/openapi.yaml
+
 ### Health check (no auth required)
 GET {{host}}/v1/hello
+
+### Dependency health (no auth required)
+GET {{host}}/v1/health
 
 ### App info (admin only)
 GET {{host}}/v1/info
@@ -237,6 +243,26 @@ X-API-Key: {{lookupKey}}
   "fingerprint": true
 }
 
+### Domain lookup with DNS security (free key - all plans)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{freeKey}}
+
+{
+  "domains": ["example.com"],
+  "dns_security": true
+}
+
+### Domain lookup with DNS security (admin key)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "dns_security": true
+}
+
 ### Invalidate auth cache (admin only)
 POST {{host}}/v1/admin/auth/cache/invalidate
 X-API-Key: {{adminKey}}
@@ -310,6 +336,21 @@ X-API-Key: {{adminKey}}
 {
   "ips": ["8.8.8.8", "1.1.1.1"]
 }
+
+### My usage (any plan)
+GET {{host}}/v1/usage
+X-API-Key: {{lookupKey}}
+
+### My usage with custom window (any plan)
+GET {{host}}/v1/usage?days=7
+X-API-Key: {{lookupKey}}
+
+### My usage - should return 401 (no key)
+GET {{host}}/v1/usage
+
+### Rotate API key (any plan) - returns a NEW key; old keys expire after the grace window
+POST {{host}}/v1/keys/rotate
+X-API-Key: {{lookupKey}}
 
 ### Usage statistics (admin only)
 GET {{host}}/v1/admin/usage
