@@ -177,6 +177,12 @@ func Run(logger *zap.Logger, version string) error {
 	if v := cfg.GetInt64("subdomain.max_response_bytes"); v > 0 {
 		domain.MaxResponseBody = v
 	}
+	if v := cfg.GetDuration("subdomain.http_timeout"); v > 0 {
+		domain.SubdomainHTTPTimeout = v
+	}
+	if v := cfg.GetDuration("ct_logs.http_timeout"); v > 0 {
+		domain.CTLogsHTTPTimeout = v
+	}
 
 	domainService := service.NewDomainService(redisCache, cacheTTL, negativeCacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("screenshot.max_concurrent"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
