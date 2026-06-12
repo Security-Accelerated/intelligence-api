@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Domain and IP intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for domains. IP lookups provide GeoIP, ASN, reverse DNS, abuse contact (RDAP), and threat intelligence. Results are cached in Redis. Auth is API-key-based with PostgreSQL storage.
+Domain and IP intelligence REST API built in Go with Gin. Performs concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security (SPF/DKIM/DMARC/MTA-STS/TLS-RPT/BIMI), subdomain, certificate transparency, BGP/ASN, technology fingerprinting, threat intelligence, and DNS security (DNSSEC/CAA) lookups for domains, plus a computed aggregate risk score on every domain response. IP lookups provide GeoIP, ASN, reverse DNS, abuse contact (RDAP), and threat intelligence. Results are cached in Redis (with singleflight coalescing and negative caching). Auth is API-key-based with PostgreSQL storage; customers can self-rotate keys and query their own usage. OpenAPI 3.1 spec served at `/docs/openapi.yaml`.
 
 **Module:** `github.com/security-accelerated/intelligence-api`
 
@@ -36,7 +36,22 @@ changelog.yaml                → Symlink to internal/handler/changelog.yaml (ed
 Services use function fields (`lookupWhois`, `lookupDNS`, etc.) instead of interfaces for each lookup. The constructor wires in real implementations from the `domain` package. Tests swap them via `SetLookups()` and per-feature setters (`SetEmailSecurityLookup`, `SetSubdomainLookup`). This avoids interface pollution while keeping tests fully deterministic.
 
 ### Concurrent fan-out with shared response
-`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains, ct_logs, bgp, threat_intel) only spawn when requested. Fingerprint runs as post-processing after `wg.Wait()` using already-fetched headers data (zero extra network calls). A 30-second context timeout covers the entire operation.
+`service.Lookup()` spawns goroutines for each lookup type, protected by `sync.Mutex` on the shared `DomainResponse`. Four base lookups always run; optional lookups (screenshot, reputation, email_security, subdomains, ct_logs, bgp, threat_intel, dns_security) only spawn when requested. Fingerprint and the aggregate risk score run as post-processing after `wg.Wait()` using already-fetched data (zero extra network calls). A 30-second context timeout covers the entire operation.
+
+### Singleflight coalescing + negative caching
+Concurrent lookups for the same cache key coalesce into one fan-out via `golang.org/x/sync/singleflight` (in both `DomainService` and `IPService`); coalesced callers get deep copies via `copyViaJSON` so they never share mutable state. The executed lookup runs under `context.WithoutCancel` so one disconnecting client can't poison the shared result. Responses containing lookup errors — including fully-failed lookups — are cached with a shorter TTL (`redis.negative_cache_ttl`, default 5m) instead of the full `redis.cache_ttl` (60m), so transient upstream failures age out quickly and dead domains don't trigger a fresh fan-out per request.
+
+### Aggregate risk score
+`internal/domain/risk.go` computes a weighted 0–100 score (`ComputeRiskScore`) from whichever lookup results are present: threat_intel (0.35), reputation (0.25), ssl, security_headers, email_security, domain_age (0.10 each). Weights renormalize over present components. Risk levels use the same thresholds as `ScoreThreatIntel`. Runs as post-processing in `service.Lookup()` — zero extra network calls. Returned as `risk` on every domain response.
+
+### DNS security lookup
+`internal/domain/dnssec.go` uses raw DNS via `miekg/dns` (net.Resolver can't query DS/DNSKEY/CAA) against `domain.ActiveDNSServers()` (set by `InitResolver`). Reports DNSSEC deployment (DS at parent + DNSKEY at zone + algorithms) and CAA records. Truncated UDP responses retry over TCP. Opt-in via `dns_security` flag, all plans. Tests run a local `miekg/dns` server.
+
+### API key rotation
+`POST /v1/keys/rotate` (any authenticated customer) issues a new key and grace-expires all previous keys (`auth.rotation_grace`, default 24h). Migration 012 dropped the one-key-per-customer constraint and added `api_keys.expires_at`; the auth lookup filters expired keys and `DeactivateStaleKeys` only deactivates customers with no fresh live key. `billing.KeyRotationService` depends only on the DB (works without Stripe) and invalidates the auth cache after rotating.
+
+### Health endpoint
+`GET /v1/health` (unauthenticated, internal/ops — never in consumer docs, same policy as `/v1/hello`) pings Postgres and Redis with a 2s timeout and reports GeoIP database state. Postgres/Redis down → 503 `degraded`; missing GeoIP does not degrade (absent until bootstrapped). The uptime workflow hits this endpoint.
 
 ### Partial failure tolerance
 Each lookup goroutine catches its own errors. Failures are appended to `resp.Errors` with sanitized messages — the rest of the response still returns. Full errors are logged server-side; users see only safe summaries via `sanitizeErr()`.
@@ -63,7 +78,7 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 `sanitizeErr()` strips internal error details before including them in API responses. `safenet.BlockedError` gets a specific user-friendly message. Other errors are truncated to the final segment after `: `. Full context is always logged server-side.
 
 ### Stripe billing
-`internal/billing/` follows the notifications pattern (interface + real impl + noop fallback). `Service` interface defines `HandleWebhook` and `GetProvisionedKey`. `StripeService` verifies webhook signatures, handles checkout/subscription/payment events, and provisions API keys. `NoopService` returns "billing not configured" errors. `Repository` wraps billing-specific DB operations (customer+key creation, provisioned key storage, plan updates, stale key cleanup). Key provisioning: on checkout, generates a random API key, stores hash in `api_keys`, stores raw key in `provisioned_keys` (1hr expiry, one-time retrieval). `keygen.go` generates 64-char hex keys via `crypto/rand`. Auth cache is invalidated after any plan change. `last_used_at` on `api_keys` is updated on auth cache-miss lookups (fire-and-forget goroutine). `StripeService` accepts a `notifications.Notifier` and sends async Pushover notifications on all billing events (new signup, plan change, cancellation, payment failure). Customer Portal link is configurable via `STRIPE_PORTAL_LINK` and shown on docs/success pages. Config: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICES_BASIC_MONTHLY`, `STRIPE_PRICES_PRO_MONTHLY`, `STRIPE_PAYMENT_LINK_BASIC`, `STRIPE_PAYMENT_LINK_PRO`, `STRIPE_PORTAL_LINK`, `BILLING_STALE_KEY_DAYS`.
+`internal/billing/` follows the notifications pattern (interface + real impl + noop fallback). `Service` interface defines `HandleWebhook` and `GetProvisionedKey`. `StripeService` verifies webhook signatures, handles checkout/subscription/payment events, and provisions API keys. `NoopService` returns "billing not configured" errors. `Repository` wraps billing-specific DB operations (customer+key creation, provisioned key storage, plan updates, stale key cleanup). Key provisioning: on checkout, generates a random API key, stores hash in `api_keys`, stores raw key in `provisioned_keys` (1hr expiry, one-time retrieval). `keygen.go` generates 64-char hex keys via `crypto/rand`. Auth cache is invalidated after any plan change. `last_used_at` on `api_keys` is updated on auth cache-miss lookups (batched via `auth.LastUsedBatcher`). `StripeService` accepts a `notifications.Notifier` and sends async Pushover notifications on all billing events (new signup, plan change, cancellation, payment failure). Customer Portal link is configurable via `STRIPE_PORTAL_LINK` and shown on docs/success pages. Config: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICES_BASIC_MONTHLY`, `STRIPE_PRICES_PRO_MONTHLY`, `STRIPE_PAYMENT_LINK_BASIC`, `STRIPE_PAYMENT_LINK_PRO`, `STRIPE_PORTAL_LINK`, `BILLING_STALE_KEY_DAYS`.
 
 ### Usage tracking
 `internal/usage/` follows the notifications/billing pattern (interface + real impl + noop). `Recorder` interface accepts `UsageEntry` values; `Queryer` interface returns aggregated `UsageSummary`. `UsageLogger` buffers entries on a channel and batch-inserts to PostgreSQL's `request_log` table on a timer (default 5s) or when the batch hits 50 entries. Channel full = silent drop with warning log. `NoopRecorder` discards entries when usage tracking isn't needed (tests). `QueryService` runs aggregation SQL for the admin endpoint. Middleware `UsageLog()` collects request metadata after `c.Next()` and calls `recorder.Record()`. Admin endpoint: `GET /v1/admin/usage?days=30&customer_id=X&api_key_id=Y`. Config: `USAGE_BUFFER_SIZE`, `USAGE_FLUSH_INTERVAL`.
@@ -83,7 +98,7 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 ## Middleware Chain (order matters)
 
 1. `gin.Recovery()` — catches panics, returns 500
-2. `SecurityHeaders()` — adds defensive headers (X-Content-Type-Options, X-Frame-Options, Cache-Control: no-store)
+2. `SecurityHeaders()` — adds defensive headers (X-Content-Type-Options, X-Frame-Options, Cache-Control: no-store, Strict-Transport-Security, Referrer-Policy, and a strict `default-src 'none'` Content-Security-Policy for the JSON API; HTML pages override the CSP with `htmlPageCSP` in the handler package — no inline JS, page scripts are served externally at `/docs/*.js`)
 3. `BodyLimit(1MB)` — rejects oversized request bodies
 4. `ClientRequestID()` — validates/echoes X-Client-Request-ID header, sets context key
 5. `RequestLogger()` — structured request logging with context keys (runs after `c.Next()` returns)
@@ -134,7 +149,7 @@ Sample config: `internal/config/sample-config.yml`
 
 PostgreSQL with migrations in `migrations/`. Docker initdb only runs scripts on first volume creation — existing volumes require manual migration. For production (Neon), apply new migrations via `psql "$NEON_CONNECTION_STRING" -c "..."` using the connection string from `.env`.
 
-Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout), `request_log` (usage tracking — per-request metadata for admin analytics, includes `domain_count` and `ip_count` for independent service analytics).
+Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, last_used_at, expires_at — multiple keys per customer allowed during rotation grace windows), `fingerprint_rules` (append-only JSONB rules), `provisioned_keys` (one-time key retrieval after Stripe checkout), `request_log` (usage tracking — per-request metadata for admin and customer analytics, includes `domain_count`, `ip_count`, and per-feature flags including `dns_security`).
 
 ## Infrastructure
 

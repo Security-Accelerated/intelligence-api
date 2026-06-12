@@ -16,7 +16,22 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
+
+// copyViaJSON deep-copies a response struct so coalesced singleflight callers
+// never share (and mutate) the same value. Returns nil if the round-trip fails.
+func copyViaJSON[T any](v *T) *T {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	out := new(T)
+	if err := json.Unmarshal(data, out); err != nil {
+		return nil
+	}
+	return out
+}
 
 // sanitizeErr replaces internal error messages with user-friendly descriptions.
 // Full details are logged server-side; only safe summaries reach the API response.
@@ -80,6 +95,8 @@ func recordIfUnexpected(alerter notifications.ErrorRecorder, lookupName string, 
 type DomainService struct {
 	cache               cache.Cache
 	cacheTTL            time.Duration
+	negativeCacheTTL    time.Duration
+	sf                  singleflight.Group
 	lookupTimeout       time.Duration
 	screenshotTimeout   time.Duration
 	subdomainMaxResults int
@@ -98,9 +115,10 @@ type DomainService struct {
 	lookupCTLogs        func(ctx context.Context, d string, maxEntries int) (*domain.CTLogsInfo, error)
 	lookupBGP           func(ctx context.Context, d string) (*domain.BGPInfo, error)
 	lookupThreatIntel   func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError)
+	lookupDNSSecurity   func(ctx context.Context, d string) (*domain.DNSSecurityInfo, error)
 }
 
-func NewDomainService(c cache.Cache, cacheTTL, lookupTimeout, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
+func NewDomainService(c cache.Cache, cacheTTL, negativeCacheTTL, lookupTimeout, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -110,12 +128,16 @@ func NewDomainService(c cache.Cache, cacheTTL, lookupTimeout, screenshotTimeout 
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
 	}
+	if negativeCacheTTL <= 0 {
+		negativeCacheTTL = cacheTTL
+	}
 	if alerter == nil {
 		alerter = &notifications.NoopRecorder{}
 	}
 	return &DomainService{
 		cache:               c,
 		cacheTTL:            cacheTTL,
+		negativeCacheTTL:    negativeCacheTTL,
 		lookupTimeout:       lookupTimeout,
 		screenshotTimeout:   screenshotTimeout,
 		subdomainMaxResults: subdomainMaxResults,
@@ -137,6 +159,7 @@ func NewDomainService(c cache.Cache, cacheTTL, lookupTimeout, screenshotTimeout 
 		lookupThreatIntel: func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError) {
 			return domain.LookupThreatIntel(ctx, d, tiProviders)
 		},
+		lookupDNSSecurity: domain.LookupDNSSecurity,
 	}
 }
 
@@ -191,6 +214,13 @@ func (s *DomainService) SetThreatIntelLookup(
 	s.lookupThreatIntel = fn
 }
 
+// SetDNSSecurityLookup replaces the DNS security lookup function (for testing).
+func (s *DomainService) SetDNSSecurityLookup(
+	fn func(context.Context, string) (*domain.DNSSecurityInfo, error),
+) {
+	s.lookupDNSSecurity = fn
+}
+
 // SetFingerprintEngine replaces the fingerprint engine (for testing).
 func (s *DomainService) SetFingerprintEngine(engine *domain.FingerprintEngine) {
 	s.fingerprintEngine = engine
@@ -203,6 +233,9 @@ func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	}
 	if opts.CTLogs {
 		suffixes = append(suffixes, "ct_logs")
+	}
+	if opts.DNSSecurity {
+		suffixes = append(suffixes, "dns_security")
 	}
 	if opts.EmailSecurity {
 		suffixes = append(suffixes, "email_security")
@@ -229,9 +262,33 @@ func buildCacheKey(domainName string, opts domain.LookupOptions) string {
 	return domainName + ":" + strings.Join(suffixes, "+")
 }
 
+// domainLookupResult carries a completed lookup through singleflight to all
+// coalesced callers.
+type domainLookupResult struct {
+	resp     *domain.DomainResponse
+	cacheHit bool
+}
+
 func (s *DomainService) Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool) {
 	cacheKey := buildCacheKey(domainName, opts)
 
+	// Coalesce concurrent lookups for the same cache key — only one fan-out
+	// runs; the rest wait for its result. The executed lookup is detached from
+	// the triggering caller's cancellation so one disconnecting client can't
+	// poison the result shared with the others.
+	v, _, shared := s.sf.Do(cacheKey, func() (any, error) {
+		return s.doLookup(context.WithoutCancel(ctx), domainName, cacheKey, opts), nil
+	})
+	res := v.(*domainLookupResult)
+	if shared {
+		if copied := copyViaJSON(res.resp); copied != nil {
+			return copied, res.cacheHit
+		}
+	}
+	return res.resp, res.cacheHit
+}
+
+func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey string, opts domain.LookupOptions) *domainLookupResult {
 	if data, err := s.cache.Get(ctx, cacheKey); err != nil {
 		logging.Logger().Warn("cache get failed", zap.String("domain", domainName), zap.Error(err))
 	} else if data != nil {
@@ -239,16 +296,12 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		if err := json.Unmarshal(data, &cached); err != nil {
 			logging.Logger().Warn("cache unmarshal failed", zap.String("domain", domainName), zap.Error(err))
 		} else {
-			return &cached, true
+			return &domainLookupResult{resp: &cached, cacheHit: true}
 		}
 	}
 
-	// Respect any tighter deadline from the parent (e.g. HTTP server write timeout).
-	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > s.lookupTimeout {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.lookupTimeout)
-		defer cancel()
-	}
+	ctx, cancel := context.WithTimeout(ctx, s.lookupTimeout)
+	defer cancel()
 
 	resp := &domain.DomainResponse{
 		Domain: domainName,
@@ -428,6 +481,24 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		})
 	}
 
+	if opts.DNSSecurity {
+		wg.Go(func() {
+			result, err := s.lookupDNSSecurity(ctx, domainName)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				logger.Warn("lookup failed", zap.String("lookup", "dns_security"), zap.String("domain", domainName), zap.Error(err))
+				resp.Errors = append(resp.Errors, domain.LookupError{
+					Lookup:  "dns_security",
+					Message: sanitizeErr(err),
+				})
+				recordIfUnexpected(s.alerter, "dns_security", err)
+				return
+			}
+			resp.DNSSecurity = result
+		})
+	}
+
 	if opts.ThreatIntel {
 		wg.Go(func() {
 			result, errs := s.lookupThreatIntel(ctx, domainName)
@@ -448,14 +519,25 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		resp.Fingerprint = s.fingerprintEngine.Match(resp.Headers)
 	}
 
-	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil || resp.ThreatIntel != nil
-	if hasData {
+	// Aggregate risk score is post-processing over already-fetched data —
+	// zero extra network calls, computed from whichever lookups are present.
+	resp.Risk = domain.ComputeRiskScore(resp, time.Now())
+
+	hasData := resp.Whois != nil || resp.DNS != nil || resp.SSL != nil || resp.Headers != nil || resp.Screenshot != nil || resp.Reputation != nil || resp.EmailSecurity != nil || resp.Subdomains != nil || resp.CTLogs != nil || resp.BGP != nil || resp.Fingerprint != nil || resp.ThreatIntel != nil || resp.DNSSecurity != nil
+	// Responses with failures get a shorter TTL so transient upstream errors
+	// aren't served from cache for the full window — but they ARE cached, so a
+	// nonexistent domain doesn't trigger a fresh fan-out on every request.
+	ttl := s.cacheTTL
+	if len(resp.Errors) > 0 {
+		ttl = s.negativeCacheTTL
+	}
+	if hasData || len(resp.Errors) > 0 {
 		if data, err := json.Marshal(resp); err != nil {
 			logging.Logger().Warn("cache marshal failed", zap.String("domain", domainName), zap.Error(err))
-		} else if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL); err != nil {
+		} else if err := s.cache.Set(ctx, cacheKey, data, ttl); err != nil {
 			logging.Logger().Warn("cache set failed", zap.String("domain", domainName), zap.Error(err))
 		}
 	}
 
-	return resp, false
+	return &domainLookupResult{resp: resp}
 }

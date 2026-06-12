@@ -105,7 +105,7 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 	defer cancel()
 
 	// Build a multi-row INSERT for efficiency.
-	const cols = 19
+	const cols = 20
 	valueStrings := make([]string, 0, len(entries))
 	args := make([]any, 0, len(entries)*cols)
 
@@ -113,15 +113,15 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 	for i, e := range entries {
 		base := i * cols
 		valueStrings = append(valueStrings, fmt.Sprintf(
-			"($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9,
-			base+10, base+11, base+12, base+13, base+14, base+15, base+16, base+17, base+18, base+19,
+			"($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10,
+			base+11, base+12, base+13, base+14, base+15, base+16, base+17, base+18, base+19, base+20,
 		))
 		args = append(args,
 			nilIfZero(e.CustomerID), nilIfZero(e.APIKeyID), nilIfEmpty(e.Plan),
 			e.Method, e.Path, e.StatusCode, e.LatencyMs, e.DomainCount, e.IPCount,
 			e.CacheHit, e.Screenshot, e.Reputation, e.EmailSecurity,
-			e.Subdomains, e.CTLogs, e.BGP, e.Fingerprint, e.ThreatIntel,
+			e.Subdomains, e.CTLogs, e.BGP, e.Fingerprint, e.ThreatIntel, e.DNSSecurity,
 			now,
 		)
 	}
@@ -129,7 +129,7 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 	query := fmt.Sprintf(`INSERT INTO request_log
 		(customer_id, api_key_id, plan, method, path, status_code, latency_ms,
 		 domain_count, ip_count, cache_hit, screenshot, reputation, email_security,
-		 subdomains, ct_logs, bgp, fingerprint, threat_intel, created_at)
+		 subdomains, ct_logs, bgp, fingerprint, threat_intel, dns_security, created_at)
 		VALUES %s`, strings.Join(valueStrings, ","))
 
 	if _, err := ul.db.ExecContext(ctx, query, args...); err != nil {

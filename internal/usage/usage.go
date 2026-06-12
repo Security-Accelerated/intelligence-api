@@ -22,6 +22,7 @@ type UsageEntry struct {
 	BGP           bool
 	Fingerprint   bool
 	ThreatIntel   bool
+	DNSSecurity   bool
 }
 
 // Recorder accepts usage entries for persistent storage.

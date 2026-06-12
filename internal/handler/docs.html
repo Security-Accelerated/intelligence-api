@@ -12,24 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/docs/styles.css">
-<script>
-  (function() {
-    var storageKey = "sa-docs-theme";
-    var root = document.documentElement;
-    var theme = null;
-
-    try {
-      theme = localStorage.getItem(storageKey);
-    } catch (err) {}
-
-    if (theme !== "light" && theme !== "dark") {
-      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-
-    root.setAttribute("data-theme", theme);
-    root.style.colorScheme = theme;
-  })();
-</script>
+<script src="/docs/theme.js"></script>
 <style>
   /* Overview layout overrides */
   .topbar { position: sticky; left: auto; right: auto; z-index: 20; }
@@ -329,7 +312,7 @@
   <section class="services">
     <article class="service-card">
       <h3>Domain Intelligence</h3>
-      <p>WHOIS, DNS, SSL, headers, screenshots, reputation, email security, subdomains, CT logs, BGP and ASN, fingerprinting, and threat intelligence in one request.</p>
+      <p>WHOIS, DNS, SSL, headers, screenshots, reputation, email security, subdomains, CT logs, BGP and ASN, fingerprinting, threat intelligence, and DNS security (DNSSEC/CAA) in one request &mdash; with an aggregate risk score in every response.</p>
       <div class="service-meta"><span class="method-tag">POST</span><span class="endpoint-path">/v1/domain/lookup</span></div>
       <a href="/docs/domain" class="service-link">Open endpoint reference</a>
     </article>
@@ -368,7 +351,9 @@
         <tr><td>Domains per request</td><td>1</td><td>5</td><td>20</td></tr>
         <tr><td>IPs per request</td><td>1</td><td>5</td><td>20</td></tr>
         <tr><td>Core lookups (WHOIS, DNS, SSL, headers, GeoIP, ASN, RDNS)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-        <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, abuse contact</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, DNS security, abuse contact</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Aggregate risk score (computed on every domain lookup)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Usage statistics + self-service key rotation</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
         <tr><td>Screenshot, reputation, threat intelligence</td><td>-</td><td>-</td><td>Yes</td></tr>
       </tbody>
     </table>
@@ -452,6 +437,20 @@
     <p>Pass an optional <code>X-Client-Request-ID</code> header for end-to-end tracing. The API echoes it back in response headers and includes it in server-side logs.</p>
   </section>
 
+  <section class="section-card">
+    <p class="section-label">Self-Service</p>
+    <h2>Account &amp; Keys</h2>
+    <p>Every plan can inspect its own usage and rotate its API key without contacting support.</p>
+    <table>
+      <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method-tag">GET</span> <span class="endpoint-path">/v1/usage</span></td><td>Your aggregated usage for the last 30 days (override with <code>?days=1..365</code>): request counts, cache hit rate, latency, status codes, and feature usage.</td></tr>
+        <tr><td><span class="method-tag">POST</span> <span class="endpoint-path">/v1/keys/rotate</span></td><td>Issues a fresh API key, returned exactly once. Previous keys keep working for a 24-hour grace window so deployed clients can be switched over without downtime.</td></tr>
+      </tbody>
+    </table>
+    <div class="note">The rotated key cannot be retrieved again &mdash; store it immediately. The response includes <code>old_keys_expire_at</code> so you know exactly when previous keys stop working.</div>
+  </section>
+
   {{if .Changelog}}
   <section class="section-card">
     <p class="section-label">Release Notes</p>
@@ -470,63 +469,13 @@
   <div class="docs-footer-shell">
     <div class="docs-footer-panel">
       <p class="docs-footer-copy">&copy; 2026 Security Accelerated</p>
+      <a href="/docs/openapi.yaml" class="docs-footer-link">OpenAPI spec</a>
       <a href="https://x.com/SecAccelerated" class="docs-footer-link docs-footer-link-icon" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
       <a href="mailto:support@securityaccelerated.com" class="docs-footer-link docs-footer-support">support@securityaccelerated.com</a>
     </div>
   </div>
 </footer>
 
-<script>
-  (function() {
-    var storageKey = "sa-docs-theme";
-    var root = document.documentElement;
-    var toggle = document.querySelector("[data-theme-toggle]");
-    if (!toggle) return;
-
-    var label = toggle.querySelector(".theme-toggle-label");
-
-    function setTheme(theme) {
-      var nextTheme = theme === "dark" ? "light" : "dark";
-      root.setAttribute("data-theme", theme);
-      root.style.colorScheme = theme;
-      toggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
-      toggle.setAttribute("aria-label", "Theme: " + theme + " mode. Activate to switch to " + nextTheme + " mode.");
-      toggle.setAttribute("title", "Switch to " + nextTheme + " mode");
-      label.textContent = theme === "dark" ? "Dark mode" : "Light mode";
-    }
-
-    function storedTheme() {
-      try {
-        return localStorage.getItem(storageKey);
-      } catch (err) {
-        return null;
-      }
-    }
-
-    setTheme(root.getAttribute("data-theme") || "light");
-
-    toggle.addEventListener("click", function() {
-      var nextTheme = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      setTheme(nextTheme);
-      try {
-        localStorage.setItem(storageKey, nextTheme);
-      } catch (err) {}
-    });
-
-    if (!window.matchMedia) return;
-    var media = window.matchMedia("(prefers-color-scheme: dark)");
-    var syncTheme = function(event) {
-      var savedTheme = storedTheme();
-      if (savedTheme === "light" || savedTheme === "dark") return;
-      setTheme(event.matches ? "dark" : "light");
-    };
-
-    if (media.addEventListener) {
-      media.addEventListener("change", syncTheme);
-    } else if (media.addListener) {
-      media.addListener(syncTheme);
-    }
-  })();
-</script>
+<script src="/docs/docs.js" defer></script>
 </body>
 </html>

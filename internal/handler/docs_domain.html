@@ -12,24 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/docs/styles.css">
-<script>
-  (function() {
-    var storageKey = "sa-docs-theme";
-    var root = document.documentElement;
-    var theme = null;
-
-    try {
-      theme = localStorage.getItem(storageKey);
-    } catch (err) {}
-
-    if (theme !== "light" && theme !== "dark") {
-      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    }
-
-    root.setAttribute("data-theme", theme);
-    root.style.colorScheme = theme;
-  })();
-</script>
+<script src="/docs/theme.js"></script>
 </head>
 <body>
 
@@ -55,9 +38,9 @@
   </div>
 </header>
 
-<button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle navigation">&#9776;</button>
+<button class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle navigation">&#9776;</button>
 
-<div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+<div class="sidebar-backdrop" data-sidebar-close></div>
 
 <nav class="sidebar">
   <div class="sidebar-brand">
@@ -95,6 +78,8 @@
     <a href="#bgp" class="indent">bgp</a>
     <a href="#fingerprint" class="indent">fingerprint</a>
     <a href="#threat-intel" class="indent">threat_intel</a>
+    <a href="#dns-security" class="indent">dns_security</a>
+    <a href="#risk" class="indent">risk</a>
     <a href="#errors-field" class="indent">errors</a>
   </div>
 
@@ -115,7 +100,7 @@
   <section class="hero" id="top">
     <p class="eyebrow">Documentation</p>
     <h1>Domain Intelligence</h1>
-    <p>Concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for any domain.</p>
+    <p>Concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, threat intelligence, and DNS security lookups for any domain &mdash; with an aggregate risk score in every response.</p>
     <div class="hero-actions">
       <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span class="version-pill">{{.Version}}</span>{{end}}</div>
       <a href="mailto:support@securityaccelerated.com" class="support-link">support@securityaccelerated.com</a>
@@ -149,6 +134,8 @@
       <tr><td><strong>CT Logs</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
       <tr><td><strong>BGP / ASN</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
       <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>DNS Security (DNSSEC / CAA)</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+      <tr><td><strong>Aggregate Risk Score</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
       <tr><td><strong>Screenshot</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
       <tr><td><strong>Reputation</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
       <tr><td><strong>Threat Intelligence</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
@@ -272,6 +259,13 @@
         <td><code>false</code></td>
         <td>Query threat intelligence feeds (VirusTotal, URLhaus, AlienVault OTX). <span class="tag tag-pro">Pro</span></td>
       </tr>
+      <tr>
+        <td><code>dns_security</code></td>
+        <td><code>bool</code></td>
+        <td><span class="tag tag-optional">Optional</span></td>
+        <td><code>false</code></td>
+        <td>Check DNSSEC deployment (DS/DNSKEY records) and CAA records.</td>
+      </tr>
     </tbody>
   </table>
 
@@ -291,9 +285,9 @@
 
   <h3 id="example-request">Example</h3>
   <div class="lang-tabs">
-    <button class="lang-tab active" onclick="switchTab(event, 'curl')">curl</button>
-    <button class="lang-tab" onclick="switchTab(event, 'python')">Python</button>
-    <button class="lang-tab" onclick="switchTab(event, 'go')">Go</button>
+    <button class="lang-tab active" data-lang="curl">curl</button>
+    <button class="lang-tab" data-lang="python">Python</button>
+    <button class="lang-tab" data-lang="go">Go</button>
   </div>
   <div id="tab-curl" class="lang-panel active">
   <pre><code><span class="flag">curl</span> <span class="flag">-X</span> POST <span class="url">https://api.securityaccelerated.com/v1/domain/lookup</span> \
@@ -385,10 +379,11 @@ resp = requests.post(
     <span class="str">"email_security"</span>: { ... },
     <span class="str">"subdomains"</span>: { ... },
     <span class="str">"threat_intel"</span>: { ... },
+    <span class="str">"risk"</span>: { ... },
     <span class="str">"errors"</span>: []
   }
 ]</code></pre>
-  <p>Optional fields (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>) are only present in the response when requested.</p>
+  <p>Optional fields (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>, <code>dns_security</code>) are only present in the response when requested. The <code>risk</code> object is computed automatically for every lookup &mdash; no request flag needed.</p>
 
   <h3 id="invalid-domains">Invalid Domains</h3>
   <p>Invalid domains in a multi-domain request do not fail the entire request. They are included in the response with a validation error while valid domains return normally:</p>
@@ -625,6 +620,41 @@ resp = requests.post(
       <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DKIM TXT record (only when found)</td></tr>
     </tbody>
   </table>
+
+  <h4><code>mta_sts</code> -- MTA Strict Transport Security</h4>
+  <p>Only present when a record exists at <code>_mta-sts.&lt;domain&gt;</code>. When the TXT record is found, the policy file at <code>https://mta-sts.&lt;domain&gt;/.well-known/mta-sts.txt</code> is fetched for the mode and MX patterns.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full MTA-STS TXT record</td></tr>
+      <tr><td><code>id</code></td><td><code>string</code></td><td>Policy version identifier (<code>id=</code> tag)</td></tr>
+      <tr><td><code>policy_fetched</code></td><td><code>bool</code></td><td>Whether the well-known policy file was retrieved</td></tr>
+      <tr><td><code>mode</code></td><td><code>string</code></td><td><code>enforce</code>, <code>testing</code>, or <code>none</code> (from the policy file)</td></tr>
+      <tr><td><code>max_age</code></td><td><code>int</code></td><td>Policy cache lifetime in seconds</td></tr>
+      <tr><td><code>mx_patterns</code></td><td><code>string[]</code></td><td>MX host patterns the policy allows</td></tr>
+    </tbody>
+  </table>
+
+  <h4><code>tls_rpt</code> -- SMTP TLS Reporting</h4>
+  <p>Only present when a record exists at <code>_smtp._tls.&lt;domain&gt;</code>.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full TLS-RPT TXT record</td></tr>
+      <tr><td><code>rua</code></td><td><code>string</code></td><td>Report destination (e.g., <code>mailto:tlsrpt@example.com</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h4><code>bimi</code> -- Brand Indicators for Message Identification</h4>
+  <p>Only present when a record exists at <code>default._bimi.&lt;domain&gt;</code>.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full BIMI TXT record</td></tr>
+      <tr><td><code>location</code></td><td><code>string</code></td><td>Brand logo SVG URL (<code>l=</code> tag)</td></tr>
+      <tr><td><code>authority</code></td><td><code>string</code></td><td>Verified Mark Certificate URL (<code>a=</code> tag)</td></tr>
+    </tbody>
+  </table>
   <pre><code>{
   <span class="str">"spf"</span>: {
     <span class="str">"raw"</span>: <span class="str">"v=spf1 include:_spf.google.com -all"</span>,
@@ -641,9 +671,19 @@ resp = requests.post(
   <span class="str">"dkim"</span>: [
     { <span class="str">"selector"</span>: <span class="str">"google"</span>, <span class="str">"found"</span>: <span class="kw">true</span>, <span class="str">"raw"</span>: <span class="str">"v=DKIM1; k=rsa; p=MIGf..."</span> },
     { <span class="str">"selector"</span>: <span class="str">"default"</span>, <span class="str">"found"</span>: <span class="kw">false</span> }
-  ]
+  ],
+  <span class="str">"mta_sts"</span>: {
+    <span class="str">"raw"</span>: <span class="str">"v=STSv1; id=20240101T000000"</span>,
+    <span class="str">"id"</span>: <span class="str">"20240101T000000"</span>,
+    <span class="str">"policy_fetched"</span>: <span class="kw">true</span>,
+    <span class="str">"mode"</span>: <span class="str">"enforce"</span>,
+    <span class="str">"max_age"</span>: <span class="num">86400</span>,
+    <span class="str">"mx_patterns"</span>: [<span class="str">"*.example.com"</span>]
+  },
+  <span class="str">"tls_rpt"</span>: { <span class="str">"raw"</span>: <span class="str">"v=TLSRPTv1; rua=mailto:tlsrpt@example.com"</span>, <span class="str">"rua"</span>: <span class="str">"mailto:tlsrpt@example.com"</span> },
+  <span class="str">"bimi"</span>: { <span class="str">"raw"</span>: <span class="str">"v=BIMI1; l=https://example.com/logo.svg"</span>, <span class="str">"location"</span>: <span class="str">"https://example.com/logo.svg"</span> }
 }</code></pre>
-  <div class="note">DKIM probes 8 common selectors: <code>google</code>, <code>default</code>, <code>selector1</code>, <code>selector2</code>, <code>k1</code>, <code>s1</code>, <code>mail</code>, <code>dkim</code>.</div>
+  <div class="note">DKIM probes 8 common selectors: <code>google</code>, <code>default</code>, <code>selector1</code>, <code>selector2</code>, <code>k1</code>, <code>s1</code>, <code>mail</code>, <code>dkim</code>. The <code>mta_sts</code>, <code>tls_rpt</code>, and <code>bimi</code> objects are omitted when the corresponding DNS record does not exist.</div>
 
   <!-- subdomains -->
   <h3 id="subdomains"><code>subdomains</code> -- Subdomain Enumeration</h3>
@@ -836,6 +876,114 @@ resp = requests.post(
   <h4>Scoring</h4>
   <p>The aggregate score is a weighted average across providers: VirusTotal (50%), URLhaus (30%), AlienVault OTX (20%). Risk levels map from the aggregate score: 0 = none, 1--20 = low, 21--50 = medium, 51--80 = high, 81--100 = critical.</p>
 
+  <!-- dns_security -->
+  <h3 id="dns-security"><code>dns_security</code> -- DNSSEC &amp; CAA</h3>
+  <p>Checks DNSSEC deployment (DS records at the parent zone, DNSKEY records at the zone, signing algorithms) and CAA records via raw DNS queries. Available to all plans. Missing DNSSEC means DNS responses can be spoofed; missing CAA means any certificate authority can issue certificates for the domain.</p>
+
+  <h4><code>dnssec</code></h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>enabled</code></td><td><code>bool</code></td><td><code>true</code> when both DS (parent) and DNSKEY (zone) records exist</td></tr>
+      <tr><td><code>ds_records</code></td><td><code>int</code></td><td>Number of DS records at the parent zone</td></tr>
+      <tr><td><code>dnskey_records</code></td><td><code>int</code></td><td>Number of DNSKEY records at the zone</td></tr>
+      <tr><td><code>algorithms</code></td><td><code>string[]</code></td><td>Signing algorithms from DS records (e.g., <code>ECDSAP256SHA256</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h4><code>caa</code></h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>present</code></td><td><code>bool</code></td><td>Whether any CAA records exist</td></tr>
+      <tr><td><code>records</code></td><td><code>array</code></td><td>CAA records: <code>flag</code> (int), <code>tag</code> (<code>issue</code>, <code>issuewild</code>, or <code>iodef</code>), <code>value</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>Example</h4>
+  <pre><code><span class="flag">curl</span> <span class="flag">-X</span> POST <span class="url">https://api.securityaccelerated.com/v1/domain/lookup</span> \
+  <span class="flag">-H</span> <span class="str">'Content-Type: application/json'</span> \
+  <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span> \
+  <span class="flag">-d</span> <span class="str">'{
+    "domains": ["example.com"],
+    "dns_security": true
+  }'</span></code></pre>
+  <p>The <code>dns_security</code> object in the response:</p>
+  <pre><code>{
+  <span class="str">"dnssec"</span>: {
+    <span class="str">"enabled"</span>: <span class="kw">true</span>,
+    <span class="str">"ds_records"</span>: <span class="num">1</span>,
+    <span class="str">"dnskey_records"</span>: <span class="num">2</span>,
+    <span class="str">"algorithms"</span>: [<span class="str">"ECDSAP256SHA256"</span>]
+  },
+  <span class="str">"caa"</span>: {
+    <span class="str">"present"</span>: <span class="kw">true</span>,
+    <span class="str">"records"</span>: [
+      { <span class="str">"flag"</span>: <span class="num">0</span>, <span class="str">"tag"</span>: <span class="str">"issue"</span>, <span class="str">"value"</span>: <span class="str">"letsencrypt.org"</span> },
+      { <span class="str">"flag"</span>: <span class="num">0</span>, <span class="str">"tag"</span>: <span class="str">"iodef"</span>, <span class="str">"value"</span>: <span class="str">"mailto:security@example.com"</span> }
+    ]
+  }
+}</code></pre>
+
+  <!-- risk -->
+  <h3 id="risk"><code>risk</code> -- Aggregate Risk Score</h3>
+  <p>A computed 0--100 weighted risk score included in <strong>every</strong> domain lookup response &mdash; no request flag needed and no extra network calls made. The score is derived from whichever lookups are present in the response and renormalized over the weights of the components that have data.</p>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>score</code></td><td><code>int</code></td><td>Weighted aggregate risk score (0--100)</td></tr>
+      <tr><td><code>risk_level</code></td><td><code>string</code></td><td><code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, or <code>critical</code></td></tr>
+      <tr><td><code>components</code></td><td><code>array</code></td><td>Per-component breakdown (see below)</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Risk Component</h4>
+  <table>
+    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>component</code></td><td><code>string</code></td><td>Which signal contributed (see weights below)</td></tr>
+      <tr><td><code>score</code></td><td><code>int</code></td><td>This component's 0--100 score</td></tr>
+      <tr><td><code>weight</code></td><td><code>float</code></td><td>The component's weight in the aggregate</td></tr>
+      <tr><td><code>detail</code></td><td><code>string</code></td><td>Human-readable explanation (e.g., <code>certificate expires in 12 days</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Component Weights</h4>
+  <table>
+    <thead><tr><th>Component</th><th>Weight</th><th>Signal</th></tr></thead>
+    <tbody>
+      <tr><td><code>threat_intel</code></td><td>0.35</td><td>Aggregate threat intelligence score (when requested)</td></tr>
+      <tr><td><code>reputation</code></td><td>0.25</td><td>DNS blocklist reputation score (when requested)</td></tr>
+      <tr><td><code>ssl</code></td><td>0.10</td><td>Certificate expired or expiring soon</td></tr>
+      <tr><td><code>security_headers</code></td><td>0.10</td><td>Missing common security headers</td></tr>
+      <tr><td><code>email_security</code></td><td>0.10</td><td>Missing or weak SPF / DMARC (when requested)</td></tr>
+      <tr><td><code>domain_age</code></td><td>0.10</td><td>Recently registered domains score higher</td></tr>
+    </tbody>
+  </table>
+  <p>Components only contribute when their underlying lookup ran and returned data. A base lookup scores from SSL, security headers, and domain age alone; requesting <code>threat_intel</code> or <code>reputation</code> makes those signals dominate.</p>
+
+  <pre><code>{
+  <span class="str">"score"</span>: <span class="num">28</span>,
+  <span class="str">"risk_level"</span>: <span class="str">"medium"</span>,
+  <span class="str">"components"</span>: [
+    { <span class="str">"component"</span>: <span class="str">"ssl"</span>, <span class="str">"score"</span>: <span class="num">40</span>, <span class="str">"weight"</span>: <span class="num">0.1</span>, <span class="str">"detail"</span>: <span class="str">"certificate expires in 12 days"</span> },
+    { <span class="str">"component"</span>: <span class="str">"security_headers"</span>, <span class="str">"score"</span>: <span class="num">20</span>, <span class="str">"weight"</span>: <span class="num">0.1</span>, <span class="str">"detail"</span>: <span class="str">"missing: content-security-policy, referrer-policy"</span> },
+    { <span class="str">"component"</span>: <span class="str">"domain_age"</span>, <span class="str">"score"</span>: <span class="num">25</span>, <span class="str">"weight"</span>: <span class="num">0.1</span>, <span class="str">"detail"</span>: <span class="str">"domain registered 210 days ago"</span> }
+  ]
+}</code></pre>
+
+  <h4>Risk Levels</h4>
+  <table>
+    <thead><tr><th>Risk Level</th><th>Score Range</th></tr></thead>
+    <tbody>
+      <tr><td><span class="risk-clean">none</span></td><td>0</td></tr>
+      <tr><td><span class="risk-low">low</span></td><td>1 -- 20</td></tr>
+      <tr><td><span class="risk-medium">medium</span></td><td>21 -- 50</td></tr>
+      <tr><td><span class="risk-high">high</span></td><td>51 -- 80</td></tr>
+      <tr><td><span class="risk-high">critical</span></td><td>81 -- 100</td></tr>
+    </tbody>
+  </table>
+
   <!-- errors -->
   <h3 id="errors-field"><code>errors</code> -- Partial Failures</h3>
   <p>Individual lookups can fail without blocking the rest of the response. Each error contains:</p>
@@ -849,7 +997,7 @@ resp = requests.post(
 
   <!-- Full Response Example -->
   <h2 id="full-response-example">Full Response Example</h2>
-  <p>A complete response with all optional features enabled (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>):</p>
+  <p>A complete response with all optional features enabled (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>, <code>dns_security</code>):</p>
   <pre><code>[
   {
     <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
@@ -937,6 +1085,22 @@ resp = requests.post(
         { <span class="str">"provider"</span>: <span class="str">"alienvault_otx"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> }
       ]
     },
+    <span class="str">"dns_security"</span>: {
+      <span class="str">"dnssec"</span>: { <span class="str">"enabled"</span>: <span class="kw">true</span>, <span class="str">"ds_records"</span>: <span class="num">1</span>, <span class="str">"dnskey_records"</span>: <span class="num">2</span>, <span class="str">"algorithms"</span>: [<span class="str">"ECDSAP256SHA256"</span>] },
+      <span class="str">"caa"</span>: { <span class="str">"present"</span>: <span class="kw">true</span>, <span class="str">"records"</span>: [{ <span class="str">"flag"</span>: <span class="num">0</span>, <span class="str">"tag"</span>: <span class="str">"issue"</span>, <span class="str">"value"</span>: <span class="str">"letsencrypt.org"</span> }] }
+    },
+    <span class="str">"risk"</span>: {
+      <span class="str">"score"</span>: <span class="num">4</span>,
+      <span class="str">"risk_level"</span>: <span class="str">"low"</span>,
+      <span class="str">"components"</span>: [
+        { <span class="str">"component"</span>: <span class="str">"threat_intel"</span>, <span class="str">"score"</span>: <span class="num">0</span>, <span class="str">"weight"</span>: <span class="num">0.35</span>, <span class="str">"detail"</span>: <span class="str">"aggregate threat intelligence score across 3 providers"</span> },
+        { <span class="str">"component"</span>: <span class="str">"reputation"</span>, <span class="str">"score"</span>: <span class="num">0</span>, <span class="str">"weight"</span>: <span class="num">0.25</span>, <span class="str">"detail"</span>: <span class="str">"DNS blocklist reputation score"</span> },
+        { <span class="str">"component"</span>: <span class="str">"ssl"</span>, <span class="str">"score"</span>: <span class="num">0</span>, <span class="str">"weight"</span>: <span class="num">0.1</span>, <span class="str">"detail"</span>: <span class="str">"certificate valid"</span> },
+        { <span class="str">"component"</span>: <span class="str">"security_headers"</span>, <span class="str">"score"</span>: <span class="num">30</span>, <span class="str">"weight"</span>: <span class="num">0.1</span>, <span class="str">"detail"</span>: <span class="str">"missing: content-security-policy, x-frame-options, referrer-policy"</span> },
+        { <span class="str">"component"</span>: <span class="str">"email_security"</span>, <span class="str">"score"</span>: <span class="num">0</span>, <span class="str">"weight"</span>: <span class="num">0.1</span>, <span class="str">"detail"</span>: <span class="str">"SPF and DMARC configured"</span> },
+        { <span class="str">"component"</span>: <span class="str">"domain_age"</span>, <span class="str">"score"</span>: <span class="num">0</span>, <span class="str">"weight"</span>: <span class="num">0.1</span>, <span class="str">"detail"</span>: <span class="str">"domain registered 11254 days ago"</span> }
+      ]
+    },
     <span class="str">"errors"</span>: []
   }
 ]</code></pre>
@@ -996,120 +1160,7 @@ resp = requests.post(
 
 </main>
 
-<script>
-function switchTab(event, lang) {
-  var tabs = event.target.parentElement.querySelectorAll('.lang-tab');
-  tabs.forEach(function(t) { t.classList.remove('active'); });
-  event.target.classList.add('active');
-
-  var container = event.target.parentElement.parentElement;
-  container.querySelectorAll('.lang-panel').forEach(function(p) { p.classList.remove('active'); });
-  container.querySelector('#tab-' + lang).classList.add('active');
-}
-
-var sidebar = document.querySelector('.sidebar');
-
-function closeSidebar() {
-  sidebar.classList.remove('open');
-  document.body.classList.remove('shell-open');
-}
-
-function toggleSidebar() {
-  var isOpen = sidebar.classList.toggle('open');
-  document.body.classList.toggle('shell-open', isOpen);
-}
-
-document.querySelectorAll('.sidebar a').forEach(function(link) {
-  link.addEventListener('click', function() {
-    if (window.innerWidth <= 860) {
-      closeSidebar();
-    }
-  });
-});
-
-window.addEventListener('resize', function() {
-  if (window.innerWidth > 860) {
-    closeSidebar();
-  }
-});
-
-(function() {
-  var storageKey = "sa-docs-theme";
-  var root = document.documentElement;
-  var toggle = document.querySelector('[data-theme-toggle]');
-  if (!toggle) return;
-
-  var label = toggle.querySelector('.theme-toggle-label');
-
-  function setTheme(theme) {
-    var nextTheme = theme === 'dark' ? 'light' : 'dark';
-    root.setAttribute('data-theme', theme);
-    root.style.colorScheme = theme;
-    toggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
-    toggle.setAttribute('aria-label', 'Theme: ' + theme + ' mode. Activate to switch to ' + nextTheme + ' mode.');
-    toggle.setAttribute('title', 'Switch to ' + nextTheme + ' mode');
-    label.textContent = theme === 'dark' ? 'Dark mode' : 'Light mode';
-  }
-
-  function storedTheme() {
-    try {
-      return localStorage.getItem(storageKey);
-    } catch (err) {
-      return null;
-    }
-  }
-
-  setTheme(root.getAttribute('data-theme') || 'light');
-
-  toggle.addEventListener('click', function() {
-    var nextTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    try {
-      localStorage.setItem(storageKey, nextTheme);
-    } catch (err) {}
-  });
-
-  if (!window.matchMedia) return;
-  var media = window.matchMedia('(prefers-color-scheme: dark)');
-  var syncTheme = function(event) {
-    var savedTheme = storedTheme();
-    if (savedTheme === 'light' || savedTheme === 'dark') return;
-    setTheme(event.matches ? 'dark' : 'light');
-  };
-
-  if (media.addEventListener) {
-    media.addEventListener('change', syncTheme);
-  } else if (media.addListener) {
-    media.addListener(syncTheme);
-  }
-})();
-
-(function() {
-  var links = document.querySelectorAll('.sidebar a[href^="#"]');
-  var sections = [];
-  links.forEach(function(link) {
-    var id = link.getAttribute('href').slice(1);
-    var el = document.getElementById(id);
-    if (el) sections.push({ el: el, link: link });
-  });
-
-  function onScroll() {
-    var scrollY = window.scrollY + 140;
-    var active = null;
-    for (var i = sections.length - 1; i >= 0; i--) {
-      if (sections[i].el.offsetTop <= scrollY) {
-        active = sections[i];
-        break;
-      }
-    }
-    links.forEach(function(l) { l.classList.remove('active'); });
-    if (active) active.link.classList.add('active');
-  }
-
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-})();
-</script>
+<script src="/docs/docs.js" defer></script>
 
 </body>
 </html>

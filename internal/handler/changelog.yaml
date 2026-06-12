@@ -1,6 +1,34 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.52.0
+  date: 2026-06-11
+  changes:
+    - text: "Every domain lookup now includes an aggregate risk score (0–100 with risk level and per-component breakdown) computed from all returned data"
+      audience: public
+    - text: "New dns_security option — DNSSEC deployment (DS/DNSKEY, signing algorithms) and CAA records, available on all plans"
+      audience: public
+    - text: "email_security now also checks MTA-STS (including the published policy), TLS-RPT, and BIMI"
+      audience: public
+    - text: "New GET /v1/usage — view your own request counts, cache hit rate, and feature usage"
+      audience: public
+    - text: "New POST /v1/keys/rotate — self-service API key rotation; old keys keep working for a 24h grace window"
+      audience: public
+    - text: "Machine-readable OpenAPI 3.1 spec now served at /docs/openapi.yaml"
+      audience: public
+    - text: "All responses now include Strict-Transport-Security, Referrer-Policy, and Content-Security-Policy headers"
+      audience: public
+    - text: "Failed lookups are now retried sooner: error responses cache for a short negative TTL instead of the full cache window"
+      audience: public
+    - text: "Removed all inline JavaScript from docs and checkout pages; scripts are now served as external files under a strict page CSP"
+      audience: internal
+    - text: "Concurrent identical lookups now coalesce via singleflight; lookups detached from client cancellation"
+      audience: internal
+    - text: "New unauthenticated /v1/health endpoint (Postgres/Redis/GeoIP state); uptime monitoring now hits it instead of /v1/hello"
+      audience: internal
+    - text: "Migrations 012 (api_keys.expires_at, multi-key rotation) and 013 (request_log.dns_security) — already applied to Neon"
+      audience: internal
+
 - version: v0.51.0
   date: 2026-04-16
   changes:

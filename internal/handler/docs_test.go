@@ -14,7 +14,7 @@ import (
 func docsRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h.RegisterRoutes(r)
 	return r
 }
@@ -106,6 +106,75 @@ func TestDocs_CSSEndpoint(t *testing.T) {
 	body := w.Body.String()
 	if !strings.Contains(body, "--accent") {
 		t.Error("expected CSS to contain custom properties")
+	}
+}
+
+func TestDocs_JSEndpoints(t *testing.T) {
+	r := docsRouter()
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/docs/theme.js", "sa-docs-theme"},
+		{"/docs/docs.js", "lang-tab"},
+		{"/docs/checkout_success.js", "copy-key"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+			}
+			ct := w.Header().Get("Content-Type")
+			if !strings.Contains(ct, "application/javascript") {
+				t.Errorf("Content-Type = %q, want application/javascript", ct)
+			}
+			cc := w.Header().Get("Cache-Control")
+			if cc != "public, max-age=3600" {
+				t.Errorf("Cache-Control = %q, want %q", cc, "public, max-age=3600")
+			}
+			if !strings.Contains(w.Body.String(), tt.want) {
+				t.Errorf("expected JS body to contain %q", tt.want)
+			}
+		})
+	}
+}
+
+func TestDocs_PagesSetCSPAndNoInlineScripts(t *testing.T) {
+	r := docsRouter()
+
+	for _, path := range []string{"/docs", "/docs/domain", "/docs/ip"} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+			}
+			if got := w.Header().Get("Content-Security-Policy"); got != htmlPageCSP {
+				t.Errorf("Content-Security-Policy = %q, want %q", got, htmlPageCSP)
+			}
+
+			body := w.Body.String()
+			if strings.Contains(body, "<script>") {
+				t.Error("docs pages must not contain inline <script> blocks")
+			}
+			if strings.Contains(body, "onclick=") {
+				t.Error("docs pages must not contain inline event handlers")
+			}
+			if !strings.Contains(body, `<script src="/docs/theme.js"></script>`) {
+				t.Error("expected page to reference external theme.js")
+			}
+			if !strings.Contains(body, `<script src="/docs/docs.js" defer></script>`) {
+				t.Error("expected page to reference external docs.js")
+			}
+		})
 	}
 }
 

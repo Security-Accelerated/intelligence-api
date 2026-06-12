@@ -84,15 +84,13 @@ func (h *Handler) CheckoutSuccess(c *gin.Context) {
 	renderHTML(c, http.StatusOK, checkoutSuccessTmpl, checkoutSuccessData{
 		APIKey:     rawKey,
 		PortalLink: portalLink,
-	}, map[string]string{
-		"Content-Type":  "text/html; charset=utf-8",
+	}, htmlPageHeaders(map[string]string{
 		"Cache-Control": "no-store",
-	})
+	}))
 }
 
 func renderCheckoutError(c *gin.Context, msg string) {
-	renderHTML(c, http.StatusOK, checkoutSuccessTmpl, checkoutSuccessData{Error: msg}, map[string]string{
-		"Content-Type":  "text/html; charset=utf-8",
+	renderHTML(c, http.StatusOK, checkoutSuccessTmpl, checkoutSuccessData{Error: msg}, htmlPageHeaders(map[string]string{
 		"Cache-Control": "no-store",
-	})
+	}))
 }

@@ -8,8 +8,36 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// htmlPageCSP is the Content-Security-Policy for HTML pages (docs, checkout
+// success). It overrides the strict API-wide default set by the
+// SecurityHeaders middleware: pages load same-origin scripts/styles/images,
+// inline <style> blocks, and Google Fonts. No inline JavaScript is allowed.
+const htmlPageCSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
+// htmlPageHeaders returns the response headers for an HTML page, including
+// the page-level Content-Security-Policy override.
+func htmlPageHeaders(extra map[string]string) map[string]string {
+	headers := map[string]string{
+		"Content-Type":            "text/html; charset=utf-8",
+		"Content-Security-Policy": htmlPageCSP,
+	}
+	for key, value := range extra {
+		headers[key] = value
+	}
+	return headers
+}
+
 //go:embed docs_styles.css
 var docsCSS string
+
+//go:embed docs_theme.js
+var docsThemeJS string
+
+//go:embed docs.js
+var docsJS string
+
+//go:embed checkout_success.js
+var checkoutSuccessJS string
 
 //go:embed docs.html
 var docsHTML string
@@ -70,14 +98,27 @@ func (h *Handler) buildDocsData() docsData {
 
 func (h *Handler) renderDocs(c *gin.Context, tmpl *template.Template) {
 	data := h.buildDocsData()
-	renderHTML(c, http.StatusOK, tmpl, data, map[string]string{
-		"Content-Type": "text/html; charset=utf-8",
-	})
+	renderHTML(c, http.StatusOK, tmpl, data, htmlPageHeaders(nil))
 }
 
 func (h *Handler) DocsCSS(c *gin.Context) {
 	c.Header("Cache-Control", "public, max-age=3600")
 	c.Data(http.StatusOK, "text/css; charset=utf-8", []byte(docsCSS))
+}
+
+func (h *Handler) DocsThemeJS(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.Data(http.StatusOK, "application/javascript; charset=utf-8", []byte(docsThemeJS))
+}
+
+func (h *Handler) DocsJS(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.Data(http.StatusOK, "application/javascript; charset=utf-8", []byte(docsJS))
+}
+
+func (h *Handler) CheckoutSuccessJS(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=3600")
+	c.Data(http.StatusOK, "application/javascript; charset=utf-8", []byte(checkoutSuccessJS))
 }
 
 func (h *Handler) Docs(c *gin.Context) {
