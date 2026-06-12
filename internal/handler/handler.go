@@ -130,6 +130,9 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/docs/domain", h.DocsDomain)
 	router.GET("/docs/ip", h.DocsIP)
 	router.GET("/docs/styles.css", h.DocsCSS)
+	router.GET("/docs/theme.js", h.DocsThemeJS)
+	router.GET("/docs/docs.js", h.DocsJS)
+	router.GET("/docs/checkout_success.js", h.CheckoutSuccessJS)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
 	v1.GET("/health", h.Health)
@@ -149,4 +152,5 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin
 	v1.POST("/admin/geoip/refresh", middleware.RequireAdmin(), h.RefreshGeoIP)
 	v1.POST("/domain/lookup", h.DomainLookup)
 	v1.POST("/ip/lookup", h.IPLookup)
+	v1.GET("/usage", h.MyUsage)
 }
