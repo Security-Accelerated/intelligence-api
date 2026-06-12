@@ -33,6 +33,31 @@ func copyViaJSON[T any](v *T) *T {
 	return out
 }
 
+// goLookup runs a lookup goroutine with panic recovery. gin.Recovery only
+// covers handler goroutines — without this, one panicking lookup (malformed
+// cert, bad regex) would kill the entire process. A panic degrades to a
+// sanitized lookup error on the response, consistent with partial-failure
+// tolerance.
+func goLookup(wg *sync.WaitGroup, mu *sync.Mutex, errs *[]domain.LookupError, alerter notifications.ErrorRecorder, lookupName, target string, fn func()) {
+	wg.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logging.Logger().Error("lookup panicked",
+					zap.String("lookup", lookupName),
+					zap.String("target", target),
+					zap.Any("panic", r),
+					zap.Stack("stack"),
+				)
+				mu.Lock()
+				defer mu.Unlock()
+				*errs = append(*errs, domain.LookupError{Lookup: lookupName, Message: "internal error"})
+				alerter.RecordLookupError(lookupName)
+			}
+		}()
+		fn()
+	})
+}
+
 // sanitizeErr replaces internal error messages with user-friendly descriptions.
 // Full details are logged server-side; only safe summaries reach the API response.
 func sanitizeErr(err error) string {
@@ -281,9 +306,17 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 	})
 	res := v.(*domainLookupResult)
 	if shared {
-		if copied := copyViaJSON(res.resp); copied != nil {
-			return copied, res.cacheHit
+		copied := copyViaJSON(res.resp)
+		if copied == nil {
+			// Never hand a coalesced caller the shared pointer — concurrent
+			// mutation (e.g. the handler setting CacheHit) would race.
+			logging.Logger().Error("singleflight response copy failed", zap.String("domain", domainName))
+			return &domain.DomainResponse{
+				Domain: domainName,
+				Errors: []domain.LookupError{{Lookup: "internal", Message: "internal error, please retry"}},
+			}, false
 		}
+		return copied, res.cacheHit
 	}
 	return res.resp, res.cacheHit
 }
@@ -312,7 +345,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 
 	logger := logging.Logger()
 
-	wg.Go(func() {
+	goLookup(&wg, &mu, &resp.Errors, s.alerter, "whois", domainName, func() {
 		result, err := s.lookupWhois(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -328,7 +361,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 		resp.Whois = result
 	})
 
-	wg.Go(func() {
+	goLookup(&wg, &mu, &resp.Errors, s.alerter, "dns", domainName, func() {
 		result, err := s.lookupDNS(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -344,7 +377,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 		resp.DNS = result
 	})
 
-	wg.Go(func() {
+	goLookup(&wg, &mu, &resp.Errors, s.alerter, "ssl", domainName, func() {
 		result, err := s.lookupSSL(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -360,7 +393,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 		resp.SSL = result
 	})
 
-	wg.Go(func() {
+	goLookup(&wg, &mu, &resp.Errors, s.alerter, "headers", domainName, func() {
 		result, err := s.lookupHeaders(ctx, domainName)
 		mu.Lock()
 		defer mu.Unlock()
@@ -377,7 +410,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	})
 
 	if opts.Screenshot {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "screenshot", domainName, func() {
 			result, err := s.lookupScreenshot(ctx, domainName, s.screenshotTimeout)
 			mu.Lock()
 			defer mu.Unlock()
@@ -395,7 +428,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	}
 
 	if opts.Reputation {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "reputation", domainName, func() {
 			result, errs := s.lookupReputation(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
@@ -408,7 +441,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	}
 
 	if opts.EmailSecurity {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "email_security", domainName, func() {
 			result, err := s.lookupEmailSecurity(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
@@ -426,7 +459,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	}
 
 	if opts.Subdomains {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "subdomains", domainName, func() {
 			result, err := s.lookupSubdomains(ctx, domainName, domain.SubdomainOptions{
 				MaxResults: s.subdomainMaxResults,
 			})
@@ -446,7 +479,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	}
 
 	if opts.CTLogs {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "ct_logs", domainName, func() {
 			result, err := s.lookupCTLogs(ctx, domainName, s.ctLogsMaxEntries)
 			mu.Lock()
 			defer mu.Unlock()
@@ -464,7 +497,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	}
 
 	if opts.BGP {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "bgp", domainName, func() {
 			result, err := s.lookupBGP(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
@@ -482,7 +515,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	}
 
 	if opts.DNSSecurity {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "dns_security", domainName, func() {
 			result, err := s.lookupDNSSecurity(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()
@@ -500,7 +533,7 @@ func (s *DomainService) doLookup(ctx context.Context, domainName, cacheKey strin
 	}
 
 	if opts.ThreatIntel {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "threat_intel", domainName, func() {
 			result, errs := s.lookupThreatIntel(ctx, domainName)
 			mu.Lock()
 			defer mu.Unlock()

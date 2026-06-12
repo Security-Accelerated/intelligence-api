@@ -123,9 +123,17 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 	})
 	res := v.(*ipLookupResult)
 	if shared {
-		if copied := copyViaJSON(res.resp); copied != nil {
-			return copied, res.cacheHit
+		copied := copyViaJSON(res.resp)
+		if copied == nil {
+			// Never hand a coalesced caller the shared pointer — concurrent
+			// mutation (e.g. the handler setting CacheHit) would race.
+			logging.Logger().Error("singleflight response copy failed", zap.String("ip", ip))
+			return &domain.IPResponse{
+				IP:     ip,
+				Errors: []domain.LookupError{{Lookup: "internal", Message: "internal error, please retry"}},
+			}, false
 		}
+		return copied, res.cacheHit
 	}
 	return res.resp, res.cacheHit
 }
@@ -155,7 +163,7 @@ func (s *IPService) doLookup(ctx context.Context, ip, cacheKey string, opts doma
 
 	// GeoIP (local DB, no network call)
 	if s.lookupGeo != nil && parsedIP != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "geo", ip, func() {
 			result, err := s.lookupGeo(parsedIP)
 			mu.Lock()
 			defer mu.Unlock()
@@ -176,7 +184,7 @@ func (s *IPService) doLookup(ctx context.Context, ip, cacheKey string, opts doma
 
 	// ASN (local DB, no network call)
 	if s.lookupASN != nil && parsedIP != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "asn", ip, func() {
 			result, err := s.lookupASN(parsedIP)
 			mu.Lock()
 			defer mu.Unlock()
@@ -197,7 +205,7 @@ func (s *IPService) doLookup(ctx context.Context, ip, cacheKey string, opts doma
 
 	// Reverse DNS
 	if s.lookupReverseDNS != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "reverse_dns", ip, func() {
 			result, err := s.lookupReverseDNS(ctx, ip)
 			mu.Lock()
 			defer mu.Unlock()
@@ -213,7 +221,7 @@ func (s *IPService) doLookup(ctx context.Context, ip, cacheKey string, opts doma
 
 	// Abuse contact (RDAP)
 	if s.lookupAbuseContact != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "abuse_contact", ip, func() {
 			result, err := s.lookupAbuseContact(ctx, ip)
 			mu.Lock()
 			defer mu.Unlock()
@@ -230,7 +238,7 @@ func (s *IPService) doLookup(ctx context.Context, ip, cacheKey string, opts doma
 	// Threat intel (optional, pro-only)
 	if opts.ThreatIntel && s.lookupThreatIntel != nil {
 		tiLookup := s.lookupThreatIntel
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "threat_intel", ip, func() {
 			result, errs := tiLookup(ctx, ip)
 			mu.Lock()
 			defer mu.Unlock()
