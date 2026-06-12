@@ -2,21 +2,26 @@ package domain
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/oschwald/geoip2-golang"
 )
 
-// MaxMind download URL template. The license key and edition are substituted at runtime.
-const maxmindDownloadURL = "https://download.maxmind.com/app/geoip_download?edition_id=%s&license_key=%s&suffix=tar.gz"
+// MaxMind download URL template. The license key and edition are substituted at
+// runtime. var (not const) so tests can point it at a stub server.
+var maxmindDownloadURL = "https://download.maxmind.com/app/geoip_download?edition_id=%s&license_key=%s&suffix=tar.gz"
 
 // ErrDBNotLoaded is returned when a GeoIP lookup is attempted before databases
 // are loaded (e.g., fresh deployment before admin refresh).
@@ -197,19 +202,21 @@ type RefreshResult struct {
 // license key, writes them to temp files, validates them, and atomically swaps
 // them into the reader. cityFile and asnFile are the filenames (not paths) to
 // write inside dbPath, matching the configured maxmind.city_db / maxmind.asn_db.
-func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath, cityFile, asnFile string) (*RefreshResult, error) {
+// ctx cancels the in-flight HTTP downloads — the 5-minute http.Client timeout
+// is the absolute ceiling, ctx is the per-request lever.
+func (r *GeoIPReader) DownloadAndReload(ctx context.Context, licenseKey, dbPath, cityFile, asnFile string) (*RefreshResult, error) {
 	if licenseKey == "" {
 		return nil, fmt.Errorf("maxmind license key not configured")
 	}
 
 	client := &http.Client{Timeout: 5 * time.Minute}
 
-	cityTmp, cityHash, citySize, err := downloadMMDB(client, "GeoLite2-City", licenseKey, dbPath)
+	cityTmp, cityHash, citySize, err := downloadMMDB(ctx, client, "GeoLite2-City", licenseKey, dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("download city db: %w", err)
 	}
 
-	asnTmp, asnHash, asnSize, err := downloadMMDB(client, "GeoLite2-ASN", licenseKey, dbPath)
+	asnTmp, asnHash, asnSize, err := downloadMMDB(ctx, client, "GeoLite2-ASN", licenseKey, dbPath)
 	if err != nil {
 		os.Remove(cityTmp)
 		return nil, fmt.Errorf("download asn db: %w", err)
@@ -262,13 +269,17 @@ func (r *GeoIPReader) DownloadAndReload(licenseKey, dbPath, cityFile, asnFile st
 
 // downloadMMDB downloads a MaxMind database edition, decompresses it, and writes
 // the .mmdb file to a temp file in dbPath. Returns the temp file path, SHA-256
-// hash, and file size.
-func downloadMMDB(client *http.Client, edition, licenseKey, dbPath string) (string, string, int64, error) {
-	url := fmt.Sprintf(maxmindDownloadURL, edition, licenseKey)
+// hash, and file size. ctx cancels the in-flight request.
+func downloadMMDB(ctx context.Context, client *http.Client, edition, licenseKey, dbPath string) (string, string, int64, error) {
+	dlURL := fmt.Sprintf(maxmindDownloadURL, edition, licenseKey)
 
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dlURL, nil)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("fetch %s: %w", edition, err)
+		return "", "", 0, fmt.Errorf("build %s request: %w", edition, scrubLicenseKey(err))
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", 0, fmt.Errorf("fetch %s: %w", edition, scrubLicenseKey(err))
 	}
 	defer resp.Body.Close()
 
@@ -312,4 +323,36 @@ func downloadMMDB(client *http.Client, edition, licenseKey, dbPath string) (stri
 
 	hash := fmt.Sprintf("%x", hasher.Sum(nil))
 	return tmp.Name(), hash, int64(n), nil
+}
+
+// scrubLicenseKey rewrites any *url.Error in the chain so its URL field has the
+// license_key query parameter redacted. The Go HTTP client puts the full request
+// URL into url.Error.URL, which would otherwise leak the MaxMind license key
+// into wrapped error messages and any logs that print them.
+func scrubLicenseKey(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		urlErr.URL = redactLicenseKeyParam(urlErr.URL)
+	}
+	return err
+}
+
+// redactLicenseKeyParam replaces the value of the license_key query parameter
+// with "REDACTED". Returns the input unchanged if the parameter is not present
+// or the URL is unparseable.
+func redactLicenseKeyParam(s string) string {
+	if !strings.Contains(s, "license_key=") {
+		return s
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return s
+	}
+	q := u.Query()
+	if !q.Has("license_key") {
+		return s
+	}
+	q.Set("license_key", "REDACTED")
+	u.RawQuery = q.Encode()
+	return u.String()
 }

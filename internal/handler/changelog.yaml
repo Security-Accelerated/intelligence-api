@@ -1,7 +1,7 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
-- version: v0.51.0
+- version: v0.52.0
   date: 2026-06-11
   changes:
     - text: "Every domain lookup now includes an aggregate risk score (0–100 with risk level and per-component breakdown) computed from all returned data"
@@ -26,7 +26,21 @@
       audience: internal
     - text: "New unauthenticated /v1/health endpoint (Postgres/Redis/GeoIP state); uptime monitoring now hits it instead of /v1/hello"
       audience: internal
-    - text: "Migrations 012 (api_keys.expires_at, multi-key rotation) and 013 (request_log.dns_security) — apply to Neon before deploy"
+    - text: "Migrations 012 (api_keys.expires_at, multi-key rotation) and 013 (request_log.dns_security) — already applied to Neon"
+      audience: internal
+
+- version: v0.51.0
+  date: 2026-04-16
+  changes:
+    - text: "Subdomain enumeration is now subject to a tighter per-plan domain cap (subdomain.max_domains.*). The config keys and defaults shipped earlier; this is the missing enforcement"
+      audience: public
+    - text: "MaxMind license key is now redacted from any wrapped error originating from the database download client"
+      audience: internal
+    - text: "Replaced time.Sleep-based test synchronization in billing and notification tests with channel-driven waits"
+      audience: internal
+    - text: "Added GetProvisionedKey unit tests covering success and ErrKeyRetrieved propagation"
+      audience: internal
+    - text: "MaxMind database download now honors request-scoped cancellation — admin disconnects abort the in-flight download instead of waiting for the 5-minute http.Client timeout"
       audience: internal
 
 - version: v0.50.2

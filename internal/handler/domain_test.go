@@ -795,6 +795,58 @@ func TestDomainLookup_MaxDomains_FreePlanLimit(t *testing.T) {
 	})
 }
 
+func TestDomainLookup_MaxDomains_SubdomainCapTighter(t *testing.T) {
+	cfg := testCfg(map[string]any{
+		"domain.max_domains.basic":    5,
+		"subdomain.max_domains.basic": 3,
+	})
+
+	t.Run("under domain cap but over subdomain cap returns 400 when subdomains requested", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"],"subdomains":true}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+		}
+		var body map[string]string
+		json.Unmarshal(w.Body.Bytes(), &body)
+		want := "too many domains: maximum 3 allowed for basic plan when subdomains is requested"
+		if body["error"] != want {
+			t.Errorf("error = %q, want %q", body["error"], want)
+		}
+	})
+
+	t.Run("at subdomain cap succeeds when subdomains requested", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com"],"subdomains":true}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+
+	t.Run("over subdomain cap but subdomains not requested still succeeds", func(t *testing.T) {
+		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+	})
+}
+
 func TestDomainLookup_EmailSecurity_AllPlansAllowed(t *testing.T) {
 	r := newTestRouterWithPlan(&mockService{}, "basic")
 	w := httptest.NewRecorder()
