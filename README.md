@@ -961,6 +961,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `013_request_log_dns_security.sql` — adds `dns_security` column to `request_log`
 - `014_request_log_cache_metrics.sql` — replaces the per-request `cache_hit` boolean with `cache_hits`/`cache_misses` counts, and adds `whois`/`dns`/`ssl`/`headers`/`risk` columns now that the base lookups and the risk score are individually selectable
 - `015_request_log_ip_lookups.sql` — adds `geo`/`asn`/`reverse_dns`/`abuse_contact` columns now that IP lookups are individually selectable
+- `016_drop_request_log_cache_hit.sql` — drops the superseded `cache_hit` column. **Apply only after a build that no longer writes it (v0.55.0+) is deployed** — see below
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
