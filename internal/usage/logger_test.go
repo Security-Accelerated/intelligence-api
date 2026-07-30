@@ -77,7 +77,9 @@ func TestUsageLogger_FlushInsertsCacheAndLookupColumns(t *testing.T) {
 			"POST", "/v1/domain/lookup", 200, 12, 2, 0, // method..ip_count
 			3, 1, // cache_hits, cache_misses
 			true, true, false, false, // whois, dns, ssl, headers
-			false, false, false, false, false, false, false, false, // remaining lookups
+			// screenshot, reputation, email_security, subdomains, ct_logs, bgp,
+			// fingerprint, threat_intel, dns_security, risk
+			false, false, false, false, false, false, false, false, false, false,
 			sqlmock.AnyArg(), // created_at
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))

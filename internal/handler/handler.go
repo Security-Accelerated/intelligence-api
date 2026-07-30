@@ -74,6 +74,7 @@ type Handler struct {
 	fingerprintService FingerprintAdminService
 	billingService     billing.Service
 	usageService       usage.Queryer
+	keyRotationService KeyRotationService
 	geoRefresher       GeoIPRefresher
 	cfg                *viper.Viper
 	redisCache         *cache.RedisCache
@@ -83,7 +84,7 @@ type Handler struct {
 	changelog          []ChangelogVersion
 }
 
-func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
+func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, keyRotationService KeyRotationService, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
 	changelog, err := parseChangelog()
 	if err != nil {
 		logging.Logger().Error("failed to parse changelog", zap.Error(err))
@@ -95,6 +96,7 @@ func New(domainService DomainLookupService, ipService IPLookupService, fingerpri
 		fingerprintService: fingerprintService,
 		billingService:     billingService,
 		usageService:       usageService,
+		keyRotationService: keyRotationService,
 		geoRefresher:       geoRefresher,
 		cfg:                cfg,
 		redisCache:         redisCache,
@@ -130,8 +132,13 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/docs/domain", h.DocsDomain)
 	router.GET("/docs/ip", h.DocsIP)
 	router.GET("/docs/styles.css", h.DocsCSS)
+	router.GET("/docs/theme.js", h.DocsThemeJS)
+	router.GET("/docs/docs.js", h.DocsJS)
+	router.GET("/docs/checkout_success.js", h.CheckoutSuccessJS)
+	router.GET("/docs/openapi.yaml", h.OpenAPISpec)
 	v1 := router.Group("/v1")
 	v1.GET("/hello", h.Hello)
+	v1.GET("/health", h.Health)
 
 	billingGroup := router.Group("/billing")
 	billingGroup.POST("/webhook", h.StripeWebhook)
@@ -148,4 +155,6 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin
 	v1.POST("/admin/geoip/refresh", middleware.RequireAdmin(), h.RefreshGeoIP)
 	v1.POST("/domain/lookup", h.DomainLookup)
 	v1.POST("/ip/lookup", h.IPLookup)
+	v1.GET("/usage", h.MyUsage)
+	v1.POST("/keys/rotate", h.RotateKey)
 }

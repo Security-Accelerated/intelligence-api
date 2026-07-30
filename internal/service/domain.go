@@ -15,6 +15,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
 
 // sanitizeErr replaces internal error messages with user-friendly descriptions.
@@ -80,8 +81,10 @@ type DomainService struct {
 	cache               cache.Cache
 	defaultCacheTTL     time.Duration
 	cacheTTLs           map[string]time.Duration
+	sf                  singleflight.Group
 	lookupTimeout       time.Duration
 	screenshotTimeout   time.Duration
+	screenshotSem       chan struct{} // caps concurrent Chromium across ALL in-flight requests
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
 	fingerprintEngine   *domain.FingerprintEngine
@@ -98,9 +101,10 @@ type DomainService struct {
 	lookupCTLogs        func(ctx context.Context, d string, maxEntries int) (*domain.CTLogsInfo, error)
 	lookupBGP           func(ctx context.Context, d string) (*domain.BGPInfo, error)
 	lookupThreatIntel   func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError)
+	lookupDNSSecurity   func(ctx context.Context, d string) (*domain.DNSSecurityInfo, error)
 }
 
-func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs map[string]time.Duration, lookupTimeout, screenshotTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
+func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs map[string]time.Duration, lookupTimeout, screenshotTimeout time.Duration, screenshotMaxConcurrent, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -109,6 +113,9 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 	}
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
+	}
+	if screenshotMaxConcurrent <= 0 {
+		screenshotMaxConcurrent = 4
 	}
 	if alerter == nil {
 		alerter = &notifications.NoopRecorder{}
@@ -119,6 +126,7 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 		cacheTTLs:           cacheTTLs,
 		lookupTimeout:       lookupTimeout,
 		screenshotTimeout:   screenshotTimeout,
+		screenshotSem:       make(chan struct{}, screenshotMaxConcurrent),
 		subdomainMaxResults: subdomainMaxResults,
 		ctLogsMaxEntries:    ctLogsMaxEntries,
 		fingerprintEngine:   fpEngine,
@@ -138,6 +146,7 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 		lookupThreatIntel: func(ctx context.Context, d string) (*domain.ThreatIntelInfo, []domain.LookupError) {
 			return domain.LookupThreatIntel(ctx, d, tiProviders)
 		},
+		lookupDNSSecurity: domain.LookupDNSSecurity,
 	}
 }
 
@@ -192,6 +201,13 @@ func (s *DomainService) SetThreatIntelLookup(
 	s.lookupThreatIntel = fn
 }
 
+// SetDNSSecurityLookup replaces the DNS security lookup function (for testing).
+func (s *DomainService) SetDNSSecurityLookup(
+	fn func(context.Context, string) (*domain.DNSSecurityInfo, error),
+) {
+	s.lookupDNSSecurity = fn
+}
+
 // SetFingerprintEngine replaces the fingerprint engine (for testing).
 func (s *DomainService) SetFingerprintEngine(engine *domain.FingerprintEngine) {
 	s.fingerprintEngine = engine
@@ -222,22 +238,35 @@ type lookupData struct {
 	ctLogs        *domain.CTLogsInfo
 	bgp           *domain.BGPInfo
 	threatIntel   *domain.ThreatIntelInfo
+	dnsSecurity   *domain.DNSSecurityInfo
 }
 
-// lookupRunner is one cacheable lookup for one domain: how to decode a cached
-// payload into lookupData, and how to fetch it live.
+// lookupRunner is one cacheable lookup for one domain: how to decode a payload
+// into lookupData, and how to fetch that payload live.
+//
+// fetch is deliberately free of per-request state so it can be shared between
+// concurrent callers via singleflight; every caller then decodes the resulting
+// payload into its own lookupData. Decoding per caller (rather than sharing a
+// pointer) gives each request an independent deep copy for free.
 type lookupRunner struct {
 	name string
-	// decode populates lookupData from a cached payload. An error means the
-	// entry is unusable and the lookup is treated as a miss.
+	// decode populates lookupData from a payload — cached or freshly fetched.
+	// An error means the payload is unusable and the lookup counts as a miss.
 	decode func([]byte) error
-	// run performs the live lookup and populates lookupData. It returns the
-	// payload to cache, or nil when nothing should be cached (failure or an
-	// empty result). Errors are appended to the response by the runner itself.
-	run func(ctx context.Context) []byte
+	// fetch performs the live lookup. It touches no per-request state.
+	fetch func(ctx context.Context) fetchResult
 }
 
-// runState is the mutable state shared by concurrently running lookups.
+// fetchResult is what one live lookup produced: the payload to cache and hand
+// to every coalesced caller, plus any errors to report. A nil payload means
+// nothing should be cached (the lookup failed, or returned no data).
+type fetchResult struct {
+	payload []byte
+	errs    []domain.LookupError
+}
+
+// runState is the mutable per-request state shared by concurrently running
+// lookups. fetch never touches it; only decode and error collection do.
 type runState struct {
 	mu     sync.Mutex
 	resp   *domain.DomainResponse
@@ -246,27 +275,41 @@ type runState struct {
 	domain string
 }
 
+// recoverFetch converts a panicking lookup into an ordinary error result.
+// Containment has to happen inside the fetch rather than at the goroutine
+// boundary: a panic escaping into singleflight is re-raised in every coalesced
+// caller, so one bad lookup would take down unrelated requests.
+func recoverFetch(s *DomainService, st *runState, name string, res *fetchResult) {
+	if r := recover(); r != nil {
+		st.logger.Error("lookup panicked",
+			zap.String("lookup", name),
+			zap.String("domain", st.domain),
+			zap.Any("panic", r),
+			zap.Stack("stack"),
+		)
+		s.alerter.RecordLookupError(name)
+		*res = fetchResult{errs: []domain.LookupError{{Lookup: name, Message: "internal error"}}}
+	}
+}
+
 // simpleRunner wires a lookup returning (*T, error) into a lookupRunner. dst
-// points at the lookupData field that receives the payload.
+// points at the lookupData field that receives the decoded payload.
 func simpleRunner[T any](s *DomainService, st *runState, name string, dst **T, fetch func(context.Context) (*T, error)) lookupRunner {
 	return lookupRunner{
 		name:   name,
 		decode: decodeInto(dst),
-		run: func(ctx context.Context) []byte {
+		fetch: func(ctx context.Context) (res fetchResult) {
+			defer recoverFetch(s, st, name, &res)
 			result, err := fetch(ctx)
-			st.mu.Lock()
-			defer st.mu.Unlock()
 			if err != nil {
 				st.logger.Warn("lookup failed", zap.String("lookup", name), zap.String("domain", st.domain), zap.Error(err))
-				st.resp.Errors = append(st.resp.Errors, domain.LookupError{
+				recordIfUnexpected(s.alerter, name, err)
+				return fetchResult{errs: []domain.LookupError{{
 					Lookup:  name,
 					Message: sanitizeErr(err),
-				})
-				recordIfUnexpected(s.alerter, name, err)
-				return nil
+				}}}
 			}
-			*dst = result
-			return marshalForCache(st, name, result)
+			return fetchResult{payload: marshalForCache(st, name, result)}
 		},
 	}
 }
@@ -278,23 +321,20 @@ func multiErrRunner[T any](s *DomainService, st *runState, name string, dst **T,
 	return lookupRunner{
 		name:   name,
 		decode: decodeInto(dst),
-		run: func(ctx context.Context) []byte {
+		fetch: func(ctx context.Context) (res fetchResult) {
+			defer recoverFetch(s, st, name, &res)
 			result, errs := fetch(ctx)
-			st.mu.Lock()
-			defer st.mu.Unlock()
 			for _, e := range errs {
 				s.alerter.RecordLookupError(e.Lookup)
 			}
-			st.resp.Errors = append(st.resp.Errors, errs...)
-			*dst = result
-			return marshalForCache(st, name, result)
+			return fetchResult{payload: marshalForCache(st, name, result), errs: errs}
 		},
 	}
 }
 
-// decodeInto returns a decoder that unmarshals a cached payload into dst.
-// Cached payloads are the bare lookup type — no request metadata, no cache
-// flags — so this is a plain unmarshal.
+// decodeInto returns a decoder that unmarshals a payload into dst. Payloads are
+// the bare lookup type — no request metadata, no cache flags — so this is a
+// plain unmarshal, identical for cached and freshly fetched data.
 func decodeInto[T any](dst **T) func([]byte) error {
 	return func(b []byte) error {
 		var v T
@@ -306,9 +346,9 @@ func decodeInto[T any](dst **T) func([]byte) error {
 	}
 }
 
-// marshalForCache serializes a successful lookup result for storage. Only the
-// bare payload type is marshaled, so response-only metadata (cache_hit) can
-// never reach Redis. Callers must hold st.mu. A nil result caches nothing.
+// marshalForCache serializes a successful lookup result. Only the bare payload
+// type is marshaled, so response-only metadata (cache_hit) can never reach
+// Redis. A nil result produces no payload and so is never cached.
 func marshalForCache[T any](st *runState, name string, result *T) []byte {
 	if result == nil {
 		return nil
@@ -326,6 +366,8 @@ func marshalForCache[T any](st *runState, name string, result *T) []byte {
 //   - fingerprint has no runner of its own — it is pure computation over headers
 //     data, so caching headers already caches fingerprint. Requesting it pulls in
 //     the headers runner instead.
+//   - risk has no runner either — it scores the other lookups already on the
+//     response, so it needs no fetch and gets no cache entry.
 //   - headers is fetched at most once even when both headers and fingerprint are
 //     requested, so shared data costs exactly one upstream call.
 func (s *DomainService) buildRunners(st *runState, opts domain.LookupOptions) []lookupRunner {
@@ -352,6 +394,17 @@ func (s *DomainService) buildRunners(st *runState, opts domain.LookupOptions) []
 	if opts.Has(domain.LookupScreenshotName) {
 		runners = append(runners, simpleRunner(s, st, domain.LookupScreenshotName, &d.screenshot,
 			func(ctx context.Context) (*domain.ScreenshotInfo, error) {
+				// Chromium is by far the most expensive lookup, so it takes a
+				// slot from a process-wide semaphore rather than fork-bombing
+				// under load.
+				if s.screenshotSem != nil {
+					select {
+					case s.screenshotSem <- struct{}{}:
+						defer func() { <-s.screenshotSem }()
+					case <-ctx.Done():
+						return nil, errors.New("screenshot queue timed out, please retry")
+					}
+				}
 				return s.lookupScreenshot(ctx, st.domain, s.screenshotTimeout)
 			}))
 	}
@@ -389,6 +442,12 @@ func (s *DomainService) buildRunners(st *runState, opts domain.LookupOptions) []
 				return s.lookupThreatIntel(ctx, st.domain)
 			}))
 	}
+	if opts.Has(domain.LookupDNSSecurityName) {
+		runners = append(runners, simpleRunner(s, st, domain.LookupDNSSecurityName, &d.dnsSecurity,
+			func(ctx context.Context) (*domain.DNSSecurityInfo, error) {
+				return s.lookupDNSSecurity(ctx, st.domain)
+			}))
+	}
 
 	return runners
 }
@@ -404,10 +463,12 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 	resp := &domain.DomainResponse{Domain: domainName}
 	logger := logging.Logger()
 
-	// Respect any tighter deadline from the parent (e.g. HTTP server write timeout).
+	// The cache read follows the caller's deadline — it is cheap and per-caller.
+	// Live fetches deliberately do not (see below).
+	readCtx := ctx
 	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > s.lookupTimeout {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.lookupTimeout)
+		readCtx, cancel = context.WithTimeout(ctx, s.lookupTimeout)
 		defer cancel()
 	}
 
@@ -415,18 +476,51 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 	runners := s.buildRunners(st, opts)
 
 	hits := make(map[string]bool, len(runners))
-	misses := s.readCache(ctx, st, runners, hits)
+	misses := s.readCache(readCtx, st, runners, hits)
 
 	var wg sync.WaitGroup
 	for _, r := range misses {
 		wg.Go(func() {
-			payload := r.run(ctx)
-			if payload == nil {
-				return
-			}
-			if err := s.cache.Set(ctx, cache.LookupKey(domainName, r.name), payload, s.ttlFor(r.name)); err != nil {
-				// Fail-open: the caller still gets the freshly fetched result.
-				logger.Warn("cache set failed", zap.String("lookup", r.name), zap.String("domain", domainName), zap.Error(err))
+			key := cache.LookupKey(domainName, r.name)
+
+			// Coalesce concurrent fetches of the same lookup for the same
+			// domain — only one runs and every caller gets its payload. Keying
+			// per lookup rather than per response means two requests asking for
+			// overlapping-but-different lookup sets still share the overlap.
+			// The executed fetch is detached from the triggering caller's
+			// cancellation so one disconnecting client can't poison the result
+			// shared with the others.
+			v, _, _ := s.sf.Do(key, func() (any, error) {
+				// Shared work is detached from the triggering caller's context
+				// and bounded by the service's own timeout instead. One client
+				// disconnecting — or holding a tight deadline — must not cancel
+				// or truncate a fetch that other coalesced callers are waiting
+				// on. WithoutCancel drops the parent deadline too, so the
+				// timeout has to be reapplied here.
+				fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.lookupTimeout)
+				defer cancel()
+
+				res := r.fetch(fetchCtx)
+				// Only the goroutine that actually ran the fetch writes it back;
+				// coalesced callers would just rewrite the identical value.
+				if res.payload != nil {
+					if err := s.cache.Set(fetchCtx, key, res.payload, s.ttlFor(r.name)); err != nil {
+						// Fail-open: callers still get the freshly fetched result.
+						logger.Warn("cache set failed", zap.String("lookup", r.name), zap.String("domain", domainName), zap.Error(err))
+					}
+				}
+				return res, nil
+			})
+			res := v.(fetchResult)
+
+			st.mu.Lock()
+			defer st.mu.Unlock()
+			st.resp.Errors = append(st.resp.Errors, res.errs...)
+			if res.payload != nil {
+				if err := r.decode(res.payload); err != nil {
+					logger.Warn("decoding freshly fetched payload failed",
+						zap.String("lookup", r.name), zap.String("domain", domainName), zap.Error(err))
+				}
 			}
 		})
 	}
@@ -510,6 +604,10 @@ func (s *DomainService) assemble(resp *domain.DomainResponse, d *lookupData, opt
 		resp.ThreatIntel = &domain.ThreatIntelResult{CacheHit: hits[domain.LookupThreatIntelName], ThreatIntelInfo: d.threatIntel}
 	}
 
+	if opts.Has(domain.LookupDNSSecurityName) && d.dnsSecurity != nil {
+		resp.DNSSecurity = &domain.DNSSecurityResult{CacheHit: hits[domain.LookupDNSSecurityName], DNSSecurityInfo: d.dnsSecurity}
+	}
+
 	// Fingerprint is derived from headers rather than fetched or cached, so its
 	// cache_hit mirrors where the headers data came from. Because there is no
 	// fingerprint cache entry, admin rule updates take effect immediately.
@@ -521,6 +619,46 @@ func (s *DomainService) assemble(resp *domain.DomainResponse, d *lookupData, opt
 			}
 		}
 	}
+
+	// Risk is likewise post-processing: it scores whatever lookups landed on the
+	// response, makes no network call, and is never cached. Assembling it last
+	// means it sees every other field. Its cache_hit generalizes fingerprint's
+	// rule — true only when every lookup it scored over came from cache.
+	if opts.Has(domain.LookupRiskName) {
+		if summary := domain.ComputeRiskScore(resp, time.Now()); summary != nil {
+			resp.Risk = &domain.RiskResult{
+				CacheHit:    riskFullyCached(opts, hits),
+				RiskSummary: summary,
+			}
+		}
+	}
+}
+
+// riskInputs lists the lookups that feed the aggregate risk score.
+var riskInputs = []string{
+	domain.LookupThreatIntelName,
+	domain.LookupReputationName,
+	domain.LookupSSLName,
+	domain.LookupHeadersName,
+	domain.LookupEmailSecurityName,
+	domain.LookupWhoisName,
+}
+
+// riskFullyCached reports whether every risk input the caller requested was
+// served from cache, meaning the score itself is derived entirely from cached
+// data. False when no scoring input was requested at all.
+func riskFullyCached(opts domain.LookupOptions, hits map[string]bool) bool {
+	scored := 0
+	for _, name := range riskInputs {
+		if !opts.Has(name) {
+			continue
+		}
+		scored++
+		if !hits[name] {
+			return false
+		}
+	}
+	return scored > 0
 }
 
 // cacheStats counts hits and misses across the lookups the caller requested.
@@ -529,8 +667,19 @@ func cacheStats(opts domain.LookupOptions, hits map[string]bool) domain.CacheSta
 	var stats domain.CacheStats
 	for _, name := range opts.Lookups {
 		source := name
-		if name == domain.LookupFingerprintName {
+		switch name {
+		case domain.LookupFingerprintName:
+			// Fingerprint is served by the headers entry.
 			source = domain.LookupHeadersName
+		case domain.LookupRiskName:
+			// Risk fetches nothing; it counts as a hit only when everything it
+			// scored over was cached.
+			if riskFullyCached(opts, hits) {
+				stats.Hits++
+			} else {
+				stats.Misses++
+			}
+			continue
 		}
 		if hits[source] {
 			stats.Hits++

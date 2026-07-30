@@ -76,17 +76,28 @@ func (r *Repository) ProvisionCustomer(ctx context.Context, name, email, plan, s
 	return customerID, nil
 }
 
-// RetrieveProvisionedKey atomically marks a provisioned key as retrieved and returns it.
-// Returns an error if the key has already been retrieved, has expired, or does not exist.
+// RetrieveProvisionedKey atomically marks a provisioned key as retrieved,
+// blanks the stored plaintext, and returns it. The row is kept (with an empty
+// raw_key) so a second attempt still classifies as "already retrieved"; the
+// cleanup ticker deletes it once expired. Returns an error if the key has
+// already been retrieved, has expired, or does not exist.
 func (r *Repository) RetrieveProvisionedKey(ctx context.Context, sessionID string) (string, error) {
 	var rawKey string
+	// The CTE captures the pre-update raw_key — RETURNING on its own would
+	// yield the post-update (blanked) value.
 	err := r.db.QueryRowContext(ctx,
-		`UPDATE provisioned_keys
-		    SET retrieved = true
-		  WHERE session_id = $1
-		    AND retrieved = false
-		    AND expires_at > now()
-		  RETURNING raw_key`,
+		`WITH claimed AS (
+		    SELECT id, raw_key FROM provisioned_keys
+		     WHERE session_id = $1
+		       AND retrieved = false
+		       AND expires_at > now()
+		       FOR UPDATE
+		 )
+		 UPDATE provisioned_keys p
+		    SET retrieved = true, raw_key = ''
+		   FROM claimed
+		  WHERE p.id = claimed.id
+		  RETURNING claimed.raw_key`,
 		sessionID,
 	).Scan(&rawKey)
 	if err != nil {
@@ -120,6 +131,53 @@ func (r *Repository) classifyRetrievalError(ctx context.Context, sessionID strin
 		return ErrKeyExpired
 	}
 	return ErrKeyNotFound
+}
+
+// RotateKey inserts a new API key for the customer and sets every other key
+// of that customer to expire at graceExpiry (never extending an expiry that is
+// already sooner). Both steps run in one transaction so a failure can't leave
+// the customer with their old key expired and no replacement.
+func (r *Repository) RotateKey(ctx context.Context, customerID int, newKeyHash string, graceExpiry time.Time) (err error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+			err = errors.Join(err, fmt.Errorf("rollback transaction: %w", rbErr))
+		}
+	}()
+
+	var newKeyID int
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO api_keys (customer_id, key_hash, created_at)
+		 VALUES ($1, $2, now())
+		 RETURNING id`,
+		customerID, newKeyHash,
+	).Scan(&newKeyID)
+	if err != nil {
+		return fmt.Errorf("insert rotated api key: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`UPDATE api_keys
+		    SET expires_at = $1
+		  WHERE customer_id = $2
+		    AND id != $3
+		    AND (expires_at IS NULL OR expires_at > $1)`,
+		graceExpiry, customerID, newKeyID,
+	)
+	if err != nil {
+		return fmt.Errorf("expire previous api keys: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
 }
 
 // UpdatePlan updates a customer's plan by their Stripe customer ID.
@@ -157,18 +215,24 @@ func (r *Repository) CleanupExpiredKeys(ctx context.Context) error {
 	return nil
 }
 
-// DeactivateStaleKeys deactivates customers whose API keys have not been used
-// since the cutoff time (or were created before the cutoff and never used).
-// Returns the number of deactivated customers.
+// DeactivateStaleKeys deactivates customers none of whose live (non-expired)
+// API keys have been used since the cutoff time (counting never-used keys by
+// creation date). A customer with any fresh key stays active — rotation can
+// leave multiple keys per customer. Returns the number of deactivated customers.
 func (r *Repository) DeactivateStaleKeys(ctx context.Context, cutoff time.Time) (int, error) {
 	result, err := r.db.ExecContext(ctx,
 		`UPDATE customers SET active = false
-		 WHERE active = true AND plan != 'admin' AND id IN (
-			SELECT c.id FROM customers c
-			JOIN api_keys ak ON ak.customer_id = c.id
-			WHERE c.active = true AND c.plan != 'admin'
-			  AND ((ak.last_used_at IS NULL AND ak.created_at < $1)
-			    OR (ak.last_used_at IS NOT NULL AND ak.last_used_at < $1))
+		 WHERE active = true AND plan != 'admin'
+		   AND EXISTS (
+			SELECT 1 FROM api_keys ak
+			WHERE ak.customer_id = customers.id
+		   )
+		   AND NOT EXISTS (
+			SELECT 1 FROM api_keys ak
+			WHERE ak.customer_id = customers.id
+			  AND (ak.expires_at IS NULL OR ak.expires_at > now())
+			  AND ((ak.last_used_at IS NULL AND ak.created_at >= $1)
+			    OR (ak.last_used_at IS NOT NULL AND ak.last_used_at >= $1))
 		 )`,
 		cutoff,
 	)

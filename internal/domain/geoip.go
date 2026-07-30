@@ -65,6 +65,13 @@ func NewGeoIPReader(cityPath, asnPath string) (*GeoIPReader, error) {
 	}, nil
 }
 
+// Loaded reports whether both MaxMind databases are loaded and lookups can serve data.
+func (r *GeoIPReader) Loaded() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cityDB != nil && r.asnDB != nil
+}
+
 // LookupGeo returns geographic information for the given IP.
 func (r *GeoIPReader) LookupGeo(ip net.IP) (*GeoIPInfo, error) {
 	r.mu.RLock()

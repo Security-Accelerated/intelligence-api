@@ -49,15 +49,16 @@ type poolStats struct {
 }
 
 type cacheStats struct {
-	Addr          string            `json:"addr"`
-	DB            int               `json:"db"`
-	DefaultTTL    string            `json:"default_ttl"`
-	LookupTTLs    map[string]string `json:"lookup_ttls,omitempty"`
-	AuthCacheTTL  string            `json:"auth_cache_ttl"`
-	PingMs        *float64          `json:"ping_ms,omitempty"`
-	KeyCount      *int64            `json:"key_count,omitempty"`
-	MemoryUsed    string            `json:"memory_used,omitempty"`
-	AuthCacheSize *int              `json:"auth_cache_size,omitempty"`
+	Addr             string            `json:"addr"`
+	DB               int               `json:"db"`
+	DefaultTTL       string            `json:"default_ttl"`
+	LookupTTLs       map[string]string `json:"lookup_ttls,omitempty"`
+	NegativeCacheTTL string            `json:"negative_cache_ttl"`
+	AuthCacheTTL     string            `json:"auth_cache_ttl"`
+	PingMs           *float64          `json:"ping_ms,omitempty"`
+	KeyCount         *int64            `json:"key_count,omitempty"`
+	MemoryUsed       string            `json:"memory_used,omitempty"`
+	AuthCacheSize    *int              `json:"auth_cache_size,omitempty"`
 }
 
 func (h *Handler) Info(c *gin.Context) {
@@ -122,11 +123,12 @@ func (h *Handler) Info(c *gin.Context) {
 
 	// Cache — static config + live data
 	cs := cacheStats{
-		Addr:         s.Cache.Addr,
-		DB:           s.Cache.DB,
-		DefaultTTL:   s.Cache.DefaultTTL,
-		LookupTTLs:   s.Cache.LookupTTLs,
-		AuthCacheTTL: s.Cache.AuthCacheTTL,
+		Addr:             s.Cache.Addr,
+		DB:               s.Cache.DB,
+		DefaultTTL:       s.Cache.DefaultTTL,
+		LookupTTLs:       s.Cache.LookupTTLs,
+		NegativeCacheTTL: s.Cache.NegativeCacheTTL,
+		AuthCacheTTL:     s.Cache.AuthCacheTTL,
 	}
 
 	if h.redisCache != nil {

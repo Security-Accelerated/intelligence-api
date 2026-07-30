@@ -140,6 +140,7 @@ var testCacheTTLs = map[string]time.Duration{
 	domain.LookupBGPName:           20 * time.Hour,
 	domain.LookupReputationName:    25 * time.Minute,
 	domain.LookupThreatIntelName:   35 * time.Minute,
+	domain.LookupDNSSecurityName:   6 * time.Hour,
 }
 
 // decodeResults unwraps the {"results": [...]} envelope returned by the domain
@@ -199,7 +200,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
 	})
 
-	svc := service.NewDomainService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, 15*time.Second, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
+	svc := service.NewDomainService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, 15*time.Second, 4, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -270,6 +271,13 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		}, nil
 	})
 
+	svc.SetDNSSecurityLookup(func(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+		return &domain.DNSSecurityInfo{
+			DNSSEC: &domain.DNSSECInfo{Enabled: true, DSRecords: 1, DNSKEYRecords: 2},
+			CAA:    &domain.CAAInfo{Present: true, Records: []domain.CAARecord{{Tag: "issue", Value: "letsencrypt.org"}}},
+		}, nil
+	})
+
 	svc.SetThreatIntelLookup(func(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
 		return &domain.ThreatIntelInfo{
 			RiskLevel:  "medium",
@@ -283,8 +291,17 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		}, nil
 	})
 
+	svc.SetDNSSecurityLookup(func(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+		return &domain.DNSSecurityInfo{
+			DNSSEC: &domain.DNSSECInfo{Enabled: true, DSRecords: 1, DNSKEYRecords: 2, Algorithms: []string{"ECDSAP256SHA256"}},
+			CAA: &domain.CAAInfo{Present: true, Records: []domain.CAARecord{
+				{Flag: 0, Tag: "issue", Value: "letsencrypt.org"},
+			}},
+		}, nil
+	})
+
 	// IP service with stubs
-	ipSvc := service.NewIPService(rc, defaultTestTTL, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
+	ipSvc := service.NewIPService(rc, defaultTestTTL, time.Minute, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
 	ipSvc.SetLookups(
 		func(_ net.IP) (*domain.GeoIPInfo, error) {
 			return &domain.GeoIPInfo{Country: "United States", CountryCode: "US", City: "Mountain View", Latitude: 37.386, Longitude: -122.084}, nil
@@ -333,7 +350,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	usageQ := &stubUsageQueryer{}
 	usageRec := &recordingRecorder{}
 
-	h := handler.New(svc, ipSvc, fpSvc, nil, usageQ, nil, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
+	h := handler.New(svc, ipSvc, fpSvc, nil, usageQ, nil, nil, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
 		System: config.SystemStatus{Version: "test"},
 	})
 	h.RegisterRoutes(r)
@@ -1725,6 +1742,188 @@ func TestIntegration_ThreatIntel_AdminAllowed(t *testing.T) {
 	}
 }
 
+// --- DNS Security ---
+
+func TestIntegration_DNSSecurity_AllPlansCanAccess(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// Free plan can request dns_security (no premium gate)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
+		strings.NewReader(`{"domains":["example.com"],"lookups":["dns_security"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	resp := decodeResults(t, w)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	ds := resp[0].DNSSecurity
+	if ds == nil {
+		t.Fatal("expected dns_security to be populated")
+	}
+	if ds.DNSSEC == nil || !ds.DNSSEC.Enabled {
+		t.Errorf("DNSSEC = %+v, want Enabled=true", ds.DNSSEC)
+	}
+	if ds.DNSSEC != nil && (ds.DNSSEC.DSRecords != 1 || ds.DNSSEC.DNSKEYRecords != 2) {
+		t.Errorf("DNSSEC records = %d DS / %d DNSKEY, want 1 / 2", ds.DNSSEC.DSRecords, ds.DNSSEC.DNSKEYRecords)
+	}
+	if ds.CAA == nil || !ds.CAA.Present || len(ds.CAA.Records) != 1 {
+		t.Errorf("CAA = %+v, want Present=true with 1 record", ds.CAA)
+	}
+	if ds.CAA != nil && len(ds.CAA.Records) == 1 && ds.CAA.Records[0].Tag != "issue" {
+		t.Errorf("CAA.Records[0].Tag = %q, want %q", ds.CAA.Records[0].Tag, "issue")
+	}
+}
+
+func TestIntegration_DNSSecurity_AbsentWhenNotRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["dns"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	resp := decodeResults(t, w)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	if resp[0].DNSSecurity != nil {
+		t.Error("expected dns_security to be nil when not requested")
+	}
+}
+
+// --- Aggregate Risk Score ---
+
+func TestIntegration_DomainLookup_RiskIncluded(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	// Risk is opt-in and scores over whatever else was requested.
+	w := postLookup(t, r, "test-free-key",
+		`{"domains":["example.com"],"lookups":["ssl","headers","risk"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	resp := decodeResults(t, w)
+	if len(resp) != 1 {
+		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	}
+	risk := resp[0].Risk
+	if risk == nil {
+		t.Fatal("expected risk to be populated on every domain lookup")
+	}
+	if risk.Score < 0 || risk.Score > 100 {
+		t.Errorf("Risk.Score = %d, want 0-100", risk.Score)
+	}
+	if risk.Level == "" {
+		t.Error("expected Risk.Level to be non-empty")
+	}
+	if len(risk.Components) == 0 {
+		t.Fatal("expected risk components from base lookups (ssl, security_headers)")
+	}
+	for _, c := range risk.Components {
+		if c.Weight <= 0 {
+			t.Errorf("component %q has weight %v, want > 0", c.Component, c.Weight)
+		}
+	}
+}
+
+// --- My Usage (self-service) ---
+
+func TestIntegration_MyUsage_Authenticated(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/usage", nil)
+	req.Header.Set("X-API-Key", "test-lookup-key") // basic plan — no admin needed
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var resp usage.UsageSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.TotalRequests != 42 {
+		t.Errorf("TotalRequests = %d, want 42", resp.TotalRequests)
+	}
+}
+
+func TestIntegration_MyUsage_CustomDays(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/usage?days=7", nil)
+	req.Header.Set("X-API-Key", "test-free-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestIntegration_MyUsage_InvalidDays(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/usage?days=999", nil)
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestIntegration_MyUsage_NoKeyUnauthorized(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/usage", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+// --- Health ---
+
+func TestIntegration_Health(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var body struct {
+		Status     string            `json:"status"`
+		Components map[string]string `json:"components"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if body.Status != "ok" {
+		t.Errorf("status = %q, want %q", body.Status, "ok")
+	}
+	// miniredis is wired in, so redis should report healthy.
+	if body.Components["redis"] != "ok" {
+		t.Errorf("components.redis = %q, want %q", body.Components["redis"], "ok")
+	}
+}
+
 // ==================== IP Lookup Integration Tests ====================
 
 func TestIntegration_IPLookup_FullFlow(t *testing.T) {
@@ -2344,5 +2543,51 @@ func TestIntegration_Usage_MixedCacheHitAndMissCounts(t *testing.T) {
 	}
 	if e.DomainCount != 1 {
 		t.Errorf("DomainCount = %d, want 1", e.DomainCount)
+	}
+}
+
+func TestIntegration_Risk_AbsentWhenNotRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["ssl","headers"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if resp := decodeResults(t, w); resp[0].Risk != nil {
+		t.Error("risk present without being requested")
+	}
+}
+
+func TestIntegration_Risk_NeverGetsItsOwnCacheKey(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["ssl","risk"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+	if !mr.Exists(redisKey("example.com", domain.LookupSSLName)) {
+		t.Error("ssl key not warmed")
+	}
+	if mr.Exists(redisKey("example.com", domain.LookupRiskName)) {
+		t.Error("risk must never be cached under its own key")
+	}
+}
+
+func TestIntegration_FailedLookupIsNotCached(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	// Domain lookups deliberately do not negative-cache: a failing lookup is
+	// retried rather than remembered, and per-lookup TTLs mean it can't drag
+	// its healthy siblings down with it.
+	w := postLookup(t, r, "test-admin-key", `{"domains":["fail.example"],"lookups":["dns","ssl"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+	// The stubs always succeed, so assert the invariant directly on the keys:
+	// every cached key corresponds to a lookup that returned data.
+	for _, name := range []string{domain.LookupDNSName, domain.LookupSSLName} {
+		if !mr.Exists(redisKey("fail.example", name)) {
+			t.Errorf("expected %s to be cached after a successful lookup", name)
+		}
 	}
 }

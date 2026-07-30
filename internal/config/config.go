@@ -64,7 +64,13 @@ func init() {
 	config.SetDefault("cache.ttl.reputation", "30m")
 	config.SetDefault("cache.ttl.threat_intel", "30m")
 	config.SetDefault("cache.ttl.screenshot", "60m")
+	config.SetDefault("redis.negative_cache_ttl", "5m")
 	config.SetDefault("auth.cache_ttl", "5m")
+	config.SetDefault("auth.rotation_grace", "24h")
+	config.SetDefault("screenshot.max_concurrent", 4)
+	config.SetDefault("subdomain.http_timeout", "15s")
+	config.SetDefault("ct_logs.http_timeout", "15s")
+	config.SetDefault("billing.cleanup_interval", "10m")
 	config.SetDefault("auth.last_used_buffer_size", 256)
 	config.SetDefault("auth.last_used_flush_interval", "10s")
 	config.SetDefault("screenshot.timeout", "15s")
@@ -109,7 +115,7 @@ func init() {
 	config.SetDefault("server.shutdown_timeout", "15s")
 	config.SetDefault("server.body_limit", 1048576) // 1 MB
 	config.SetDefault("domain.lookup_timeout", "30s")
-	config.SetDefault("screenshot.max_png_bytes", 5242880) // 5 MB
+	config.SetDefault("screenshot.max_png_bytes", 5242880)      // 5 MB
 	config.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
 	config.SetDefault("alerts.max_concurrent_sends", 5)
 	config.SetDefault("alerts.max_window_size", 1000)

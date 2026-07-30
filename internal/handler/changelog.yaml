@@ -1,7 +1,7 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
-- version: v0.52.0
+- version: v0.54.0
   date: 2026-07-30
   changes:
     - text: "BREAKING: domain lookups now require a `lookups` array naming exactly which lookups to run. The per-feature booleans (screenshot, reputation, email_security, subdomains, ct_logs, bgp, fingerprint, threat_intel) are gone, and whois/dns/ssl/headers are no longer implicit — nothing runs unless you ask for it"
@@ -22,6 +22,12 @@
       audience: public
     - text: "New 400 responses for a missing/empty `lookups` array and for unrecognized lookup names; requesting a lookup outside your plan returns 403 naming that lookup"
       audience: public
+    - text: "`dns_security` (DNSSEC + CAA) is now selected like any other lookup rather than via its own flag"
+      audience: public
+    - text: "BREAKING: the aggregate `risk` score is now opt-in. Add \"risk\" to `lookups` to get it — it still costs no extra network call and scores over whatever else you requested"
+      audience: public
+    - text: "Domain lookups no longer cache failures. Per-lookup TTLs mean one flaky provider can no longer shorten every other lookup's cache lifetime, and a failing lookup is retried rather than remembered. IP lookups still negative-cache, since they are cached as a single document"
+      audience: public
     - text: "Cache keys are now flat `lookup:<domain>:<name>` entries; the composite sorted-suffix key builder has been removed"
       audience: internal
     - text: "service.Lookup() issues a single MGET for all requested lookups and spawns goroutines only for the misses; each goroutine writes its own result with that lookup's TTL"
@@ -35,6 +41,58 @@
     - text: "Admin usage endpoint reports cache hit rate from per-lookup counts and includes whois/dns/ssl/headers in feature_usage"
       audience: internal
     - text: "/v1/info cache section now reports default_ttl plus the resolved per-lookup TTL table"
+      audience: internal
+    - text: "Singleflight coalescing is now keyed per lookup per domain instead of per response, so requests asking for overlapping-but-different lookup sets share the overlap"
+      audience: internal
+    - text: "Coalesced callers each decode the shared payload into their own response, replacing the copy-via-JSON guard against shared-pointer mutation"
+      audience: internal
+    - text: "The global Chromium semaphore now lives inside the screenshot lookup runner"
+      audience: internal
+
+- version: v0.53.0
+  date: 2026-06-12
+  changes:
+    - text: "Improved reliability under load: heavy lookups are now bounded and isolated so one slow or failing lookup can't affect other requests"
+      audience: public
+    - text: "Panic recovery in all lookup goroutines — a panicking lookup degrades to a per-lookup error instead of killing the process"
+      audience: internal
+    - text: "Provisioned API key plaintext is blanked on retrieval and expired rows are swept on an interval (billing.cleanup_interval, default 10m)"
+      audience: internal
+    - text: "Global semaphore caps concurrent Chromium screenshots (screenshot.max_concurrent, default 4)"
+      audience: internal
+    - text: "crt.sh requests (subdomains, CT logs) now have end-to-end HTTP timeouts (subdomain.http_timeout / ct_logs.http_timeout, default 15s)"
+      audience: internal
+    - text: "safenet blocks TEST-NET, benchmarking, 240/4, 0/8, 192.0.0.0/24, and IPv6 documentation ranges; IPv4-mapped IPv6 unmapped before checks; migrated to netip.Addr"
+      audience: internal
+    - text: "Singleflight copy failures return an isolated error response instead of a shared pointer (CodeRabbit finding)"
+      audience: internal
+
+- version: v0.52.0
+  date: 2026-06-11
+  changes:
+    - text: "Every domain lookup now includes an aggregate risk score (0–100 with risk level and per-component breakdown) computed from all returned data"
+      audience: public
+    - text: "New dns_security option — DNSSEC deployment (DS/DNSKEY, signing algorithms) and CAA records, available on all plans"
+      audience: public
+    - text: "email_security now also checks MTA-STS (including the published policy), TLS-RPT, and BIMI"
+      audience: public
+    - text: "New GET /v1/usage — view your own request counts, cache hit rate, and feature usage"
+      audience: public
+    - text: "New POST /v1/keys/rotate — self-service API key rotation; old keys keep working for a 24h grace window"
+      audience: public
+    - text: "Machine-readable OpenAPI 3.1 spec now served at /docs/openapi.yaml"
+      audience: public
+    - text: "All responses now include Strict-Transport-Security, Referrer-Policy, and Content-Security-Policy headers"
+      audience: public
+    - text: "Failed lookups are now retried sooner: error responses cache for a short negative TTL instead of the full cache window"
+      audience: public
+    - text: "Removed all inline JavaScript from docs and checkout pages; scripts are now served as external files under a strict page CSP"
+      audience: internal
+    - text: "Concurrent identical lookups now coalesce via singleflight; lookups detached from client cancellation"
+      audience: internal
+    - text: "New unauthenticated /v1/health endpoint (Postgres/Redis/GeoIP state); uptime monitoring now hits it instead of /v1/hello"
+      audience: internal
+    - text: "Migrations 012 (api_keys.expires_at, multi-key rotation) and 013 (request_log.dns_security) — already applied to Neon"
       audience: internal
 
 - version: v0.51.0

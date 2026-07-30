@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"time"
 )
 
 const (
@@ -14,6 +15,10 @@ const (
 	// Subdomains use "%.domain" — CT logs use the bare domain for full cert metadata.
 	crtShCTURL = "https://crt.sh/?q=%s&output=json"
 )
+
+// CTLogsHTTPTimeout bounds the whole crt.sh request including body read.
+// Overridable via config (ct_logs.http_timeout), set in app bootstrap.
+var CTLogsHTTPTimeout = 15 * time.Second
 
 // crtShCTEntry is the structure returned by crt.sh JSON API with full cert details.
 type crtShCTEntry struct {
@@ -41,6 +46,10 @@ func LookupCTLogs(ctx context.Context, domainName string, maxEntries int) (*CTLo
 
 	client := &http.Client{
 		Transport: trustedTransport,
+		// End-to-end cap: the transport's dial timeout doesn't bound a
+		// stalled response body, which would otherwise hold the request
+		// until the whole lookup deadline.
+		Timeout: CTLogsHTTPTimeout,
 	}
 
 	resp, err := client.Do(req)

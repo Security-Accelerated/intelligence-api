@@ -47,6 +47,17 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 	}
 }
 
+// activeDNSServers holds the resolver addresses configured via InitResolver,
+// for lookups that need raw DNS access (e.g. DNSSEC/CAA via miekg/dns) rather
+// than net.Resolver.
+var activeDNSServers = DefaultDNSServers
+
+// ActiveDNSServers returns the resolver addresses configured via InitResolver
+// (the defaults when InitResolver hasn't been called).
+func ActiveDNSServers() []string {
+	return activeDNSServers
+}
+
 // InitResolver overrides net.DefaultResolver with an external resolver.
 // Call this AFTER database and Redis connections are established so that
 // platform-internal hostnames (postgres, redis) resolve via system DNS.
@@ -54,5 +65,6 @@ func InitResolver(servers []string, dialTimeout time.Duration) {
 	if len(servers) == 0 {
 		servers = DefaultDNSServers
 	}
+	activeDNSServers = servers
 	*net.DefaultResolver = *NewExternalResolver(servers, dialTimeout)
 }

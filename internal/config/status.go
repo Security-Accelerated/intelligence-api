@@ -65,30 +65,34 @@ type DatabaseConfig struct {
 }
 
 type CacheConfig struct {
-	Addr         string            `json:"addr"`
-	DB           int               `json:"db"`
-	DefaultTTL   string            `json:"default_ttl"`
-	LookupTTLs   map[string]string `json:"lookup_ttls"`
-	AuthCacheTTL string            `json:"auth_cache_ttl"`
+	Addr             string            `json:"addr"`
+	DB               int               `json:"db"`
+	DefaultTTL       string            `json:"default_ttl"`
+	LookupTTLs       map[string]string `json:"lookup_ttls"`
+	NegativeCacheTTL string            `json:"negative_cache_ttl"`
+	AuthCacheTTL     string            `json:"auth_cache_ttl"`
 }
 
 type LookupConfig struct {
-	Timeout              string `json:"timeout"`
-	ScreenshotTimeout    string `json:"screenshot_timeout"`
-	ScreenshotMaxPNG     int    `json:"screenshot_max_png_bytes"`
-	SubdomainMaxResults  int    `json:"subdomain_max_results"`
-	SubdomainMaxResponse int    `json:"subdomain_max_response_bytes"`
-	CTLogsMaxEntries     int    `json:"ct_logs_max_entries"`
-	RateLimitFree        int    `json:"rate_limit_free"`
-	RateLimitBasic       int    `json:"rate_limit_basic"`
-	RateLimitPro         int    `json:"rate_limit_pro"`
-	MaxDomainsFree       int    `json:"max_domains_free"`
-	MaxDomainsBasic      int    `json:"max_domains_basic"`
-	MaxDomainsPro        int    `json:"max_domains_pro"`
-	IPTimeout            string `json:"ip_timeout"`
-	MaxIPsFree           int    `json:"max_ips_free"`
-	MaxIPsBasic          int    `json:"max_ips_basic"`
-	MaxIPsPro            int    `json:"max_ips_pro"`
+	Timeout                 string `json:"timeout"`
+	ScreenshotTimeout       string `json:"screenshot_timeout"`
+	ScreenshotMaxPNG        int    `json:"screenshot_max_png_bytes"`
+	ScreenshotMaxConcurrent int    `json:"screenshot_max_concurrent"`
+	SubdomainMaxResults     int    `json:"subdomain_max_results"`
+	SubdomainMaxResponse    int    `json:"subdomain_max_response_bytes"`
+	SubdomainHTTPTimeout    string `json:"subdomain_http_timeout"`
+	CTLogsMaxEntries        int    `json:"ct_logs_max_entries"`
+	CTLogsHTTPTimeout       string `json:"ct_logs_http_timeout"`
+	RateLimitFree           int    `json:"rate_limit_free"`
+	RateLimitBasic          int    `json:"rate_limit_basic"`
+	RateLimitPro            int    `json:"rate_limit_pro"`
+	MaxDomainsFree          int    `json:"max_domains_free"`
+	MaxDomainsBasic         int    `json:"max_domains_basic"`
+	MaxDomainsPro           int    `json:"max_domains_pro"`
+	IPTimeout               string `json:"ip_timeout"`
+	MaxIPsFree              int    `json:"max_ips_free"`
+	MaxIPsBasic             int    `json:"max_ips_basic"`
+	MaxIPsPro               int    `json:"max_ips_pro"`
 }
 
 type ServicesStatus struct {
@@ -181,29 +185,33 @@ func NewStatusSnapshot(version string, lookupNames []string) *StatusSnapshot {
 			ConnMaxIdleTime: cfg.GetDuration("postgres.conn_max_idle_time").String(),
 		},
 		Cache: CacheConfig{
-			Addr:         cfg.GetString("redis.addr"),
-			DB:           cfg.GetInt("redis.db"),
-			DefaultTTL:   DefaultCacheTTL(cfg).String(),
-			LookupTTLs:   lookupTTLs,
-			AuthCacheTTL: cfg.GetDuration("auth.cache_ttl").String(),
+			Addr:             cfg.GetString("redis.addr"),
+			DB:               cfg.GetInt("redis.db"),
+			DefaultTTL:       DefaultCacheTTL(cfg).String(),
+			LookupTTLs:       lookupTTLs,
+			NegativeCacheTTL: cfg.GetDuration("redis.negative_cache_ttl").String(),
+			AuthCacheTTL:     cfg.GetDuration("auth.cache_ttl").String(),
 		},
 		Lookups: LookupConfig{
-			Timeout:              cfg.GetDuration("domain.lookup_timeout").String(),
-			ScreenshotTimeout:    cfg.GetDuration("screenshot.timeout").String(),
-			ScreenshotMaxPNG:     cfg.GetInt("screenshot.max_png_bytes"),
-			SubdomainMaxResults:  cfg.GetInt("subdomain.max_results"),
-			SubdomainMaxResponse: cfg.GetInt("subdomain.max_response_bytes"),
-			CTLogsMaxEntries:     cfg.GetInt("ct_logs.max_entries"),
-			RateLimitFree:        cfg.GetInt("rate_limit.free"),
-			RateLimitBasic:       cfg.GetInt("rate_limit.basic"),
-			RateLimitPro:         cfg.GetInt("rate_limit.pro"),
-			MaxDomainsFree:       cfg.GetInt("domain.max_domains.free"),
-			MaxDomainsBasic:      cfg.GetInt("domain.max_domains.basic"),
-			MaxDomainsPro:        cfg.GetInt("domain.max_domains.pro"),
-			IPTimeout:            cfg.GetDuration("ip.lookup_timeout").String(),
-			MaxIPsFree:           cfg.GetInt("ip.max_ips.free"),
-			MaxIPsBasic:          cfg.GetInt("ip.max_ips.basic"),
-			MaxIPsPro:            cfg.GetInt("ip.max_ips.pro"),
+			Timeout:                 cfg.GetDuration("domain.lookup_timeout").String(),
+			ScreenshotTimeout:       cfg.GetDuration("screenshot.timeout").String(),
+			ScreenshotMaxPNG:        cfg.GetInt("screenshot.max_png_bytes"),
+			ScreenshotMaxConcurrent: cfg.GetInt("screenshot.max_concurrent"),
+			SubdomainMaxResults:     cfg.GetInt("subdomain.max_results"),
+			SubdomainMaxResponse:    cfg.GetInt("subdomain.max_response_bytes"),
+			SubdomainHTTPTimeout:    cfg.GetDuration("subdomain.http_timeout").String(),
+			CTLogsMaxEntries:        cfg.GetInt("ct_logs.max_entries"),
+			CTLogsHTTPTimeout:       cfg.GetDuration("ct_logs.http_timeout").String(),
+			RateLimitFree:           cfg.GetInt("rate_limit.free"),
+			RateLimitBasic:          cfg.GetInt("rate_limit.basic"),
+			RateLimitPro:            cfg.GetInt("rate_limit.pro"),
+			MaxDomainsFree:          cfg.GetInt("domain.max_domains.free"),
+			MaxDomainsBasic:         cfg.GetInt("domain.max_domains.basic"),
+			MaxDomainsPro:           cfg.GetInt("domain.max_domains.pro"),
+			IPTimeout:               cfg.GetDuration("ip.lookup_timeout").String(),
+			MaxIPsFree:              cfg.GetInt("ip.max_ips.free"),
+			MaxIPsBasic:             cfg.GetInt("ip.max_ips.basic"),
+			MaxIPsPro:               cfg.GetInt("ip.max_ips.pro"),
 		},
 	}
 }

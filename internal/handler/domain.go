@@ -41,6 +41,8 @@ var lookupMinPlan = map[string]string{
 	domain.LookupCTLogsName:        planFree,
 	domain.LookupBGPName:           planFree,
 	domain.LookupFingerprintName:   planFree,
+	domain.LookupDNSSecurityName:   planFree,
+	domain.LookupRiskName:          planFree,
 	domain.LookupScreenshotName:    planPro,
 	domain.LookupReputationName:    planPro,
 	domain.LookupThreatIntelName:   planPro,

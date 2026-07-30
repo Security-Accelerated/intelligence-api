@@ -72,7 +72,7 @@ func newTestRouter(svc DomainLookupService) *gin.Engine {
 func newTestRouterWithPlan(svc DomainLookupService, plan string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_plan", plan)
@@ -321,7 +321,7 @@ func TestDomainLookup_EmptyDomainsArray(t *testing.T) {
 func TestDomainLookup_NoService(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) { c.Set("api_key_plan", planPro); c.Next() })
 
 	w := post(r, `{"domains":["example.com"],"lookups":["dns"]}`)
@@ -534,7 +534,7 @@ func testCfg(overrides map[string]any) *viper.Viper {
 func newTestRouterWithConfig(svc DomainLookupService, plan string, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(svc, nil, nil, nil, nil, nil, cfg, nil, nil, nil, nil)
+	h := New(svc, nil, nil, nil, nil, nil, nil, cfg, nil, nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_plan", plan)
 		c.Next()
@@ -595,7 +595,7 @@ func TestDomainLookup_MaxDomains_SubdomainCapTighter(t *testing.T) {
 func TestDomainLookup_SetsContextKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(&mockService{stats: domain.CacheStats{Hits: 3, Misses: 1}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(&mockService{stats: domain.CacheStats{Hits: 3, Misses: 1}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	var (
 		lookups            []string
@@ -655,7 +655,7 @@ func TestDomainLookup_SetsContextKeys(t *testing.T) {
 func TestDomainLookup_CacheStatsSummedAcrossDomains(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(&mockService{stats: domain.CacheStats{Hits: 1, Misses: 2}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(&mockService{stats: domain.CacheStats{Hits: 1, Misses: 2}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	var hits, misses int
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
@@ -678,7 +678,7 @@ func TestDomainLookup_CacheStatsSummedAcrossDomains(t *testing.T) {
 func TestDomainLookup_ErrorCountIncludesValidationErrors(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	var errCt int
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
@@ -704,7 +704,7 @@ func TestDomainLookup_OversizedBody_Returns413(t *testing.T) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16)
 		c.Next()
 	})
-	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) { c.Set("api_key_plan", planPro); c.Next() })
 
 	w := post(r, `{"domains":["example.com"],"lookups":["dns","ssl","whois","headers"]}`)
@@ -731,7 +731,7 @@ func TestDomainLookup_RecordsDemandOnRejectedRequests(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			r := gin.New()
-			h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 			var lookups []string
 			var domainCount int

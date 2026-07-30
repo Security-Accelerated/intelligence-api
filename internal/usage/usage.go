@@ -70,6 +70,8 @@ var LookupColumns = []string{
 	"bgp",
 	"fingerprint",
 	"threat_intel",
+	"dns_security",
+	"risk",
 }
 
 // NoopRecorder silently discards all entries.

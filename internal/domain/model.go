@@ -21,6 +21,8 @@ const (
 	LookupBGPName           = "bgp"
 	LookupFingerprintName   = "fingerprint"
 	LookupThreatIntelName   = "threat_intel"
+	LookupDNSSecurityName   = "dns_security"
+	LookupRiskName          = "risk"
 )
 
 // AllLookupNames lists every valid lookup name. Used to enumerate per-lookup TTL
@@ -38,6 +40,8 @@ var AllLookupNames = []string{
 	LookupBGPName,
 	LookupFingerprintName,
 	LookupThreatIntelName,
+	LookupDNSSecurityName,
+	LookupRiskName,
 }
 
 type DomainRequest struct {
@@ -80,6 +84,8 @@ type DomainResponse struct {
 	BGP           *BGPResult           `json:"bgp,omitempty"`
 	Fingerprint   *FingerprintResult   `json:"fingerprint,omitempty"`
 	ThreatIntel   *ThreatIntelResult   `json:"threat_intel,omitempty"`
+	DNSSecurity   *DNSSecurityResult   `json:"dns_security,omitempty"`
+	Risk          *RiskResult          `json:"risk,omitempty"`
 
 	Errors []LookupError `json:"errors,omitempty"`
 }
@@ -154,6 +160,60 @@ type FingerprintResult struct {
 type ThreatIntelResult struct {
 	CacheHit bool `json:"cache_hit"`
 	*ThreatIntelInfo
+}
+
+type DNSSecurityResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*DNSSecurityInfo
+}
+
+// RiskResult wraps the aggregate risk score. Like fingerprint, risk is pure
+// post-processing over other lookups rather than a fetch of its own, so it has
+// no cache entry; CacheHit is true only when every lookup it scored over came
+// from cache.
+type RiskResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*RiskSummary
+}
+
+// --- DNS Security: DNSSEC + CAA (optional field on domain lookup) ---
+
+type DNSSecurityInfo struct {
+	DNSSEC *DNSSECInfo `json:"dnssec,omitempty"`
+	CAA    *CAAInfo    `json:"caa,omitempty"`
+}
+
+type DNSSECInfo struct {
+	Enabled       bool     `json:"enabled"` // DS at parent and DNSKEY at zone both present
+	DSRecords     int      `json:"ds_records"`
+	DNSKEYRecords int      `json:"dnskey_records"`
+	Algorithms    []string `json:"algorithms,omitempty"` // signing algorithms from DS records
+}
+
+type CAAInfo struct {
+	Present bool        `json:"present"`
+	Records []CAARecord `json:"records,omitempty"`
+}
+
+type CAARecord struct {
+	Flag  uint8  `json:"flag"`
+	Tag   string `json:"tag"` // issue, issuewild, iodef
+	Value string `json:"value"`
+}
+
+// --- Aggregate Risk Score (computed post-processing, no extra lookups) ---
+
+type RiskSummary struct {
+	Score      int             `json:"score"`      // 0–100 weighted aggregate
+	Level      string          `json:"risk_level"` // none, low, medium, high, critical
+	Components []RiskComponent `json:"components"`
+}
+
+type RiskComponent struct {
+	Component string  `json:"component"`
+	Score     int     `json:"score"`
+	Weight    float64 `json:"weight"`
+	Detail    string  `json:"detail,omitempty"`
 }
 
 type ProviderResult struct {
@@ -244,9 +304,32 @@ type LookupError struct {
 // --- Email Security (optional field on domain lookup) ---
 
 type EmailSecurityInfo struct {
-	SPF   *SPFRecord   `json:"spf,omitempty"`
-	DMARC *DMARCRecord `json:"dmarc,omitempty"`
-	DKIM  []DKIMRecord `json:"dkim,omitempty"`
+	SPF    *SPFRecord    `json:"spf,omitempty"`
+	DMARC  *DMARCRecord  `json:"dmarc,omitempty"`
+	DKIM   []DKIMRecord  `json:"dkim,omitempty"`
+	MTASTS *MTASTSRecord `json:"mta_sts,omitempty"`
+	TLSRPT *TLSRPTRecord `json:"tls_rpt,omitempty"`
+	BIMI   *BIMIRecord   `json:"bimi,omitempty"`
+}
+
+type MTASTSRecord struct {
+	Raw           string   `json:"raw"`          // TXT record at _mta-sts.<domain>
+	ID            string   `json:"id,omitempty"` // id= tag
+	PolicyFetched bool     `json:"policy_fetched"`
+	Mode          string   `json:"mode,omitempty"` // enforce, testing, none (from policy file)
+	MaxAge        int      `json:"max_age,omitempty"`
+	MXPatterns    []string `json:"mx_patterns,omitempty"`
+}
+
+type TLSRPTRecord struct {
+	Raw string `json:"raw"` // TXT record at _smtp._tls.<domain>
+	RUA string `json:"rua,omitempty"`
+}
+
+type BIMIRecord struct {
+	Raw       string `json:"raw"`                 // TXT record at default._bimi.<domain>
+	Location  string `json:"location,omitempty"`  // l= logo SVG URL
+	Authority string `json:"authority,omitempty"` // a= verified mark certificate URL
 }
 
 type SPFRecord struct {
@@ -337,4 +420,22 @@ type ThreatIntelInfo struct {
 	Score      int                          `json:"score"`
 	Categories []string                     `json:"categories,omitempty"`
 	Providers  []*ThreatIntelProviderResult `json:"providers"`
+}
+
+// SSLInfo returns the SSL payload behind the response wrapper, or nil. Risk
+// scoring reads through the wrappers, so it needs the bare payload types.
+func (r *DomainResponse) SSLInfo() *SSLInfo {
+	if r.SSL == nil {
+		return nil
+	}
+	return r.SSL.SSLInfo
+}
+
+// EmailSecurityInfo returns the email security payload behind the response
+// wrapper, or nil.
+func (r *DomainResponse) EmailSecurityInfo() *EmailSecurityInfo {
+	if r.EmailSecurity == nil {
+		return nil
+	}
+	return r.EmailSecurity.EmailSecurityInfo
 }

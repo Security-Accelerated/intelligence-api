@@ -35,7 +35,7 @@ func (m *mockBillingService) GetProvisionedKey(_ context.Context, sessionID stri
 func newBillingTestRouter(billingSvc *mockBillingService, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, billingSvc, nil, nil, cfg, nil, nil, nil, nil)
+	h := New(nil, nil, nil, billingSvc, nil, nil, nil, cfg, nil, nil, nil, nil)
 	h.RegisterRoutes(r)
 	return r
 }
@@ -153,6 +153,37 @@ func TestCheckoutSuccess_NoStoreHeader(t *testing.T) {
 	cc := w.Header().Get("Cache-Control")
 	if cc != "no-store" {
 		t.Errorf("Cache-Control = %q, want %q", cc, "no-store")
+	}
+}
+
+func TestCheckoutSuccess_PageCSPHeader(t *testing.T) {
+	svc := &mockBillingService{provisionedKey: "testkey123"}
+	r := newBillingTestRouter(svc, nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	r.ServeHTTP(w, req)
+
+	if got := w.Header().Get("Content-Security-Policy"); got != htmlPageCSP {
+		t.Errorf("Content-Security-Policy = %q, want %q", got, htmlPageCSP)
+	}
+}
+
+func TestCheckoutSuccess_NoInlineScripts(t *testing.T) {
+	svc := &mockBillingService{provisionedKey: "testkey123"}
+	r := newBillingTestRouter(svc, nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	r.ServeHTTP(w, req)
+
+	body := w.Body.String()
+	if strings.Contains(body, "<script>") {
+		t.Error("checkout success page must not contain inline <script> blocks")
+	}
+	if strings.Contains(body, "onclick=") {
+		t.Error("checkout success page must not contain inline event handlers")
+	}
+	if !strings.Contains(body, `<script src="/docs/checkout_success.js" defer></script>`) {
+		t.Error("expected checkout success page to reference external checkout_success.js")
 	}
 }
 

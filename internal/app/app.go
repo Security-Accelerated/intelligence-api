@@ -133,6 +133,11 @@ func Run(logger *zap.Logger, version string) error {
 	// Services
 	defaultCacheTTL := config.DefaultCacheTTL(cfg)
 	cacheTTLs := config.CacheTTLs(cfg, domain.AllLookupNames)
+	// Domain lookups no longer negative-cache: per-lookup TTLs already stop one
+	// flaky provider from shortening everything else's lifetime, and a failing
+	// lookup is better retried than remembered. IP responses are still cached as
+	// a single document, so negative caching still earns its keep there.
+	negativeCacheTTL := cfg.GetDuration("redis.negative_cache_ttl")
 
 	fpService := service.NewFingerprintService(db)
 	fpSource := "database"
@@ -177,10 +182,17 @@ func Run(logger *zap.Logger, version string) error {
 	if v := cfg.GetInt64("subdomain.max_response_bytes"); v > 0 {
 		domain.MaxResponseBody = v
 	}
+	if v := cfg.GetDuration("subdomain.http_timeout"); v > 0 {
+		domain.SubdomainHTTPTimeout = v
+	}
+	if v := cfg.GetDuration("ct_logs.http_timeout"); v > 0 {
+		domain.CTLogsHTTPTimeout = v
+	}
 
-	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
+	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("screenshot.max_concurrent"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
+	billingRepo := billing.NewRepository(db)
 	var billingSvc billing.Service
 	stripeKey := cfg.GetString("stripe.secret_key")
 	webhookSecret := cfg.GetString("stripe.webhook_secret")
@@ -192,7 +204,6 @@ func Run(logger *zap.Logger, version string) error {
 		if p := cfg.GetString("stripe.prices.pro_monthly"); p != "" {
 			priceMap[p] = "pro"
 		}
-		billingRepo := billing.NewRepository(db)
 		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo, notifier)
 		status.Services.Billing = config.BillingStatus{
 			Enabled:              true,
@@ -204,6 +215,18 @@ func Run(logger *zap.Logger, version string) error {
 		billingSvc = &billing.NoopService{}
 		logger.Info("stripe billing disabled (no credentials configured)")
 	}
+
+	// Expired provisioned keys hold plaintext for never-retrieved sessions —
+	// sweep them on an interval regardless of whether Stripe is configured.
+	billing.StartProvisionedKeyCleanup(ctx, billingRepo, cfg.GetDuration("billing.cleanup_interval"))
+
+	// API key self-service rotation — depends only on the database, so it
+	// works whether or not Stripe billing is configured.
+	keyRotationSvc := billing.NewKeyRotationService(
+		billingRepo,
+		cfg.GetDuration("auth.rotation_grace"),
+		cachedRepo,
+	)
 
 	// Usage tracking
 	usageLogger := usage.NewUsageLogger(
@@ -267,10 +290,10 @@ func Run(logger *zap.Logger, version string) error {
 
 	// IP intelligence service
 	// IP responses are cached as a whole document, so they use the default TTL.
-	ipService := service.NewIPService(redisCache, defaultCacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
+	ipService := service.NewIPService(redisCache, defaultCacheTTL, negativeCacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
 
 	// HTTP
-	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, geoReader, cfg, redisCache, cachedRepo, db, status)
+	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, keyRotationSvc, geoReader, cfg, redisCache, cachedRepo, db, status)
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
 	serverCfg := httpapi.ServerConfig{
 		Port:            status.System.Port,

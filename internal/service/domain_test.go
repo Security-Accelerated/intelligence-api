@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -223,6 +225,17 @@ func failThreatIntel(_ context.Context, _ string) (*domain.ThreatIntelInfo, []do
 	}
 }
 
+func okDNSSecurity(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+	return &domain.DNSSecurityInfo{
+		DNSSEC: &domain.DNSSECInfo{Enabled: true, DSRecords: 1, DNSKEYRecords: 2},
+		CAA:    &domain.CAAInfo{Present: true, Records: []domain.CAARecord{{Tag: "issue", Value: "letsencrypt.org"}}},
+	}, nil
+}
+
+func failDNSSecurity(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+	return nil, errors.New("dns_security failed")
+}
+
 // testTTLs mirrors the shape of the configured per-lookup TTL table, with a
 // distinct value per lookup so tests can tell them apart. `screenshot` is
 // deliberately absent to exercise the default-TTL fallback.
@@ -237,6 +250,7 @@ var testTTLs = map[string]time.Duration{
 	domain.LookupBGPName:           20 * time.Hour,
 	domain.LookupReputationName:    25 * time.Minute,
 	domain.LookupThreatIntelName:   35 * time.Minute,
+	domain.LookupDNSSecurityName:   6 * time.Hour,
 }
 
 const testDefaultTTL = 5 * time.Minute
@@ -246,6 +260,7 @@ func newTestService(mc *mockCache) *DomainService {
 		cache:               mc,
 		defaultCacheTTL:     testDefaultTTL,
 		cacheTTLs:           testTTLs,
+		lookupTimeout:       30 * time.Second,
 		screenshotTimeout:   15 * time.Second,
 		subdomainMaxResults: 500,
 		ctLogsMaxEntries:    100,
@@ -261,6 +276,8 @@ func newTestService(mc *mockCache) *DomainService {
 		lookupCTLogs:        okCTLogs,
 		lookupBGP:           okBGP,
 		lookupThreatIntel:   okThreatIntel,
+		lookupDNSSecurity:   okDNSSecurity,
+		screenshotSem:       make(chan struct{}, 4),
 	}
 }
 
@@ -523,7 +540,8 @@ func TestLookup_CacheHitFlagNeverWrittenToCache(t *testing.T) {
 	svc.Lookup(context.Background(), "example.com", allOpts())
 
 	for _, name := range domain.AllLookupNames {
-		if name == domain.LookupFingerprintName {
+		// fingerprint and risk are derived post-processing, never cached.
+		if name == domain.LookupFingerprintName || name == domain.LookupRiskName {
 			continue
 		}
 		payload := mc.payload(key("example.com", name))
@@ -636,6 +654,8 @@ func TestLookup_EachLookupPopulatesItsField(t *testing.T) {
 		t.Errorf("stats = %+v, want %d misses", stats, len(domain.AllLookupNames))
 	}
 	checks := map[string]bool{
+		domain.LookupDNSSecurityName:   resp.DNSSecurity != nil,
+		domain.LookupRiskName:          resp.Risk != nil,
 		domain.LookupWhoisName:         resp.Whois != nil,
 		domain.LookupDNSName:           resp.DNS != nil,
 		domain.LookupSSLName:           resp.SSL != nil,
@@ -673,6 +693,7 @@ func TestLookup_EachOptionalLookupFailureIsReported(t *testing.T) {
 	svc.lookupBGP = failBGP
 	svc.lookupReputation = failReputation
 	svc.lookupThreatIntel = failThreatIntel
+	svc.lookupDNSSecurity = failDNSSecurity
 
 	resp, _ := svc.Lookup(context.Background(), "example.com", allOpts())
 
@@ -684,6 +705,7 @@ func TestLookup_EachOptionalLookupFailureIsReported(t *testing.T) {
 		domain.LookupWhoisName, domain.LookupDNSName, domain.LookupSSLName, domain.LookupHeadersName,
 		domain.LookupScreenshotName, domain.LookupEmailSecurityName, domain.LookupSubdomainsName,
 		domain.LookupCTLogsName, domain.LookupBGPName, domain.LookupReputationName, domain.LookupThreatIntelName,
+		domain.LookupDNSSecurityName,
 	} {
 		if !failed[name] {
 			t.Errorf("no error reported for %s", name)
@@ -1030,30 +1052,337 @@ func TestLookup_AppliesLookupTimeout(t *testing.T) {
 	}
 }
 
-func TestLookup_RespectsParentDeadline(t *testing.T) {
+func TestLookup_DetachedFromParentCancellation(t *testing.T) {
 	svc := newTestService(newMockCache())
-	svc.lookupTimeout = time.Hour
+	svc.lookupTimeout = 30 * time.Second
 
-	parent, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	var remaining time.Duration
+	var capturedDeadline time.Time
 	svc.lookupDNS = func(ctx context.Context, _ string) (*domain.DNSInfo, error) {
-		if dl, ok := ctx.Deadline(); ok {
-			remaining = time.Until(dl)
+		capturedDeadline, _ = ctx.Deadline()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
 		}
 		return okDNS(nil, "")
 	}
-	svc.Lookup(parent, "example.com", opts(domain.LookupDNSName))
-	if remaining <= 0 || remaining > time.Minute {
-		t.Errorf("expected the tighter parent deadline to survive, got %v remaining", remaining)
+
+	// The fetch is shared with coalesced callers via singleflight, so one
+	// caller's tight deadline must NOT propagate into it — only lookupTimeout
+	// applies. Otherwise a client that is about to give up could truncate a
+	// fetch other callers are waiting on.
+	tight := time.Now().Add(500 * time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), tight)
+	defer cancel()
+
+	resp, _ := svc.Lookup(ctx, "example.com", opts(domain.LookupDNSName))
+	if !capturedDeadline.After(tight.Add(time.Second)) {
+		t.Errorf("deadline = %v, want ~30s out (detached from the caller's tight deadline)", capturedDeadline)
+	}
+	if resp.DNS == nil {
+		t.Error("expected a dns result despite the tight parent deadline")
+	}
+}
+
+func TestLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
+	svc := newTestService(newMockCache())
+
+	var calls atomic.Int32
+	release := make(chan struct{})
+	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) {
+		calls.Add(1)
+		<-release // hold the fetch open so the others pile up behind it
+		return okDNS(nil, "")
+	}
+
+	const callers = 8
+	var wg sync.WaitGroup
+	results := make([]*domain.DomainResponse, callers)
+	for i := range callers {
+		wg.Go(func() {
+			results[i], _ = svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
+		})
+	}
+
+	// Give the callers time to converge on the same singleflight key.
+	for range 100 {
+		if calls.Load() > 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(release)
+	wg.Wait()
+
+	if got := calls.Load(); got != 1 {
+		t.Errorf("dns fetched %d times, want 1 (coalesced)", got)
+	}
+	for i, r := range results {
+		if r.DNS == nil {
+			t.Fatalf("caller %d got no dns result", i)
+		}
+	}
+	// Coalesced callers must not share a pointer — each decodes its own copy.
+	for i := 1; i < callers; i++ {
+		if results[i].DNS.DNSInfo == results[0].DNS.DNSInfo {
+			t.Errorf("caller %d shares a payload pointer with caller 0", i)
+		}
+	}
+}
+
+func TestLookup_SingleflightSharesAcrossDifferentLookupSets(t *testing.T) {
+	svc := newTestService(newMockCache())
+
+	var dnsCalls atomic.Int32
+	release := make(chan struct{})
+	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) {
+		dnsCalls.Add(1)
+		<-release
+		return okDNS(nil, "")
+	}
+
+	// Per-lookup keying means overlapping-but-different requests still share
+	// the overlap — something per-response keying could not do.
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupSSLName))
+	})
+	wg.Go(func() {
+		svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupWhoisName))
+	})
+
+	for range 100 {
+		if dnsCalls.Load() > 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(release)
+	wg.Wait()
+
+	if got := dnsCalls.Load(); got != 1 {
+		t.Errorf("dns fetched %d times, want 1 shared across both requests", got)
+	}
+}
+
+func TestLookup_PanickingLookupDegradesToError(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) {
+		panic("boom")
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupSSLName))
+
+	if resp.DNS != nil {
+		t.Error("expected dns to be absent after a panic")
+	}
+	if len(resp.Errors) != 1 || resp.Errors[0].Lookup != domain.LookupDNSName {
+		t.Fatalf("errors = %+v, want one dns error", resp.Errors)
+	}
+	if resp.Errors[0].Message != "internal error" {
+		t.Errorf("message = %q, want a sanitized %q", resp.Errors[0].Message, "internal error")
+	}
+	if mc.has(key("example.com", domain.LookupDNSName)) {
+		t.Error("a panicking lookup must not be cached")
+	}
+	// The sibling lookup is unaffected.
+	if resp.SSL == nil {
+		t.Error("expected ssl to succeed alongside the panicking lookup")
+	}
+}
+
+func TestLookup_ScreenshotSemaphoreCapsConcurrency(t *testing.T) {
+	svc := newTestService(newMockCache())
+	svc.screenshotSem = make(chan struct{}, 2)
+
+	var inFlight, peak atomic.Int32
+	release := make(chan struct{})
+	svc.lookupScreenshot = func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error) {
+		n := inFlight.Add(1)
+		for {
+			p := peak.Load()
+			if n <= p || peak.CompareAndSwap(p, n) {
+				break
+			}
+		}
+		<-release
+		inFlight.Add(-1)
+		return okScreenshot(nil, "", 0)
+	}
+
+	var wg sync.WaitGroup
+	for i := range 6 {
+		wg.Go(func() {
+			// Distinct domains so singleflight does not coalesce them.
+			svc.Lookup(context.Background(), fmt.Sprintf("example%d.com", i), opts(domain.LookupScreenshotName))
+		})
+	}
+	for range 200 {
+		if peak.Load() >= 2 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	close(release)
+	wg.Wait()
+
+	if got := peak.Load(); got > 2 {
+		t.Errorf("peak concurrent screenshots = %d, want <= 2", got)
+	}
+}
+
+func TestLookup_ScreenshotQueueTimeout(t *testing.T) {
+	svc := newTestService(newMockCache())
+	svc.screenshotSem = make(chan struct{}, 1)
+	svc.lookupTimeout = 50 * time.Millisecond
+
+	// Occupy the only Chromium slot, so the request must give up rather than
+	// queue behind it indefinitely.
+	svc.screenshotSem <- struct{}{}
+	defer func() { <-svc.screenshotSem }()
+
+	var called atomic.Int32
+	svc.lookupScreenshot = func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error) {
+		called.Add(1)
+		return okScreenshot(nil, "", 0)
+	}
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupScreenshotName))
+
+	if called.Load() != 0 {
+		t.Error("screenshot ran despite no free slot")
+	}
+	if resp.Screenshot != nil {
+		t.Error("expected no screenshot when the queue timed out")
+	}
+	if len(resp.Errors) == 0 {
+		t.Fatal("expected a queue-timeout error")
+	}
+	if !strings.Contains(resp.Errors[0].Message, "queue timed out") {
+		t.Errorf("error = %q, want a queue-timeout message", resp.Errors[0].Message)
+	}
+}
+
+// --- DNS security ---
+
+func TestLookup_DNSSecurity_OptIn(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSSecurityName))
+	if resp.DNSSecurity == nil {
+		t.Fatal("expected dns_security to be populated")
+	}
+	if resp.DNSSecurity.DNSSEC == nil || !resp.DNSSecurity.DNSSEC.Enabled {
+		t.Errorf("dnssec = %+v, want Enabled", resp.DNSSecurity.DNSSecurityInfo)
+	}
+	if !mc.has(key("example.com", domain.LookupDNSSecurityName)) {
+		t.Error("expected dns_security to be cached under its own key")
+	}
+	if got := mc.ttl(key("example.com", domain.LookupDNSSecurityName)); got != 6*time.Hour {
+		t.Errorf("dns_security TTL = %v, want 6h", got)
+	}
+}
+
+func TestLookup_DNSSecurity_NotRequested(t *testing.T) {
+	svc := newTestService(newMockCache())
+	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
+	if resp.DNSSecurity != nil {
+		t.Error("dns_security present without being requested")
+	}
+}
+
+func TestLookup_DNSSecurity_Failure(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	svc.SetDNSSecurityLookup(failDNSSecurity)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSSecurityName))
+	if resp.DNSSecurity != nil {
+		t.Error("expected dns_security to be absent after a failure")
+	}
+	if len(resp.Errors) != 1 || resp.Errors[0].Lookup != domain.LookupDNSSecurityName {
+		t.Errorf("errors = %+v, want one dns_security error", resp.Errors)
+	}
+	if mc.has(key("example.com", domain.LookupDNSSecurityName)) {
+		t.Error("failed lookup must not be cached")
+	}
+}
+
+// --- Risk ---
+
+func TestLookup_Risk_OptIn(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	resp, _ := svc.Lookup(context.Background(), "example.com",
+		opts(domain.LookupSSLName, domain.LookupHeadersName, domain.LookupRiskName))
+
+	if resp.Risk == nil {
+		t.Fatal("expected risk to be populated")
+	}
+	if len(resp.Risk.Components) == 0 {
+		t.Errorf("expected scored components, got %+v", resp.Risk.RiskSummary)
+	}
+	if resp.Risk.Level == "" {
+		t.Error("expected a risk level")
+	}
+	// Derived, so it never gets a cache entry of its own.
+	if mc.has(key("example.com", domain.LookupRiskName)) {
+		t.Error("risk must never be cached under its own key")
+	}
+}
+
+func TestLookup_Risk_NotRequested(t *testing.T) {
+	svc := newTestService(newMockCache())
+	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupSSLName))
+	if resp.Risk != nil {
+		t.Error("risk present without being requested")
+	}
+}
+
+func TestLookup_Risk_CacheHitReflectsItsInputs(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+	request := opts(domain.LookupSSLName, domain.LookupHeadersName, domain.LookupRiskName)
+
+	// Cold: inputs fetched live, so the score is not cache-derived.
+	first, _ := svc.Lookup(context.Background(), "example.com", request)
+	if first.Risk == nil || first.Risk.CacheHit {
+		t.Errorf("first request: risk cache_hit = true, want false")
+	}
+
+	// Warm: every scoring input now comes from cache.
+	second, _ := svc.Lookup(context.Background(), "example.com", request)
+	if second.Risk == nil || !second.Risk.CacheHit {
+		t.Errorf("second request: risk cache_hit = false, want true")
+	}
+}
+
+func TestLookup_Risk_PartiallyCachedInputsCountAsMiss(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestService(mc)
+
+	// Warm only ssl, then request ssl + headers + risk.
+	svc.Lookup(context.Background(), "example.com", opts(domain.LookupSSLName))
+	resp, _ := svc.Lookup(context.Background(), "example.com",
+		opts(domain.LookupSSLName, domain.LookupHeadersName, domain.LookupRiskName))
+
+	if resp.Risk == nil {
+		t.Fatal("expected risk to be populated")
+	}
+	if resp.Risk.CacheHit {
+		t.Error("risk cache_hit = true, want false when one input was fetched live")
 	}
 }
 
 // --- Setters and constructor ---
 
+// --- Setters and constructor ---
+
 func TestNewDomainService_Defaults(t *testing.T) {
-	svc := NewDomainService(newMockCache(), time.Minute, nil, 0, 0, 0, 0, nil, nil, nil)
+	svc := NewDomainService(newMockCache(), time.Minute, nil, 0, 0, 0, 0, 0, nil, nil, nil)
 	if svc.subdomainMaxResults != 500 {
 		t.Errorf("subdomainMaxResults = %d, want 500", svc.subdomainMaxResults)
 	}

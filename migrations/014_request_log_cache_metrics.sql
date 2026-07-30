@@ -11,3 +11,7 @@ ALTER TABLE request_log ADD COLUMN whois   BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE request_log ADD COLUMN dns     BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE request_log ADD COLUMN ssl     BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE request_log ADD COLUMN headers BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- The aggregate risk score is now an opt-in lookup, so it is tracked like the
+-- rest. dns_security already has a column from migration 013.
+ALTER TABLE request_log ADD COLUMN risk BOOLEAN NOT NULL DEFAULT FALSE;

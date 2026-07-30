@@ -109,10 +109,12 @@ check 301 "GET / (redirect to /docs)" "$HOST/"
 check 200 "GET /docs (landing page)" "$HOST/docs"
 check 200 "GET /docs/domain (domain docs)" "$HOST/docs/domain"
 check 200 "GET /docs/ip (IP docs)" "$HOST/docs/ip"
+check 200 "GET /docs/openapi.yaml (OpenAPI spec)" "$HOST/docs/openapi.yaml"
 
 echo ""
 echo "=== Health Check ==="
 get 200 "GET /hello (no auth)" "/v1/hello" ""
+get 200 "GET /health (no auth)" "/v1/health" ""
 
 echo ""
 echo "=== App Info ==="
@@ -161,6 +163,11 @@ post 200 "bgp (admin)"             "/v1/domain/lookup" "$ADMIN" '{"domains":["ex
 post 200 "bgp (basic)"             "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["bgp"]}'
 post 200 "fingerprint (admin)"     "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["fingerprint"]}'
 post 200 "fingerprint (basic)"     "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["fingerprint"]}'
+post 200 "dns_security (admin)"    "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["dns_security"]}'
+post 200 "dns_security (basic)"    "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["dns_security"]}'
+post 200 "dns_security (free)"     "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["dns_security"]}'
+post 200 "risk (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
+post 200 "risk (free)"             "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
 
 echo ""
 echo "=== Domain Lookup — Validation ==="
@@ -194,6 +201,18 @@ get  200 "GET usage (admin)"             "/v1/admin/usage" "$ADMIN"
 get  200 "GET usage ?days=7 (admin)"     "/v1/admin/usage?days=7" "$ADMIN"
 get  403 "GET usage (basic — not admin)" "/v1/admin/usage" "$BASIC"
 get  401 "GET usage (no key)"            "/v1/admin/usage" ""
+
+echo ""
+echo "=== My Usage ==="
+get  200 "GET /v1/usage (pro)"        "/v1/usage" "$PRO"
+get  200 "GET /v1/usage ?days=7 (basic)" "/v1/usage?days=7" "$BASIC"
+get  401 "GET /v1/usage (no key)"     "/v1/usage" ""
+
+echo ""
+echo "=== Key Rotation ==="
+# Positive rotation is deliberately NOT exercised here: rotating would mint a
+# new key and grace-expire the configured smoke keys, breaking later runs.
+post 401 "rotate key (no key)" "/v1/keys/rotate" "" ""
 
 echo ""
 echo "=== Billing ==="
@@ -237,6 +256,18 @@ check_json "lookup response has headers populated" \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
+
+check_json "lookup response has risk score" \
+    '.[0].risk.risk_level' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d "$DOMAIN"
+
+check_json "dns_security response has dnssec field" \
+    '.[0].dns_security.dnssec' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["example.com"],"dns_security":true}'
 
 echo ""
 echo "=== Multi-Domain Batch ==="

@@ -20,36 +20,69 @@ var commonDKIMSelectors = []string{
 	"dkim",      // Generic
 }
 
-// LookupEmailSecurity queries SPF, DMARC, and DKIM records for a domain.
-// It returns partial results when some sub-lookups fail and only returns
-// an error if all three produce nothing.
+// LookupEmailSecurity queries SPF, DMARC, DKIM, MTA-STS, TLS-RPT, and BIMI
+// records for a domain. All sub-lookups run concurrently. It returns partial
+// results when some sub-lookups fail and (nil, nil) when none produce data.
 func LookupEmailSecurity(ctx context.Context, domainName string) (*EmailSecurityInfo, error) {
 	resolver := net.DefaultResolver
 
 	info := &EmailSecurityInfo{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	var hasData bool
 
-	// SPF
-	if spf, err := lookupSPF(ctx, resolver, domainName); err == nil && spf != nil {
-		info.SPF = spf
+	setData := func(apply func()) {
+		mu.Lock()
+		defer mu.Unlock()
+		apply()
 		hasData = true
 	}
 
-	// DMARC
-	if dmarc, err := lookupDMARC(ctx, resolver, domainName); err == nil && dmarc != nil {
-		info.DMARC = dmarc
-		hasData = true
-	}
-
-	// DKIM — probe common selectors concurrently
-	records := lookupDKIM(ctx, resolver, domainName)
-	info.DKIM = records
-	for _, r := range records {
-		if r.Found {
-			hasData = true
-			break
+	wg.Go(func() {
+		if spf, err := lookupSPF(ctx, resolver, domainName); err == nil && spf != nil {
+			setData(func() { info.SPF = spf })
 		}
-	}
+	})
+
+	wg.Go(func() {
+		if dmarc, err := lookupDMARC(ctx, resolver, domainName); err == nil && dmarc != nil {
+			setData(func() { info.DMARC = dmarc })
+		}
+	})
+
+	wg.Go(func() {
+		// DKIM probes common selectors concurrently internally.
+		records := lookupDKIM(ctx, resolver, domainName)
+		mu.Lock()
+		defer mu.Unlock()
+		info.DKIM = records
+		for _, r := range records {
+			if r.Found {
+				hasData = true
+				break
+			}
+		}
+	})
+
+	wg.Go(func() {
+		if mtasts, err := lookupMTASTS(ctx, resolver, domainName); err == nil && mtasts != nil {
+			setData(func() { info.MTASTS = mtasts })
+		}
+	})
+
+	wg.Go(func() {
+		if tlsrpt, err := lookupTLSRPT(ctx, resolver, domainName); err == nil && tlsrpt != nil {
+			setData(func() { info.TLSRPT = tlsrpt })
+		}
+	})
+
+	wg.Go(func() {
+		if bimi, err := lookupBIMI(ctx, resolver, domainName); err == nil && bimi != nil {
+			setData(func() { info.BIMI = bimi })
+		}
+	})
+
+	wg.Wait()
 
 	if !hasData {
 		return nil, nil

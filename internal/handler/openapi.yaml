@@ -1,0 +1,1036 @@
+openapi: 3.1.0
+info:
+  title: Security Accelerated Intelligence API
+  description: |
+    Domain and IP intelligence REST API. Performs concurrent WHOIS, DNS, SSL,
+    HTTP header, screenshot, reputation, email security, subdomain, certificate
+    transparency, BGP/ASN, technology fingerprinting, DNS security, and threat
+    intelligence lookups for domains, plus GeoIP, ASN, reverse DNS, abuse
+    contact, and threat intelligence lookups for IP addresses.
+
+    Authentication is via the `X-API-Key` header. Rate limits are per API key:
+    free = 5 requests/min, basic = 30 requests/min, pro = 120 requests/min.
+    Requests over the limit receive HTTP 429.
+  version: "1.0"
+servers:
+  - url: https://api.securityaccelerated.com
+security:
+  - ApiKeyAuth: []
+paths:
+  /v1/domain/lookup:
+    post:
+      operationId: domainLookup
+      summary: Domain intelligence lookup
+      description: |
+        Performs concurrent intelligence lookups for one or more domains.
+        WHOIS, DNS, SSL, and HTTP header lookups always run; the remaining
+        lookups are opt-in via boolean request flags.
+
+        Per-plan limits on the number of domains per request: free = 1,
+        basic = 5, pro = 20.
+
+        The `screenshot`, `reputation`, and `threat_intel` flags require a
+        pro (or admin) plan; lower plans receive HTTP 403 when requesting them.
+
+        Individual lookup failures do not fail the request — they are reported
+        in each result's `errors` array alongside whatever data was gathered.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainRequest'
+      responses:
+        '200':
+          description: |
+            One result per requested domain, in request order. Domains that
+            fail validation (when the request contains more than one domain)
+            are returned with a `validation` entry in `errors`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DomainResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/ip/lookup:
+    post:
+      operationId: ipLookup
+      summary: IP intelligence lookup
+      description: |
+        Performs concurrent intelligence lookups for one or more IP addresses:
+        GeoIP, ASN, reverse DNS, and abuse contact always run; threat
+        intelligence is opt-in via the `threat_intel` flag.
+
+        Per-plan limits on the number of IPs per request: free = 1, basic = 5,
+        pro = 20.
+
+        The `threat_intel` flag requires a pro (or admin) plan; lower plans
+        receive HTTP 403 when requesting it.
+
+        Private, loopback, link-local, multicast, and other non-globally-routable
+        addresses are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IPRequest'
+      responses:
+        '200':
+          description: |
+            One result per requested IP, in request order. IPs that fail
+            validation (when the request contains more than one IP) are
+            returned with a `validation` entry in `errors`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IPResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/usage:
+    get:
+      operationId: myUsage
+      summary: Usage statistics for the authenticated customer
+      description: >
+        Returns aggregated usage statistics for the authenticated customer
+        over the requested period. Callers can only ever see their own usage.
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: Number of days of history to aggregate.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 30
+      responses:
+        '200':
+          description: Aggregated usage summary for the period.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/keys/rotate:
+    post:
+      operationId: rotateKey
+      summary: Rotate the API key
+      description: >
+        Issues a fresh API key for the authenticated customer. The new key is
+        returned exactly once and cannot be retrieved again. Previous keys
+        keep working until the grace window ends (`old_keys_expire_at`) so
+        deployed clients can be switched over without downtime.
+      responses:
+        '200':
+          description: The newly issued API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyRotationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key issued at signup or via key rotation.
+  responses:
+    BadRequest:
+      description: Validation error (malformed body, too many items, invalid parameter).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid API key, or inactive account.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The requested feature is not available on the current plan.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Rate limit exceeded for the API key's plan.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+      required:
+        - error
+    DomainRequest:
+      type: object
+      properties:
+        domains:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: >
+            Domain names to look up. Schemes, paths, ports, and userinfo are
+            stripped automatically. Raw IP addresses are not accepted.
+          examples:
+            - ["example.com"]
+        screenshot:
+          type: boolean
+          default: false
+          description: Capture a homepage screenshot (pro plan only).
+        reputation:
+          type: boolean
+          default: false
+          description: Query DNSBL reputation providers (pro plan only).
+        email_security:
+          type: boolean
+          default: false
+          description: Check SPF, DMARC, DKIM, MTA-STS, TLS-RPT, and BIMI records.
+        subdomains:
+          type: boolean
+          default: false
+          description: Enumerate known subdomains.
+        ct_logs:
+          type: boolean
+          default: false
+          description: Query certificate transparency logs.
+        bgp:
+          type: boolean
+          default: false
+          description: BGP/ASN enrichment for resolved IPs.
+        fingerprint:
+          type: boolean
+          default: false
+          description: Technology fingerprinting from HTTP response headers.
+        threat_intel:
+          type: boolean
+          default: false
+          description: Query threat intelligence providers (pro plan only).
+        dns_security:
+          type: boolean
+          default: false
+          description: Check DNSSEC and CAA records.
+      required:
+        - domains
+    DomainResponse:
+      type: object
+      properties:
+        domain:
+          type: string
+          description: The domain this result applies to.
+        cache_hit:
+          type: boolean
+          description: True when the result was served from cache.
+        whois:
+          $ref: '#/components/schemas/WhoisInfo'
+        dns:
+          $ref: '#/components/schemas/DNSInfo'
+        ssl:
+          $ref: '#/components/schemas/SSLInfo'
+        headers:
+          $ref: '#/components/schemas/HeadersInfo'
+        screenshot:
+          $ref: '#/components/schemas/ScreenshotInfo'
+        reputation:
+          $ref: '#/components/schemas/ReputationResult'
+        email_security:
+          $ref: '#/components/schemas/EmailSecurityInfo'
+        subdomains:
+          $ref: '#/components/schemas/SubdomainInfo'
+        ct_logs:
+          $ref: '#/components/schemas/CTLogsInfo'
+        bgp:
+          $ref: '#/components/schemas/BGPInfo'
+        fingerprint:
+          $ref: '#/components/schemas/FingerprintInfo'
+        threat_intel:
+          $ref: '#/components/schemas/ThreatIntelInfo'
+        dns_security:
+          $ref: '#/components/schemas/DNSSecurityInfo'
+        risk:
+          $ref: '#/components/schemas/RiskSummary'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/LookupError'
+          description: Per-lookup failures; the rest of the response is still populated.
+      required:
+        - domain
+        - cache_hit
+    WhoisInfo:
+      type: object
+      properties:
+        domain_name:
+          type: string
+        registrar:
+          type: string
+        created_date:
+          type: string
+        updated_date:
+          type: string
+        expiry_date:
+          type: string
+        status:
+          type: array
+          items:
+            type: string
+        name_servers:
+          type: array
+          items:
+            type: string
+        registrant:
+          $ref: '#/components/schemas/Contact'
+        admin:
+          $ref: '#/components/schemas/Contact'
+        tech:
+          $ref: '#/components/schemas/Contact'
+    Contact:
+      type: object
+      properties:
+        name:
+          type: string
+        organization:
+          type: string
+        country:
+          type: string
+        email:
+          type: string
+    DNSInfo:
+      type: object
+      properties:
+        a:
+          type: array
+          items:
+            type: string
+          description: IPv4 addresses.
+        aaaa:
+          type: array
+          items:
+            type: string
+          description: IPv6 addresses.
+        mx:
+          type: array
+          items:
+            $ref: '#/components/schemas/MXRecord'
+        ns:
+          type: array
+          items:
+            type: string
+        txt:
+          type: array
+          items:
+            type: string
+        cname:
+          type: string
+    MXRecord:
+      type: object
+      properties:
+        host:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 65535
+      required:
+        - host
+        - priority
+    SSLInfo:
+      type: object
+      properties:
+        subject:
+          type: string
+        issuer:
+          type: string
+        not_before:
+          type: string
+          format: date-time
+        not_after:
+          type: string
+          format: date-time
+        sans:
+          type: array
+          items:
+            type: string
+          description: Subject alternative names.
+        serial_number:
+          type: string
+        signature_algorithm:
+          type: string
+        expired:
+          type: boolean
+        days_until_expiry:
+          type: integer
+      required:
+        - expired
+        - days_until_expiry
+    HeadersInfo:
+      type: object
+      properties:
+        status_code:
+          type: integer
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: HTTP response headers.
+        security_headers:
+          $ref: '#/components/schemas/SecurityHeaders'
+      required:
+        - status_code
+    SecurityHeaders:
+      type: object
+      properties:
+        strict_transport_security:
+          type: string
+        content_security_policy:
+          type: string
+        x_frame_options:
+          type: string
+        x_content_type_options:
+          type: string
+        x_xss_protection:
+          type: string
+        referrer_policy:
+          type: string
+        permissions_policy:
+          type: string
+    ScreenshotInfo:
+      type: object
+      properties:
+        status_code:
+          type: integer
+        png:
+          type: string
+          description: Base64-encoded PNG of the homepage.
+      required:
+        - status_code
+    ReputationResult:
+      type: object
+      properties:
+        score:
+          type: integer
+        risk:
+          type: string
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderResult'
+      required:
+        - score
+        - risk
+        - providers
+    ProviderResult:
+      type: object
+      properties:
+        listed:
+          type: boolean
+        category:
+          type: string
+        provider:
+          type: string
+        return_code:
+          type: string
+      required:
+        - listed
+        - provider
+    EmailSecurityInfo:
+      type: object
+      properties:
+        spf:
+          $ref: '#/components/schemas/SPFRecord'
+        dmarc:
+          $ref: '#/components/schemas/DMARCRecord'
+        dkim:
+          type: array
+          items:
+            $ref: '#/components/schemas/DKIMRecord'
+        mta_sts:
+          $ref: '#/components/schemas/MTASTSRecord'
+        tls_rpt:
+          $ref: '#/components/schemas/TLSRPTRecord'
+        bimi:
+          $ref: '#/components/schemas/BIMIRecord'
+    SPFRecord:
+      type: object
+      properties:
+        raw:
+          type: string
+        version:
+          type: string
+        mechanisms:
+          type: array
+          items:
+            type: string
+        all:
+          type: string
+          description: 'Terminal qualifier: "+all", "-all", "~all", or "?all".'
+      required:
+        - raw
+    DMARCRecord:
+      type: object
+      properties:
+        raw:
+          type: string
+        version:
+          type: string
+        policy:
+          type: string
+          description: '"none", "quarantine", or "reject".'
+        pct:
+          type: integer
+        rua:
+          type: string
+        ruf:
+          type: string
+        sp:
+          type: string
+          description: Subdomain policy.
+      required:
+        - raw
+    DKIMRecord:
+      type: object
+      properties:
+        selector:
+          type: string
+        found:
+          type: boolean
+        raw:
+          type: string
+      required:
+        - selector
+        - found
+    MTASTSRecord:
+      type: object
+      properties:
+        raw:
+          type: string
+          description: TXT record at _mta-sts.<domain>.
+        id:
+          type: string
+          description: id= tag from the TXT record.
+        policy_fetched:
+          type: boolean
+          description: True when the MTA-STS policy file was fetched successfully.
+        mode:
+          type: string
+          description: 'Policy mode: enforce, testing, or none.'
+        max_age:
+          type: integer
+        mx_patterns:
+          type: array
+          items:
+            type: string
+      required:
+        - raw
+        - policy_fetched
+    TLSRPTRecord:
+      type: object
+      properties:
+        raw:
+          type: string
+          description: TXT record at _smtp._tls.<domain>.
+        rua:
+          type: string
+      required:
+        - raw
+    BIMIRecord:
+      type: object
+      properties:
+        raw:
+          type: string
+          description: TXT record at default._bimi.<domain>.
+        location:
+          type: string
+          description: l= logo SVG URL.
+        authority:
+          type: string
+          description: a= verified mark certificate URL.
+      required:
+        - raw
+    SubdomainInfo:
+      type: object
+      properties:
+        count:
+          type: integer
+        capped:
+          type: boolean
+          description: True when results were truncated at the maximum.
+        subdomains:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubdomainEntry'
+      required:
+        - count
+        - capped
+        - subdomains
+    SubdomainEntry:
+      type: object
+      properties:
+        domain:
+          type: string
+        source:
+          type: string
+      required:
+        - domain
+        - source
+    CTLogsInfo:
+      type: object
+      properties:
+        count:
+          type: integer
+        capped:
+          type: boolean
+          description: True when results were truncated at the maximum.
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CTLogEntry'
+      required:
+        - count
+        - capped
+        - entries
+    CTLogEntry:
+      type: object
+      properties:
+        logged_at:
+          type: string
+        not_before:
+          type: string
+        not_after:
+          type: string
+        issuer:
+          type: string
+        common_name:
+          type: string
+        name_value:
+          type: string
+        serial:
+          type: string
+      required:
+        - logged_at
+        - not_before
+        - not_after
+        - issuer
+        - common_name
+        - name_value
+        - serial
+    BGPInfo:
+      type: object
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/ASNRecord'
+      required:
+        - records
+    ASNRecord:
+      type: object
+      properties:
+        ip:
+          type: string
+        asn:
+          type: integer
+        prefix:
+          type: string
+        country:
+          type: string
+        registry:
+          type: string
+        description:
+          type: string
+      required:
+        - ip
+        - asn
+        - prefix
+        - country
+        - registry
+        - description
+    FingerprintInfo:
+      type: object
+      properties:
+        count:
+          type: integer
+        technologies:
+          type: array
+          items:
+            $ref: '#/components/schemas/FingerprintMatch'
+      required:
+        - count
+        - technologies
+    FingerprintMatch:
+      type: object
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        version:
+          type: string
+        confidence:
+          type: string
+      required:
+        - name
+        - category
+        - confidence
+    ThreatIntelInfo:
+      type: object
+      properties:
+        risk_level:
+          type: string
+          enum:
+            - none
+            - low
+            - medium
+            - high
+            - critical
+        score:
+          type: integer
+          description: Weighted aggregate score across providers (0-100).
+        categories:
+          type: array
+          items:
+            type: string
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreatIntelProviderResult'
+      required:
+        - risk_level
+        - score
+        - providers
+    ThreatIntelProviderResult:
+      type: object
+      properties:
+        provider:
+          type: string
+        detected:
+          type: boolean
+        score:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: string
+        details:
+          type: string
+      required:
+        - provider
+        - detected
+    DNSSecurityInfo:
+      type: object
+      properties:
+        dnssec:
+          $ref: '#/components/schemas/DNSSECInfo'
+        caa:
+          $ref: '#/components/schemas/CAAInfo'
+    DNSSECInfo:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: True when DS at the parent and DNSKEY at the zone are both present.
+        ds_records:
+          type: integer
+        dnskey_records:
+          type: integer
+        algorithms:
+          type: array
+          items:
+            type: string
+          description: Signing algorithms from DS records.
+      required:
+        - enabled
+        - ds_records
+        - dnskey_records
+    CAAInfo:
+      type: object
+      properties:
+        present:
+          type: boolean
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/CAARecord'
+      required:
+        - present
+    CAARecord:
+      type: object
+      properties:
+        flag:
+          type: integer
+          minimum: 0
+          maximum: 255
+        tag:
+          type: string
+          description: issue, issuewild, or iodef.
+        value:
+          type: string
+      required:
+        - flag
+        - tag
+        - value
+    RiskSummary:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Weighted aggregate risk score (0-100).
+        risk_level:
+          type: string
+          enum:
+            - none
+            - low
+            - medium
+            - high
+            - critical
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskComponent'
+      required:
+        - score
+        - risk_level
+        - components
+    RiskComponent:
+      type: object
+      properties:
+        component:
+          type: string
+        score:
+          type: integer
+        weight:
+          type: number
+        detail:
+          type: string
+      required:
+        - component
+        - score
+        - weight
+    LookupError:
+      type: object
+      properties:
+        lookup:
+          type: string
+          description: The lookup that failed (e.g. whois, dns, validation).
+        message:
+          type: string
+          description: Sanitized error summary.
+      required:
+        - lookup
+        - message
+    IPRequest:
+      type: object
+      properties:
+        ips:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: IPv4 or IPv6 addresses to look up. Must be globally routable.
+          examples:
+            - ["8.8.8.8"]
+        threat_intel:
+          type: boolean
+          default: false
+          description: Query threat intelligence providers (pro plan only).
+      required:
+        - ips
+    IPResponse:
+      type: object
+      properties:
+        ip:
+          type: string
+          description: The IP address this result applies to (canonical form).
+        cache_hit:
+          type: boolean
+          description: True when the result was served from cache.
+        geo:
+          $ref: '#/components/schemas/GeoIPInfo'
+        asn:
+          $ref: '#/components/schemas/IPASNInfo'
+        reverse_dns:
+          $ref: '#/components/schemas/ReverseDNSInfo'
+        abuse_contact:
+          $ref: '#/components/schemas/AbuseContactInfo'
+        threat_intel:
+          $ref: '#/components/schemas/ThreatIntelInfo'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/LookupError'
+          description: Per-lookup failures; the rest of the response is still populated.
+      required:
+        - ip
+        - cache_hit
+    GeoIPInfo:
+      type: object
+      properties:
+        continent:
+          type: string
+        continent_code:
+          type: string
+        country:
+          type: string
+        country_code:
+          type: string
+        region:
+          type: string
+        region_code:
+          type: string
+        city:
+          type: string
+        postal_code:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        timezone:
+          type: string
+        accuracy_radius:
+          type: integer
+          description: Accuracy radius in kilometers.
+    IPASNInfo:
+      type: object
+      properties:
+        asn:
+          type: integer
+        organization:
+          type: string
+        network:
+          type: string
+      required:
+        - asn
+    ReverseDNSInfo:
+      type: object
+      properties:
+        hostnames:
+          type: array
+          items:
+            type: string
+      required:
+        - hostnames
+    AbuseContactInfo:
+      type: object
+      properties:
+        network:
+          type: string
+        organization:
+          type: string
+        country:
+          type: string
+        email:
+          type: string
+    UsageSummary:
+      type: object
+      properties:
+        total_requests:
+          type: integer
+        cache_hits:
+          type: integer
+        cache_hit_rate:
+          type: number
+        avg_latency_ms:
+          type: number
+        total_domains:
+          type: integer
+        total_ips:
+          type: integer
+        status_codes:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Request counts keyed by HTTP status code.
+        feature_usage:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Request counts keyed by feature flag.
+        requests_by_path:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Request counts keyed by endpoint path.
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+      required:
+        - total_requests
+        - cache_hits
+        - cache_hit_rate
+        - avg_latency_ms
+        - total_domains
+        - total_ips
+        - status_codes
+        - feature_usage
+        - requests_by_path
+        - period_start
+        - period_end
+    KeyRotationResponse:
+      type: object
+      properties:
+        api_key:
+          type: string
+          description: The new API key. Shown exactly once — it cannot be retrieved again.
+        old_keys_expire_at:
+          type: string
+          format: date-time
+          description: When previous keys stop working.
+        message:
+          type: string
+      required:
+        - api_key
+        - old_keys_expire_at
+        - message

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 const crtShURL = "https://crt.sh/?q=%%.%s&output=json"
@@ -15,6 +16,10 @@ const crtShURL = "https://crt.sh/?q=%%.%s&output=json"
 // MaxResponseBody is the maximum response body size for crt.sh API calls,
 // shared by subdomain and CT log lookups. Set from config at startup.
 var MaxResponseBody int64 = 10 << 20 // 10 MB default
+
+// SubdomainHTTPTimeout bounds the whole crt.sh request including body read.
+// Overridable via config (subdomain.http_timeout), set in app bootstrap.
+var SubdomainHTTPTimeout = 15 * time.Second
 
 // crtShEntry is the minimal structure returned by the crt.sh JSON API.
 type crtShEntry struct {
@@ -35,6 +40,10 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 
 	client := &http.Client{
 		Transport: trustedTransport,
+		// End-to-end cap: the transport's dial timeout doesn't bound a
+		// stalled response body, which would otherwise hold the request
+		// until the whole lookup deadline.
+		Timeout: SubdomainHTTPTimeout,
 	}
 
 	resp, err := client.Do(req)

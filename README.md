@@ -7,7 +7,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header,
 
 ## Authentication
 
-Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/v1/hello`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
+Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
 
 ### Customer Plans
 
@@ -22,7 +22,7 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 
 The plan is stored in the `customers` table. New customers provisioned via Stripe checkout receive the plan they purchased (basic or pro).
 
-Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Requests naming a lookup outside the caller's plan (`screenshot`, `reputation`, `threat_intel` require pro) receive `403 Forbidden`. The `/v1/hello` health check requires no authentication.
+Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Requests naming a lookup outside the caller's plan (`screenshot`, `reputation`, `threat_intel` require pro) receive `403 Forbidden`. The `/v1/hello` and `/v1/health` checks require no authentication. Self-service endpoints (`GET /v1/usage`, `POST /v1/keys/rotate`) are available to every plan.
 
 ### Rate Limiting
 
@@ -49,12 +49,16 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/docs` | None | API documentation landing page |
 | GET | `/docs/domain` | None | Domain Intelligence API docs |
 | GET | `/docs/ip` | None | IP Intelligence API docs |
+| GET | `/docs/openapi.yaml` | None | OpenAPI specification for the public API |
 | GET | `/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
+| GET | `/v1/health` | None | Dependency health (Postgres, Redis, GeoIP) for ops monitoring |
 | POST | `/billing/webhook` | None (Stripe signature) | Stripe webhook endpoint |
 | GET | `/billing/success` | None (session_id token) | Post-checkout API key retrieval page |
 | GET | `/v1/info` | `admin` | Application and environment info |
 | POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |
 | POST | `/v1/ip/lookup` | All plans | IP intelligence lookup |
+| GET | `/v1/usage` | All plans | Caller's own usage statistics |
+| POST | `/v1/keys/rotate` | All plans | Rotate the caller's API key (old keys keep working for a grace window) |
 | POST | `/v1/admin/geoip/refresh` | `admin` | Download and reload MaxMind GeoIP databases |
 | POST | `/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 | GET | `/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
@@ -95,11 +99,17 @@ An array naming which lookups to run. It must be present and non-empty — there
 | `ct_logs` | All | Full certificate history from crt.sh with issuer, dates, serial, SANs. Deduplicated by serial, newest first, capped (default 100, via `ct_logs.max_entries`) |
 | `bgp` | All | BGP/ASN enrichment via Team Cymru — ASN, prefix, country, registry, organization |
 | `fingerprint` | All | Web technology detection (servers, frameworks, CDNs, CMS, languages) from HTTP headers. Makes no extra network calls — see [Caching](#caching) |
+| `dns_security` | All | DNSSEC deployment (DS + DNSKEY + algorithms) and CAA records |
+| `risk` | All | Weighted 0–100 aggregate risk score over the *other* lookups you requested. Makes no network call and is never cached — see [Caching](#caching) |
 | `screenshot` | **Pro** | Page screenshot as a base64 PNG |
 | `reputation` | **Pro** | DNS blocklist checks (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) with a computed risk score |
 | `threat_intel` | **Pro** | VirusTotal, URLhaus, and AlienVault OTX with a composite risk score |
 
 Requesting a lookup your plan does not include returns `403 Forbidden`. An unrecognized name returns `400 Bad Request` naming the offending entry.
+
+The optional `dns_security` field (default `false`) checks DNSSEC deployment (DS records at the parent, DNSKEY records at the zone, signing algorithms) and CAA records via raw DNS queries. Available to **all plans**.
+
+Every response also includes a computed `risk` object — a 0–100 weighted aggregate score with per-component breakdown derived from whichever lookups were performed (threat intel, reputation, SSL expiry, security headers, email security, domain age). No extra network calls are made; see the [`risk`](#risk--aggregate-risk-score-all-plans-automatic) section below.
 
 **Example:**
 ```sh
@@ -451,6 +461,32 @@ Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"emai
 | `found` | Whether a DKIM record exists at `<selector>._domainkey.<domain>` |
 | `raw` | The full DKIM TXT record (only when found) |
 
+**`mta_sts`** — SMTP MTA Strict Transport Security (RFC 8461). Only present when a record exists at `_mta-sts.<domain>`:
+
+| Field | What it means |
+|-------|---------------|
+| `raw` | The full MTA-STS TXT record |
+| `id` | The `id=` tag identifying the current policy version |
+| `policy_fetched` | Whether the policy file at `https://mta-sts.<domain>/.well-known/mta-sts.txt` was retrieved |
+| `mode` | Policy mode from the policy file: `enforce`, `testing`, or `none` |
+| `max_age` | How long (seconds) senders should cache the policy |
+| `mx_patterns` | MX host patterns the policy allows |
+
+**`tls_rpt`** — SMTP TLS Reporting (RFC 8460). Only present when a record exists at `_smtp._tls.<domain>`:
+
+| Field | What it means |
+|-------|---------------|
+| `raw` | The full TLS-RPT TXT record |
+| `rua` | Report destination (e.g. `mailto:tlsrpt@example.com`) |
+
+**`bimi`** — Brand Indicators for Message Identification. Only present when a record exists at `default._bimi.<domain>`:
+
+| Field | What it means |
+|-------|---------------|
+| `raw` | The full BIMI TXT record |
+| `location` | `l=` tag — URL of the brand logo SVG |
+| `authority` | `a=` tag — URL of the Verified Mark Certificate |
+
 ### `subdomains` — Subdomain Enumeration (All Plans)
 
 Enumerates subdomains via Certificate Transparency logs (crt.sh). Only present when `"subdomains"` is included in `lookups`.
@@ -533,6 +569,49 @@ Each technology entry contains:
 
 Rules are stored in PostgreSQL and loaded into memory at startup. The default ruleset covers ~90 technologies. Admin users can update rules via `POST /v1/admin/fingerprints` without redeploying.
 
+### `dns_security` — DNSSEC & CAA (All Plans)
+
+Checks DNSSEC deployment and CAA records via raw DNS queries against the configured resolvers. Only present when `"dns_security": true` is included in the request.
+
+**`dnssec`** — DNSSEC deployment status:
+
+| Field | What it means |
+|-------|---------------|
+| `enabled` | `true` when both a DS record at the parent and a DNSKEY record at the zone exist — the chain of trust is in place |
+| `ds_records` | Number of DS records at the parent zone |
+| `dnskey_records` | Number of DNSKEY records at the zone |
+| `algorithms` | Signing algorithms from the DS records (e.g. `ECDSAP256SHA256`, `RSASHA256`) |
+
+**`caa`** — Certification Authority Authorization records:
+
+| Field | What it means |
+|-------|---------------|
+| `present` | Whether any CAA records exist |
+| `records` | Array of CAA records (`flag`, `tag`, `value`) — `tag` is `issue`, `issuewild`, or `iodef` |
+
+Missing DNSSEC means DNS responses can be spoofed; missing CAA means any certificate authority can issue certificates for the domain.
+
+### `risk` — Aggregate Risk Score (All Plans)
+
+A computed 0–100 weighted risk score included in every domain lookup response — no request flag needed and no extra network calls made. The score is derived from whichever lookups are present in the response, renormalized over the weights of the components that have data.
+
+| Field | What it means |
+|-------|---------------|
+| `score` | Weighted aggregate risk score from 0 (clean) to 100 (maximum risk) |
+| `risk_level` | `none` (0), `low` (1–20), `medium` (21–50), `high` (51–80), `critical` (81–100) — same thresholds as `threat_intel` |
+| `components` | Per-component breakdown |
+
+Each component entry contains:
+
+| Field | What it means |
+|-------|---------------|
+| `component` | Which signal contributed (see weights below) |
+| `score` | This component's 0–100 score |
+| `weight` | The component's weight in the aggregate |
+| `detail` | Human-readable explanation (e.g. `certificate expires in 12 days`) |
+
+**Component weights:** `threat_intel` (0.35), `reputation` (0.25), `ssl` (0.10), `security_headers` (0.10), `email_security` (0.10), `domain_age` (0.10). Components only contribute when their underlying lookup ran and returned data — a base-lookup-only request scores from SSL, security headers, and domain age alone.
+
 ### POST /v1/ip/lookup
 
 **Request:**
@@ -562,6 +641,42 @@ Rules are stored in PostgreSQL and loaded into memory at startup. The default ru
 | `errors` | Per-lookup errors (partial failures still return other fields) |
 
 Private, loopback, link-local, multicast, unspecified, and CGNAT IPs are rejected at input validation.
+
+### `GET /v1/usage` — My Usage (All Plans)
+
+Returns aggregated usage statistics for the authenticated customer. The customer filter always comes from the auth context — callers can only ever see their own usage. The response shape matches `GET /v1/admin/usage` below.
+
+**Query parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `days` | `30` | Number of days to look back (1–365) |
+
+### `POST /v1/keys/rotate` — API Key Rotation (All Plans)
+
+Rotates the caller's API key. The new key is returned exactly once; previous keys keep working until the grace window ends (configurable via `auth.rotation_grace`, default 24h) so deployed clients can be switched over without downtime. No request body.
+
+**Response:**
+```json
+{
+  "api_key": "new-64-char-hex-key",
+  "old_keys_expire_at": "2026-06-12T15:04:05Z",
+  "message": "store this key now — it cannot be retrieved again; previous keys stop working at old_keys_expire_at"
+}
+```
+
+### `GET /v1/health` — Dependency Health (No Auth)
+
+Internal/ops endpoint for load balancers and uptime monitoring. Returns component states only — never addresses, versions, or other internals. Postgres or Redis being down returns `503` with `status: "degraded"`; GeoIP databases are optional, so their state is reported but does not degrade overall health.
+
+**Response:**
+```json
+{ "status": "ok", "components": { "postgres": "ok", "redis": "ok", "geoip": "ok" } }
+```
+
+### `GET /docs/openapi.yaml` — OpenAPI Specification (No Auth)
+
+Serves the OpenAPI spec for the public API. Useful for generating clients or importing into tools like Postman and Insomnia.
 
 ### `GET /v1/admin/usage` — Usage Statistics (Admin Only)
 
@@ -652,15 +767,20 @@ Every lookup has its own TTL, reflecting how fast that data actually changes. An
 | `reputation` | 30m |
 | `threat_intel` | 30m |
 | `screenshot` | 60m |
+| `dns_security` | 4h |
 | *(anything else)* | `cache.default_ttl` (60m) |
 
 Override individually with env vars — `CACHE_TTL_WHOIS=48h`, `CACHE_DEFAULT_TTL=30m` — or in the config file under `cache.ttl.*`.
 
 Expiry is absolute: an expired entry is gone and the lookup is refetched. There is no stale-serving.
 
-### `fingerprint` has no cache key
+### `fingerprint` and `risk` have no cache keys
 
-Technology fingerprinting is pure deterministic computation over the `headers` payload, so caching `headers` already caches fingerprint. Consequences:
+Both are pure computation over data already fetched for other lookups, so they make no network call and get no Redis entry of their own.
+
+`risk` scores whichever of `threat_intel`, `reputation`, `ssl`, `headers`, `email_security` and `whois` you also requested, renormalizing over whatever is present. Its `cache_hit` is `true` only when *every* scoring input came from cache.
+
+Technology fingerprinting is deterministic computation over the `headers` payload, so caching `headers` already caches fingerprint. Consequences:
 
 - Requesting `headers` and `fingerprint` together fetches headers **exactly once**.
 - Requesting `fingerprint` alone fetches and caches headers internally, but the `headers` object is not included in the response.
@@ -723,13 +843,17 @@ Config values:
 | `cache.ttl.<lookup>` | see [Caching](#ttls) | Per-lookup cache TTL, e.g. `cache.ttl.whois: 24h` (env: `CACHE_TTL_WHOIS`) |
 | `gin.mode` | `""` | Gin framework mode (`debug`, `release`, `test`) |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
+| `auth.rotation_grace` | `24h` | How long old keys keep working after `POST /v1/keys/rotate` |
 | `auth.last_used_buffer_size` | `256` | Buffer size for batched last_used_at updates |
 | `auth.last_used_flush_interval` | `10s` | How often last_used_at updates are flushed to PostgreSQL |
 | `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
 | `screenshot.max_png_bytes` | `5242880` | Maximum screenshot PNG size in bytes (5 MB) |
+| `screenshot.max_concurrent` | `4` | Global cap on concurrent Chromium screenshot processes |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
 | `subdomain.max_response_bytes` | `10485760` | Maximum crt.sh response body size in bytes (10 MB) |
+| `subdomain.http_timeout` | `15s` | End-to-end timeout for the crt.sh subdomain request |
 | `ct_logs.max_entries` | `100` | Maximum number of CT log entries returned per domain |
+| `ct_logs.http_timeout` | `15s` | End-to-end timeout for the crt.sh CT logs request |
 | `threat_intel.virustotal_api_key` | `""` | VirusTotal API key (enables VirusTotal provider) |
 | `threat_intel.alienvault_api_key` | `""` | AlienVault OTX API key (enables AlienVault provider) |
 | `dns.servers` | `[]` | External DNS resolvers (default: Google, Cloudflare, OpenDNS) |
@@ -779,6 +903,7 @@ Config values:
 | `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
 | `stripe.portal_link` | `""` | Stripe Customer Portal URL for subscription management |
 | `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
+| `billing.cleanup_interval` | `10m` | Sweep cadence for expired provisioned keys |
 | `usage.buffer_size` | `256` | Channel buffer size for async usage logging |
 | `usage.flush_interval` | `5s` | How often buffered usage entries are flushed to PostgreSQL |
 
@@ -1019,7 +1144,7 @@ Customers can manage their subscription (cancel, update payment method) via the 
 
 ### Stale key cleanup
 
-`api_keys.last_used_at` is updated on each auth cache-miss lookup (fire-and-forget goroutine). Keys unused for 12 months (configurable via `billing.stale_key_days`) can be deactivated via the billing repository's `DeactivateStaleKeys` method.
+`api_keys.last_used_at` is updated on auth cache-miss lookups, batched through `auth.LastUsedBatcher` (a buffered channel flushed to PostgreSQL on an interval — see `auth.last_used_buffer_size` and `auth.last_used_flush_interval`). Keys unused for 12 months (configurable via `billing.stale_key_days`) can be deactivated via the billing repository's `DeactivateStaleKeys` method.
 
 ### Configuration
 

@@ -15,13 +15,16 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 )
 
 type IPService struct {
-	cache         cache.Cache
-	cacheTTL      time.Duration
-	lookupTimeout time.Duration
-	alerter       notifications.ErrorRecorder
+	cache            cache.Cache
+	cacheTTL         time.Duration
+	negativeCacheTTL time.Duration
+	sf               singleflight.Group
+	lookupTimeout    time.Duration
+	alerter          notifications.ErrorRecorder
 
 	lookupGeo          func(ip net.IP) (*domain.GeoIPInfo, error)
 	lookupASN          func(ip net.IP) (*domain.IPASNInfo, error)
@@ -32,13 +35,16 @@ type IPService struct {
 
 func NewIPService(
 	c cache.Cache,
-	cacheTTL, lookupTimeout time.Duration,
+	cacheTTL, negativeCacheTTL, lookupTimeout time.Duration,
 	geoReader *domain.GeoIPReader,
 	alerter notifications.ErrorRecorder,
 	tiProviders []domain.IPThreatIntelProvider,
 ) *IPService {
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
+	}
+	if negativeCacheTTL <= 0 {
+		negativeCacheTTL = cacheTTL
 	}
 	if alerter == nil {
 		alerter = &notifications.NoopRecorder{}
@@ -47,6 +53,7 @@ func NewIPService(
 	svc := &IPService{
 		cache:              c,
 		cacheTTL:           cacheTTL,
+		negativeCacheTTL:   negativeCacheTTL,
 		lookupTimeout:      lookupTimeout,
 		alerter:            alerter,
 		lookupReverseDNS:   domain.LookupReverseDNS,
@@ -99,10 +106,39 @@ func buildIPCacheKey(ip string, opts domain.IPLookupOptions) string {
 	return key + ":" + strings.Join(suffixes, "+")
 }
 
-// Lookup performs concurrent IP intelligence lookups with caching.
+// ipLookupResult carries a completed lookup through singleflight to all
+// coalesced callers.
+type ipLookupResult struct {
+	resp     *domain.IPResponse
+	cacheHit bool
+}
+
+// Lookup performs concurrent IP intelligence lookups with caching. Concurrent
+// requests for the same cache key are coalesced into a single fan-out.
 func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupOptions) (*domain.IPResponse, bool) {
 	cacheKey := buildIPCacheKey(ip, opts)
 
+	v, _, shared := s.sf.Do(cacheKey, func() (any, error) {
+		return s.doLookup(context.WithoutCancel(ctx), ip, cacheKey, opts), nil
+	})
+	res := v.(*ipLookupResult)
+	if shared {
+		copied := copyViaJSON(res.resp)
+		if copied == nil {
+			// Never hand a coalesced caller the shared pointer — concurrent
+			// mutation (e.g. the handler setting CacheHit) would race.
+			logging.Logger().Error("singleflight response copy failed", zap.String("ip", ip))
+			return &domain.IPResponse{
+				IP:     ip,
+				Errors: []domain.LookupError{{Lookup: "internal", Message: "internal error, please retry"}},
+			}, false
+		}
+		return copied, res.cacheHit
+	}
+	return res.resp, res.cacheHit
+}
+
+func (s *IPService) doLookup(ctx context.Context, ip, cacheKey string, opts domain.IPLookupOptions) *ipLookupResult {
 	if data, err := s.cache.Get(ctx, cacheKey); err != nil {
 		logging.Logger().Warn("cache get failed", zap.String("ip", ip), zap.Error(err))
 	} else if data != nil {
@@ -110,15 +146,12 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 		if err := json.Unmarshal(data, &cached); err != nil {
 			logging.Logger().Warn("cache unmarshal failed", zap.String("ip", ip), zap.Error(err))
 		} else {
-			return &cached, true
+			return &ipLookupResult{resp: &cached, cacheHit: true}
 		}
 	}
 
-	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > s.lookupTimeout {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.lookupTimeout)
-		defer cancel()
-	}
+	ctx, cancel := context.WithTimeout(ctx, s.lookupTimeout)
+	defer cancel()
 
 	resp := &domain.IPResponse{IP: ip}
 	parsedIP := net.ParseIP(ip)
@@ -130,7 +163,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	// GeoIP (local DB, no network call)
 	if s.lookupGeo != nil && parsedIP != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "geo", ip, func() {
 			result, err := s.lookupGeo(parsedIP)
 			mu.Lock()
 			defer mu.Unlock()
@@ -151,7 +184,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	// ASN (local DB, no network call)
 	if s.lookupASN != nil && parsedIP != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "asn", ip, func() {
 			result, err := s.lookupASN(parsedIP)
 			mu.Lock()
 			defer mu.Unlock()
@@ -172,7 +205,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	// Reverse DNS
 	if s.lookupReverseDNS != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "reverse_dns", ip, func() {
 			result, err := s.lookupReverseDNS(ctx, ip)
 			mu.Lock()
 			defer mu.Unlock()
@@ -188,7 +221,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	// Abuse contact (RDAP)
 	if s.lookupAbuseContact != nil {
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "abuse_contact", ip, func() {
 			result, err := s.lookupAbuseContact(ctx, ip)
 			mu.Lock()
 			defer mu.Unlock()
@@ -205,7 +238,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 	// Threat intel (optional, pro-only)
 	if opts.ThreatIntel && s.lookupThreatIntel != nil {
 		tiLookup := s.lookupThreatIntel
-		wg.Go(func() {
+		goLookup(&wg, &mu, &resp.Errors, s.alerter, "threat_intel", ip, func() {
 			result, errs := tiLookup(ctx, ip)
 			mu.Lock()
 			defer mu.Unlock()
@@ -221,16 +254,21 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 
 	// Cache the result unless the GeoIP database wasn't loaded (pre-bootstrap).
 	// Only the specific ErrDBNotLoaded case skips caching — transient geo lookup
-	// failures (e.g., corrupt record) are still cached normally.
+	// failures (e.g., corrupt record) are still cached normally. Responses with
+	// failures get a shorter TTL so transient errors age out quickly.
 	if !geoDBMissing {
+		ttl := s.cacheTTL
+		if len(resp.Errors) > 0 {
+			ttl = s.negativeCacheTTL
+		}
 		if data, err := json.Marshal(resp); err != nil {
 			logger.Warn("cache marshal failed", zap.String("ip", ip), zap.Error(err))
 		} else {
-			if err := s.cache.Set(ctx, cacheKey, data, s.cacheTTL); err != nil {
+			if err := s.cache.Set(ctx, cacheKey, data, ttl); err != nil {
 				logger.Warn("cache set failed", zap.String("ip", ip), zap.Error(err))
 			}
 		}
 	}
 
-	return resp, false
+	return &ipLookupResult{resp: resp}
 }
