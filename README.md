@@ -15,14 +15,14 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 
 | Plan | Capabilities |
 |------|-------------|
-| `free` | Standard domain lookups (WHOIS, DNS, SSL, headers) + email security + subdomains + CT logs + BGP/ASN + fingerprinting. 1 domain per request. |
+| `free` | All lookups except `screenshot`, `reputation`, and `threat_intel`. 1 domain per request. |
 | `basic` | All free capabilities, up to 5 domains per request |
 | `pro` | All basic capabilities + page screenshots + reputation checks + threat intelligence, up to 20 domains per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
 The plan is stored in the `customers` table. New customers provisioned via Stripe checkout receive the plan they purchased (basic or pro).
 
-Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Basic plan requests for pro-only options (screenshot, reputation, threat_intel) receive `403 Forbidden`. The `/v1/hello` health check requires no authentication.
+Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Requests naming a lookup outside the caller's plan (`screenshot`, `reputation`, `threat_intel` require pro) receive `403 Forbidden`. The `/v1/hello` health check requires no authentication.
 
 ### Rate Limiting
 
@@ -68,157 +68,219 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 ```json
 {
   "domains": ["example.com", "example.org"],
-  "screenshot": true,
-  "reputation": true,
-  "threat_intel": true,
-  "email_security": true,
-  "subdomains": true,
-  "ct_logs": true,
-  "bgp": true,
-  "fingerprint": true
+  "lookups": ["whois", "dns", "ssl", "headers"]
 }
 ```
 
-The `domains` field accepts an array of domain names. You can pass bare domains or full URLs with any scheme — the API extracts the hostname by stripping scheme prefixes, userinfo, ports, paths, query strings, and fragments, then lowercases the result (e.g. `https://Example.COM/path?q=1` → `example.com`). The `domain` field in the response shows exactly what was looked up. Domains are looked up concurrently.
+Both fields are **required**.
 
-The optional `screenshot` field (default `false`) requests a page screenshot for each domain. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
+#### `domains`
 
-The optional `reputation` field (default `false`) checks each domain against multiple DNS-based blocklists concurrently (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) and returns a computed risk score. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
+An array of domain names. You can pass bare domains or full URLs with any scheme — the API extracts the hostname by stripping scheme prefixes, userinfo, ports, paths, query strings, and fragments, then trims whitespace and lowercases the result (e.g. `  HTTPS://Example.COM/path?q=1  ` → `example.com`). DNS names are case-insensitive, so lowercasing is always safe.
 
-The optional `threat_intel` field (default `false`) queries multiple threat intelligence providers (VirusTotal, URLhaus, AlienVault OTX) to assess whether a domain is associated with malicious activity. Returns a composite risk score, risk level, threat categories, and per-provider results. This requires a **pro** or **admin** plan — basic plan customers receive `403 Forbidden`.
+Entries that normalize to the same domain are **deduplicated** — they are looked up once and returned as a single result. Plan domain limits count the entries you submitted, not the unique domains they collapse into. Domains are looked up concurrently.
 
-The optional `email_security` field (default `false`) checks SPF, DMARC, and DKIM records for each domain via DNS lookups. Available to **all plans**. DKIM probes 8 common selectors (`google`, `default`, `selector1`, `selector2`, `k1`, `s1`, `mail`, `dkim`).
+#### `lookups`
 
-The optional `subdomains` field (default `false`) enumerates subdomains via Certificate Transparency logs (crt.sh). Available to **all plans**. Results are deduplicated, wildcards are filtered, and a hard cap (default 500, configurable via `subdomain.max_results`) prevents unbounded results.
+An array naming which lookups to run. It must be present and non-empty — there is no default set and no `"all"` value. Names are trimmed, lowercased, and deduplicated before validation, so `[" SSL ", "ssl", "SSL"]` is simply `["ssl"]`.
 
-The optional `ct_logs` field (default `false`) queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Returns full certificate metadata (issuer, dates, serial number, SANs). Available to **all plans**. Results are deduplicated by serial number, sorted newest-first, and capped (default 100, configurable via `ct_logs.max_entries`).
+| Lookup | Plan | Description |
+|--------|------|-------------|
+| `whois` | All | Registration, registrar, expiry, nameservers, contacts |
+| `dns` | All | A, AAAA, MX, NS, TXT, CNAME records |
+| `ssl` | All | TLS certificate subject, issuer, validity, SANs |
+| `headers` | All | HTTP response headers and security header analysis |
+| `email_security` | All | SPF, DMARC, and DKIM records. DKIM probes 8 common selectors (`google`, `default`, `selector1`, `selector2`, `k1`, `s1`, `mail`, `dkim`) |
+| `subdomains` | All | Subdomain enumeration via Certificate Transparency logs (crt.sh). Deduplicated, wildcards filtered, capped (default 500, via `subdomain.max_results`) |
+| `ct_logs` | All | Full certificate history from crt.sh with issuer, dates, serial, SANs. Deduplicated by serial, newest first, capped (default 100, via `ct_logs.max_entries`) |
+| `bgp` | All | BGP/ASN enrichment via Team Cymru — ASN, prefix, country, registry, organization |
+| `fingerprint` | All | Web technology detection (servers, frameworks, CDNs, CMS, languages) from HTTP headers. Makes no extra network calls — see [Caching](#caching) |
+| `screenshot` | **Pro** | Page screenshot as a base64 PNG |
+| `reputation` | **Pro** | DNS blocklist checks (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) with a computed risk score |
+| `threat_intel` | **Pro** | VirusTotal, URLhaus, and AlienVault OTX with a composite risk score |
 
-The optional `bgp` field (default `false`) resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service for BGP/ASN information. Returns ASN number, IP prefix, country, registry, and organization name. Available to **all plans**. Useful for identifying hosting providers and detecting bulletproof hosting.
-
-The optional `fingerprint` field (default `false`) detects web technologies (servers, frameworks, CDNs, CMS platforms, languages) from HTTP response headers. No extra HTTP requests are made — detection piggybacks on the headers already fetched. Returns technology name, category, version (when detectable), and which signal matched. Available to **all plans**. Rules are stored in PostgreSQL and can be updated via the admin API without redeploying.
+Requesting a lookup your plan does not include returns `403 Forbidden`. An unrecognized name returns `400 Bad Request` naming the offending entry.
 
 **Example:**
 ```sh
 curl -X POST http://localhost:8080/v1/domain/lookup \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: test-admin-key' \
-  -d '{"domains":["example.com"]}'
+  -d '{"domains":["example.com"],"lookups":["dns","ssl"]}'
 ```
 
-**Response:**
+#### Response envelope and result identification
+
+Responses are wrapped in a `{"results": [...]}` envelope. Every API response is a JSON object, matching the `{"error": "..."}` error format, and leaves room for response-level fields (warnings, metadata) to be added without breaking clients.
+
+`results` contains **one element per unique normalized domain**. Each element carries:
+
+- **`domain`** — the normalized form. Match results by this field.
+- **`inputs`** — the original request entries, verbatim and untrimmed, that mapped to this domain. This lets you reconcile results against your request without reimplementing normalization.
+
+**Array position is not part of the API contract.** Do not assume `results[i]` corresponds to `domains[i]`.
+
 ```json
-[
-  {
-    "domain": "example.com",
-    "cache_hit": false,
-    "whois": { "domain_name": "...", "registrar": "...", "..." : "..." },
-    "dns": { "a": ["93.184.216.34"], "mx": [], "ns": [], "..." : "..." },
-    "ssl": { "subject": "...", "issuer": "...", "..." : "..." },
-    "headers": { "status_code": 200, "headers": {}, "security_headers": {} },
-    "screenshot": { "status_code": 200, "png": "<base64-encoded PNG>" },
-    "reputation": {
-      "score": 35,
-      "risk": "medium",
-      "providers": [
-        { "listed": true, "category": "phishing", "provider": "spamhaus_dbl", "return_code": "127.0.1.4" },
-        { "listed": false, "provider": "surbl" },
-        { "listed": false, "provider": "uribl" },
-        { "listed": false, "provider": "spamhaus_zen" }
-      ]
-    },
-    "threat_intel": {
-      "risk_level": "medium",
-      "score": 45,
-      "categories": ["malware"],
-      "providers": [
-        { "provider": "virustotal", "detected": true, "score": 3, "categories": ["malware"], "details": "3/70 engines detected this domain" },
-        { "provider": "urlhaus", "detected": false },
-        { "provider": "alienvault_otx", "detected": true, "score": 5, "categories": ["malware"], "details": "5 threat pulses reference this domain" }
-      ]
-    },
-    "email_security": {
-      "spf": {
-        "raw": "v=spf1 include:_spf.google.com -all",
-        "version": "spf1",
-        "mechanisms": ["include:_spf.google.com"],
-        "all": "-all"
+{
+  "results": [
+    {
+      "domain": "example.com",
+      "inputs": ["HTTPS://Example.COM/", "example.com"],
+      "dns": { "cache_hit": true, "a": ["93.184.216.34"] }
+    }
+  ]
+}
+```
+
+Each result contains exactly the lookups you requested — plus `domain`, `inputs`, and `errors` — and nothing else.
+
+**Full response example** (every lookup requested):
+```json
+{
+  "results": [
+    {
+      "domain": "example.com",
+      "inputs": ["example.com"],
+      "whois": { "cache_hit": false, "domain_name": "...", "registrar": "...", "..." : "..." },
+      "dns": { "cache_hit": true, "a": ["93.184.216.34"], "mx": [], "ns": [], "..." : "..." },
+      "ssl": { "cache_hit": false, "subject": "...", "issuer": "...", "..." : "..." },
+      "headers": { "cache_hit": false, "status_code": 200, "headers": {}, "security_headers": {} },
+      "screenshot": { "cache_hit": false, "status_code": 200, "png": "<base64-encoded PNG>" },
+      "reputation": {
+        "cache_hit": false,
+        "score": 35,
+        "risk": "medium",
+        "providers": [
+          { "listed": true, "category": "phishing", "provider": "spamhaus_dbl", "return_code": "127.0.1.4" },
+          { "listed": false, "provider": "surbl" },
+          { "listed": false, "provider": "uribl" },
+          { "listed": false, "provider": "spamhaus_zen" }
+        ]
       },
-      "dmarc": {
-        "raw": "v=DMARC1; p=reject; rua=mailto:dmarc@example.com",
-        "version": "DMARC1",
-        "policy": "reject",
-        "rua": "mailto:dmarc@example.com"
+      "threat_intel": {
+        "cache_hit": false,
+        "risk_level": "medium",
+        "score": 45,
+        "categories": ["malware"],
+        "providers": [
+          { "provider": "virustotal", "detected": true, "score": 3, "categories": ["malware"], "details": "3/70 engines detected this domain" },
+          { "provider": "urlhaus", "detected": false },
+          { "provider": "alienvault_otx", "detected": true, "score": 5, "categories": ["malware"], "details": "5 threat pulses reference this domain" }
+        ]
       },
-      "dkim": [
-        { "selector": "google", "found": true, "raw": "v=DKIM1; k=rsa; p=MIGf..." },
-        { "selector": "default", "found": false }
-      ]
-    },
-    "subdomains": {
-      "count": 3,
-      "capped": false,
-      "subdomains": [
-        { "domain": "api.example.com", "source": "crt.sh" },
-        { "domain": "mail.example.com", "source": "crt.sh" },
-        { "domain": "www.example.com", "source": "crt.sh" }
-      ]
-    },
-    "ct_logs": {
-      "count": 2,
-      "capped": false,
-      "entries": [
-        {
-          "logged_at": "2024-01-15T00:00:00",
-          "not_before": "2024-01-15T00:00:00",
-          "not_after": "2024-04-14T23:59:59",
-          "issuer": "C=US, O=Let's Encrypt, CN=R3",
-          "common_name": "example.com",
-          "name_value": "example.com",
-          "serial": "04:3a:f5:..."
-        }
-      ]
-    },
-    "bgp": {
-      "records": [
-        {
-          "ip": "93.184.216.34",
-          "asn": 15133,
-          "prefix": "93.184.216.0/24",
-          "country": "US",
-          "registry": "arin",
-          "description": "EDGECAST, US"
-        }
-      ]
-    },
-    "fingerprint": {
-      "count": 2,
-      "technologies": [
-        { "name": "Nginx", "category": "web-server", "version": "1.24.0", "confidence": "header" },
-        { "name": "PHP", "category": "language", "version": "8.2", "confidence": "header" }
-      ]
-    },
-    "errors": []
-  }
-]
+      "email_security": {
+        "cache_hit": false,
+        "spf": {
+          "raw": "v=spf1 include:_spf.google.com -all",
+          "version": "spf1",
+          "mechanisms": ["include:_spf.google.com"],
+          "all": "-all"
+        },
+        "dmarc": {
+          "raw": "v=DMARC1; p=reject; rua=mailto:dmarc@example.com",
+          "version": "DMARC1",
+          "policy": "reject",
+          "rua": "mailto:dmarc@example.com"
+        },
+        "dkim": [
+          { "selector": "google", "found": true, "raw": "v=DKIM1; k=rsa; p=MIGf..." },
+          { "selector": "default", "found": false }
+        ]
+      },
+      "subdomains": {
+        "cache_hit": false,
+        "count": 3,
+        "capped": false,
+        "subdomains": [
+          { "domain": "api.example.com", "source": "crt.sh" },
+          { "domain": "mail.example.com", "source": "crt.sh" },
+          { "domain": "www.example.com", "source": "crt.sh" }
+        ]
+      },
+      "ct_logs": {
+        "cache_hit": false,
+        "count": 2,
+        "capped": false,
+        "entries": [
+          {
+            "logged_at": "2024-01-15T00:00:00",
+            "not_before": "2024-01-15T00:00:00",
+            "not_after": "2024-04-14T23:59:59",
+            "issuer": "C=US, O=Let's Encrypt, CN=R3",
+            "common_name": "example.com",
+            "name_value": "example.com",
+            "serial": "04:3a:f5:..."
+          }
+        ]
+      },
+      "bgp": {
+        "cache_hit": false,
+        "records": [
+          {
+            "ip": "93.184.216.34",
+            "asn": 15133,
+            "prefix": "93.184.216.0/24",
+            "country": "US",
+            "registry": "arin",
+            "description": "EDGECAST, US"
+          }
+        ]
+      },
+      "fingerprint": {
+        "cache_hit": false,
+        "count": 2,
+        "technologies": [
+          { "name": "Nginx", "category": "web-server", "version": "1.24.0", "confidence": "header" },
+          { "name": "PHP", "category": "language", "version": "8.2", "confidence": "header" }
+        ]
+      },
+      "errors": []
+    }
+  ]
+}
 ```
 
 Invalid domains in a multi-domain request are included in the response with a validation error instead of failing the entire request:
 ```json
-[
-  { "domain": "example.com", "whois": {}, "dns": {}, "..." : "..." },
-  { "domain": "notadomain", "errors": [{"lookup": "validation", "message": "invalid domain name"}] }
-]
+{
+  "results": [
+    { "domain": "example.com", "inputs": ["example.com"], "dns": { "cache_hit": false, "..." : "..." } },
+    { "domain": "notadomain", "inputs": ["notadomain"], "errors": [{"lookup": "validation", "message": "invalid domain name"}] }
+  ]
+}
 ```
+
+A request whose *only* domain is invalid returns `400 Bad Request`.
+
+#### Error handling
+
+Errors are returned as `{"error": "..."}`. Validation runs in a fixed order: the body is parsed, then lookups and domains are normalized and deduplicated, then `lookups` is checked for emptiness, then each name is validated, then plan access is checked, then domain caps are applied.
+
+| Status | Condition | Example message |
+|--------|-----------|-----------------|
+| `400` | Body is not valid JSON, or `domains` is missing/empty | `invalid request: domains field is required and must be a non-empty array` |
+| `400` | `lookups` missing, or empty after normalization (`[]`, `[""]`, `[" "]`) | `lookups is required, e.g. ["dns", "ssl"]` |
+| `400` | Unrecognized lookup name | `invalid lookup "banana"; valid lookups: whois, dns, ssl, ...` |
+| `400` | More domains than the plan allows | `too many domains: maximum 5 allowed for basic plan` |
+| `400` | More domains than the tighter subdomain cap allows | `too many domains: maximum 3 allowed for basic plan when subdomains is requested` |
+| `400` | The single submitted domain is invalid | `invalid domain name` / `raw IP addresses are not accepted; provide a domain name` |
+| `401` | Missing or invalid API key | `invalid API key` |
+| `403` | Lookup not included in the caller's plan | `screenshot requires a pro plan` |
+| `413` | Request body over the 1 MB limit | `request body too large` |
+| `429` | Rate limit exceeded | see [Rate Limiting](#rate-limiting) |
+
+Failures *inside* a lookup do not produce an error status. They appear in that result's `errors` array while the remaining lookups return normally, and the failed lookup's field is omitted. Cache failures are never surfaced — see [Caching](#cache-failures-never-fail-a-request).
 
 ## Response Fields
 
 ### Domain Lookup (`/v1/domain/lookup`)
 
-### `domain` / `cache_hit` / `errors`
+### `domain` / `inputs` / `cache_hit` / `errors`
 
-- **`domain`** — Which domain this result is for, since you can submit multiple in one request.
-- **`cache_hit`** — Whether the result was served from Redis cache (`true`) or fetched live (`false`). Useful for understanding data freshness.
-- **`errors`** — Per-lookup errors when an individual lookup fails (e.g. WHOIS timed out but DNS succeeded). Partial failures don't block the rest of the response.
+- **`domain`** — The normalized domain this result is for, since you can submit multiple in one request. Match results by this field, not by array position.
+- **`inputs`** — The original request entries, verbatim, that normalized to this domain.
+- **`cache_hit`** — Present on **each lookup object**, not at the top level. `true` means that lookup was served from Redis, `false` that it was fetched live. Different fields in the same result can differ, since each lookup is cached separately with its own TTL.
+- **`errors`** — Per-lookup errors when an individual lookup fails (e.g. WHOIS timed out but DNS succeeded). Partial failures don't block the rest of the response, and a failed lookup is omitted from the result rather than returned empty.
 
 ### `whois` — Domain Registration & Ownership
 
@@ -286,7 +348,7 @@ The `security_headers` subsection audits defensive headers that protect users:
 
 ### `screenshot` — Page Screenshot (Pro/Admin Only)
 
-A visual screenshot of the domain's web page, captured with headless Chrome at 1280x720. Only present when `"screenshot": true` is included in the request.
+A visual screenshot of the domain's web page, captured with headless Chrome at 1280x720. Only present when `"screenshot"` is included in `lookups`.
 
 | Field | What it means |
 |-------|---------------|
@@ -297,7 +359,7 @@ The screenshot lookup first tries HTTPS, then falls back to HTTP. Non-200 respon
 
 ### `reputation` — Domain Reputation (Pro/Admin Only)
 
-Checks the domain against 4 DNS-based blocklists concurrently and computes a risk score. Only present when `"reputation": true` is included in the request.
+Checks the domain against 4 DNS-based blocklists concurrently and computes a risk score. Only present when `"reputation"` is included in `lookups`.
 
 | Field | What it means |
 |-------|---------------|
@@ -327,7 +389,7 @@ Each provider entry contains:
 
 ### `threat_intel` — Threat Intelligence (Pro/Admin Only)
 
-Queries multiple threat intelligence providers to assess whether a domain is associated with malicious activity. Only present when `"threat_intel": true` is included in the request.
+Queries multiple threat intelligence providers to assess whether a domain is associated with malicious activity. Only present when `"threat_intel"` is included in `lookups`.
 
 | Field | What it means |
 |-------|---------------|
@@ -358,7 +420,7 @@ Each provider entry contains:
 
 ### `email_security` — Email Security (All Plans)
 
-Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"email_security": true` is included in the request.
+Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"email_security"` is included in `lookups`.
 
 **`spf`** — Sender Policy Framework record:
 
@@ -391,7 +453,7 @@ Checks SPF, DMARC, and DKIM DNS records for the domain. Only present when `"emai
 
 ### `subdomains` — Subdomain Enumeration (All Plans)
 
-Enumerates subdomains via Certificate Transparency logs (crt.sh). Only present when `"subdomains": true` is included in the request.
+Enumerates subdomains via Certificate Transparency logs (crt.sh). Only present when `"subdomains"` is included in `lookups`.
 
 | Field | What it means |
 |-------|---------------|
@@ -408,7 +470,7 @@ Each subdomain entry contains:
 
 ### `ct_logs` — Certificate Transparency Logs (All Plans)
 
-Queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Only present when `"ct_logs": true` is included in the request.
+Queries Certificate Transparency logs via crt.sh for all certificates ever issued for the domain. Only present when `"ct_logs"` is included in `lookups`.
 
 | Field | What it means |
 |-------|---------------|
@@ -432,7 +494,7 @@ Useful for detecting phishing infrastructure (unexpected issuers), identifying r
 
 ### `bgp` — BGP / ASN Enrichment (All Plans)
 
-Resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service. Only present when `"bgp": true` is included in the request.
+Resolves the domain's IP addresses and queries Team Cymru's DNS-based IP-to-ASN mapping service. Only present when `"bgp"` is included in `lookups`.
 
 | Field | What it means |
 |-------|---------------|
@@ -453,7 +515,7 @@ Useful for identifying hosting providers, detecting bulletproof hosting, and piv
 
 ### `fingerprint` — Technology Fingerprinting (All Plans)
 
-Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. Only present when `"fingerprint": true` is included in the request. No extra HTTP requests are made — detection uses the headers already fetched.
+Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. Only present when `"fingerprint"` is included in `lookups`. No extra HTTP requests are made — detection uses the headers already fetched, and requesting `headers` alongside it does not double the fetch. See [Caching](#fingerprint-has-no-cache-key).
 
 | Field | What it means |
 |-------|---------------|
@@ -517,13 +579,15 @@ Returns aggregated API usage statistics for a configurable time window.
 ```json
 {
   "total_requests": 1247,
-  "cache_hits": 312,
-  "cache_hit_rate": 25.02,
+  "cache_hits": 3120,
+  "cache_misses": 1480,
+  "cache_hit_rate": 67.83,
   "avg_latency_ms": 842.5,
   "total_domains": 1580,
   "total_ips": 420,
   "status_codes": {"200": 1190, "400": 32, "403": 15, "429": 10},
   "feature_usage": {
+    "whois": 900, "dns": 1100, "ssl": 870, "headers": 640,
     "screenshot": 45, "reputation": 120, "threat_intel": 95, "email_security": 310,
     "subdomains": 200, "ct_logs": 85, "bgp": 60, "fingerprint": 400
   },
@@ -532,6 +596,10 @@ Returns aggregated API usage statistics for a configurable time window.
   "period_end": "2026-03-11T00:00:00Z"
 }
 ```
+
+`cache_hits` and `cache_misses` count **individual lookups**, not requests — a request that serves three cached fields and fetches one live counts as 3 hits and 1 miss. `cache_hit_rate` is `hits / (hits + misses) * 100`.
+
+`feature_usage` counts requests that **asked for** each lookup, whether or not it was served from cache. A cache hit is still customer demand.
 
 ### `GET /v1/info` — Application Status (Admin Only)
 
@@ -557,19 +625,59 @@ The changelog is maintained in `changelog.yaml` at the project root (symlink to 
 
 ## Caching
 
-Lookup results are cached in Redis. Repeated lookups for the same domain return the cached result until the TTL expires. Each response includes a `cache_hit` field indicating whether the result was served from cache. The TTL is configurable via `redis.cache_ttl` (default `60m`).
+Lookup results are cached in Redis **per lookup, per domain** — not per response. Each key holds one lookup's result for one domain:
 
-Optional features use composite cache keys built from sorted feature suffixes. Each key is fully self-contained — all lookups for that feature combination are cached together:
-- `domain` — base lookups (WHOIS, DNS, SSL, headers)
-- `domain:email_security` — base + email security
-- `domain:reputation` — base + reputation
-- `domain:screenshot` — base + screenshot
-- `domain:threat_intel` — base + threat intelligence
-- `domain:subdomains` — base + subdomain enumeration
-- `domain:bgp` — base + BGP/ASN
-- `domain:ct_logs` — base + CT logs
-- `domain:fingerprint` — base + technology fingerprinting
-- `domain:bgp+ct_logs+email_security+fingerprint+reputation+screenshot+subdomains+threat_intel` — base + all optional features
+```
+lookup:<domain>:<lookup_name>
+```
+
+For example, `lookup:example.net:ssl`. Keys are built only from the normalized domain and lookup name, so the combination of lookups you request has no effect on cache reuse: a `dns`-only request warms the same `lookup:example.com:dns` entry that a later `dns` + `ssl` request reads from.
+
+Each lookup object in the response carries its own `cache_hit` flag, so a single result can mix cached and freshly fetched fields. Redis stores the lookup payload and nothing else — no request metadata, no cache flags, no timestamps.
+
+### TTLs
+
+Every lookup has its own TTL, reflecting how fast that data actually changes. Anything not listed falls back to `cache.default_ttl`.
+
+| Lookup | Default TTL |
+|--------|-------------|
+| `whois` | 24h |
+| `ct_logs` | 24h |
+| `subdomains` | 24h |
+| `bgp` | 24h |
+| `ssl` | 4h |
+| `email_security` | 4h |
+| `dns` | 30m |
+| `headers` | 30m |
+| `reputation` | 30m |
+| `threat_intel` | 30m |
+| `screenshot` | 60m |
+| *(anything else)* | `cache.default_ttl` (60m) |
+
+Override individually with env vars — `CACHE_TTL_WHOIS=48h`, `CACHE_DEFAULT_TTL=30m` — or in the config file under `cache.ttl.*`.
+
+Expiry is absolute: an expired entry is gone and the lookup is refetched. There is no stale-serving.
+
+### `fingerprint` has no cache key
+
+Technology fingerprinting is pure deterministic computation over the `headers` payload, so caching `headers` already caches fingerprint. Consequences:
+
+- Requesting `headers` and `fingerprint` together fetches headers **exactly once**.
+- Requesting `fingerprint` alone fetches and caches headers internally, but the `headers` object is not included in the response.
+- `fingerprint.cache_hit` reflects where its headers input came from.
+- Admin fingerprint-rule updates take effect immediately — there is no stale fingerprint TTL to wait out.
+
+### Cache failures never fail a request
+
+The cache is fail-open, matching the rate limiter:
+
+| Failure | Behavior |
+|---------|----------|
+| Redis unreachable on read | All lookups treated as misses; logged; live lookups run |
+| Corrupt or unreadable cached entry | Treated as a miss; logged; the live fetch overwrites the bad entry (self-healing) |
+| Cache write fails | The lookup still succeeds and is returned; the write failure is logged |
+
+Cache problems never appear in the response `errors` array — those are reserved for actual lookup failures.
 
 ## Getting Started
 
@@ -611,7 +719,8 @@ Config values:
 | `redis.addr` | `localhost:6379` | Redis address |
 | `redis.password` | `""` | Redis password |
 | `redis.db` | `0` | Redis database number |
-| `redis.cache_ttl` | `60m` | Cache TTL for domain lookups |
+| `cache.default_ttl` | `60m` | Fallback cache TTL for lookups without their own entry |
+| `cache.ttl.<lookup>` | see [Caching](#ttls) | Per-lookup cache TTL, e.g. `cache.ttl.whois: 24h` (env: `CACHE_TTL_WHOIS`) |
 | `gin.mode` | `""` | Gin framework mode (`debug`, `release`, `test`) |
 | `auth.cache_ttl` | `5m` | TTL for in-memory auth cache |
 | `auth.last_used_buffer_size` | `256` | Buffer size for batched last_used_at updates |
@@ -688,6 +797,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `009_request_log_threat_intel.sql` — adds `threat_intel` column to the `request_log` table
 - `010_drop_name_unique.sql` — drops the unique constraint on `customers.name` (allows same-name Stripe signups)
 - `011_request_log_ip.sql` — adds `ip_count` column to `request_log` for IP lookup analytics
+- `012_request_log_cache_metrics.sql` — replaces the per-request `cache_hit` boolean with `cache_hits`/`cache_misses` counts, and adds `whois`/`dns`/`ssl`/`headers` columns now that the base lookups are individually selectable
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:

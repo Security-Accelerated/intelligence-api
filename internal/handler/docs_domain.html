@@ -163,12 +163,12 @@
     <tbody>
       <tr>
         <td><strong>Free</strong></td>
-        <td>5 req/min, 1 domain/request, core lookups</td>
+        <td>5 req/min, 1 domain/request, all lookups except screenshot, reputation, and threat intel</td>
         <td>Included with any API key</td>
       </tr>
       <tr>
         <td><strong>Basic</strong></td>
-        <td>30 req/min, 5 domains/request, core lookups + email security, subdomains, CT logs, BGP, fingerprint</td>
+        <td>30 req/min, 5 domains/request, all lookups except screenshot, reputation, and threat intel</td>
         <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
       </tr>
       <tr>
@@ -202,81 +202,50 @@
     <span class="path">/v1/domain/lookup</span>
   </div>
 
-  <p>Look up one or more domains concurrently. Returns WHOIS, DNS, SSL, and HTTP header data by default for each domain. Optional flags enable additional lookups. All lookups run concurrently with a 30-second timeout.</p>
+  <p>Look up one or more domains concurrently. You choose exactly which lookups to run via the <code>lookups</code> array &mdash; there is no default set. All requested lookups run concurrently with a 30-second timeout.</p>
 
   <h3 id="request-body">Request Body</h3>
 
   <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Default</th><th>Description</th></tr></thead>
+    <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
     <tbody>
       <tr>
         <td><code>domains</code></td>
         <td><code>string[]</code></td>
         <td><span class="tag tag-required">Required</span></td>
-        <td>--</td>
-        <td>Domain names to look up. Max count depends on plan (1 / 5 / 20).</td>
+        <td>Domain names to look up. Max count depends on plan (1 / 5 / 20), counted on the entries you submit.</td>
       </tr>
       <tr>
-        <td><code>screenshot</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Capture a page screenshot. <span class="tag tag-pro">Pro</span></td>
-      </tr>
-      <tr>
-        <td><code>reputation</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Check domain against threat blocklists. <span class="tag tag-pro">Pro</span></td>
-      </tr>
-      <tr>
-        <td><code>email_security</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Check SPF, DMARC, and DKIM records.</td>
-      </tr>
-      <tr>
-        <td><code>subdomains</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Enumerate subdomains via Certificate Transparency logs.</td>
-      </tr>
-      <tr>
-        <td><code>ct_logs</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Query Certificate Transparency logs for issued certificates.</td>
-      </tr>
-      <tr>
-        <td><code>bgp</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Look up BGP/ASN information for the domain's IP addresses.</td>
-      </tr>
-      <tr>
-        <td><code>fingerprint</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Detect web technologies from HTTP response headers.</td>
-      </tr>
-      <tr>
-        <td><code>threat_intel</code></td>
-        <td><code>bool</code></td>
-        <td><span class="tag tag-optional">Optional</span></td>
-        <td><code>false</code></td>
-        <td>Query threat intelligence feeds (VirusTotal, URLhaus, AlienVault OTX). <span class="tag tag-pro">Pro</span></td>
+        <td><code>lookups</code></td>
+        <td><code>string[]</code></td>
+        <td><span class="tag tag-required">Required</span></td>
+        <td>Which lookups to run. Must be non-empty &mdash; there is no default set and no <code>"all"</code> value. Names are trimmed, lowercased and deduplicated, so <code>[" SSL ", "ssl"]</code> is just <code>["ssl"]</code>.</td>
       </tr>
     </tbody>
   </table>
 
+  <h4>Valid Lookups</h4>
+  <table>
+    <thead><tr><th>Name</th><th>Plan</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>whois</code></td><td>All</td><td>Registration, registrar, expiry, nameservers, contacts.</td></tr>
+      <tr><td><code>dns</code></td><td>All</td><td>A, AAAA, MX, NS, TXT, and CNAME records.</td></tr>
+      <tr><td><code>ssl</code></td><td>All</td><td>TLS certificate subject, issuer, validity window, SANs.</td></tr>
+      <tr><td><code>headers</code></td><td>All</td><td>HTTP response headers and security header analysis.</td></tr>
+      <tr><td><code>email_security</code></td><td>All</td><td>Check SPF, DMARC, and DKIM records.</td></tr>
+      <tr><td><code>subdomains</code></td><td>All</td><td>Enumerate subdomains via Certificate Transparency logs.</td></tr>
+      <tr><td><code>ct_logs</code></td><td>All</td><td>Query Certificate Transparency logs for issued certificates.</td></tr>
+      <tr><td><code>bgp</code></td><td>All</td><td>Look up BGP/ASN information for the domain's IP addresses.</td></tr>
+      <tr><td><code>fingerprint</code></td><td>All</td><td>Detect web technologies from HTTP response headers. Costs no extra network call &mdash; see <a href="#caching">Caching</a>.</td></tr>
+      <tr><td><code>screenshot</code></td><td><span class="tag tag-pro">Pro</span></td><td>Capture a page screenshot.</td></tr>
+      <tr><td><code>reputation</code></td><td><span class="tag tag-pro">Pro</span></td><td>Check domain against threat blocklists.</td></tr>
+      <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query threat intelligence feeds (VirusTotal, URLhaus, AlienVault OTX).</td></tr>
+    </tbody>
+  </table>
+  <p>An unrecognized name returns <code>400</code> naming the offending entry. A lookup outside your plan returns <code>403</code>.</p>
+
   <h4>Domain Normalization</h4>
-  <p>Domain names are normalized automatically. You can pass bare domains or full URLs with any scheme &mdash; the API extracts the hostname by stripping scheme prefixes, userinfo, ports, paths, query strings, and fragments. The result is lowercased. The <code>domain</code> field in the response shows exactly what was looked up. Raw IP addresses are rejected &mdash; use the <a href="/docs/ip">IP Intelligence</a> endpoint instead.</p>
+  <p>Domain names are normalized automatically. You can pass bare domains or full URLs with any scheme &mdash; the API extracts the hostname by stripping scheme prefixes, userinfo, ports, paths, query strings, and fragments, then trims whitespace and lowercases the result. Entries that normalize to the same domain are deduplicated into a single result. The <code>domain</code> field in the response holds the normalized form and <code>inputs</code> lists the original entries that mapped to it. Raw IP addresses are rejected &mdash; use the <a href="/docs/ip">IP Intelligence</a> endpoint instead.</p>
   <table class="param-table">
     <thead><tr><th>You send</th><th>We look up</th></tr></thead>
     <tbody>
@@ -286,6 +255,7 @@
       <tr><td><code>example.com:8080</code></td><td><code>example.com</code></td></tr>
       <tr><td><code>user:pass@example.com</code></td><td><code>example.com</code></td></tr>
       <tr><td><code>Example.COM/</code></td><td><code>example.com</code></td></tr>
+      <tr><td><code>&nbsp;&nbsp;example.com&nbsp;&nbsp;</code></td><td><code>example.com</code></td></tr>
     </tbody>
   </table>
 
@@ -302,8 +272,7 @@
   <span class="flag">-H</span> <span class="str">'X-Client-Request-ID: req-001'</span> \
   <span class="flag">-d</span> <span class="str">'{
     "domains": ["example.com"],
-    "email_security": true,
-    "subdomains": true
+    "lookups": ["dns", "ssl", "email_security", "subdomains"]
   }'</span></code></pre>
   </div>
   <div id="tab-python" class="lang-panel">
@@ -317,17 +286,16 @@ resp = requests.post(
     },
     json={
         <span class="str">"domains"</span>: [<span class="str">"example.com"</span>],
-        <span class="str">"email_security"</span>: <span class="kw">True</span>,
-        <span class="str">"subdomains"</span>: <span class="kw">True</span>,
+        <span class="str">"lookups"</span>: [<span class="str">"dns"</span>, <span class="str">"ssl"</span>, <span class="str">"email_security"</span>, <span class="str">"subdomains"</span>],
     },
 )
 
 <span class="kw">if</span> resp.status_code != <span class="num">200</span>:
     print(<span class="str">"Error:"</span>, resp.json()[<span class="str">"error"</span>])
 <span class="kw">else</span>:
-    results = resp.json()
-    <span class="kw">for</span> result <span class="kw">in</span> results:
-        print(result[<span class="str">"domain"</span>], result[<span class="str">"dns"</span>][<span class="str">"a"</span>])</code></pre>
+    <span class="cmt"># Results are wrapped in a "results" envelope.</span>
+    <span class="kw">for</span> result <span class="kw">in</span> resp.json()[<span class="str">"results"</span>]:
+        print(result[<span class="str">"domain"</span>], result[<span class="str">"dns"</span>][<span class="str">"a"</span>], result[<span class="str">"dns"</span>][<span class="str">"cache_hit"</span>])</code></pre>
   </div>
   <div id="tab-go" class="lang-panel">
   <pre><code><span class="kw">package</span> main
@@ -341,9 +309,8 @@ resp = requests.post(
 
 <span class="kw">func</span> main() {
     body, _ := json.Marshal(<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>{
-        <span class="str">"domains"</span>:        []<span class="kw">string</span>{<span class="str">"example.com"</span>},
-        <span class="str">"email_security"</span>: <span class="kw">true</span>,
-        <span class="str">"subdomains"</span>:     <span class="kw">true</span>,
+        <span class="str">"domains"</span>: []<span class="kw">string</span>{<span class="str">"example.com"</span>},
+        <span class="str">"lookups"</span>: []<span class="kw">string</span>{<span class="str">"dns"</span>, <span class="str">"ssl"</span>, <span class="str">"email_security"</span>, <span class="str">"subdomains"</span>},
     })
 
     req, _ := http.NewRequest(<span class="str">"POST"</span>,
@@ -366,46 +333,59 @@ resp = requests.post(
         <span class="kw">return</span>
     }
 
-    <span class="kw">var</span> results []<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>
-    json.NewDecoder(resp.Body).Decode(&results)
-    fmt.Println(results[<span class="num">0</span>][<span class="str">"domain"</span>])
+    <span class="cmt">// Results are wrapped in a "results" envelope.</span>
+    <span class="kw">var</span> body struct {
+        Results []<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span> <span class="str">`json:"results"`</span>
+    }
+    json.NewDecoder(resp.Body).Decode(&body)
+    fmt.Println(body.Results[<span class="num">0</span>][<span class="str">"domain"</span>])
 }</code></pre>
   </div>
 
   <h4>Response Structure</h4>
-  <p>The response is always a JSON array, even for single-domain requests. Each element contains the core lookup results plus any optional fields that were requested.</p>
-  <pre><code>[
-  {
-    <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
-    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
-    <span class="str">"whois"</span>: { ... },
-    <span class="str">"dns"</span>: { ... },
-    <span class="str">"ssl"</span>: { ... },
-    <span class="str">"headers"</span>: { ... },
-    <span class="str">"email_security"</span>: { ... },
-    <span class="str">"subdomains"</span>: { ... },
-    <span class="str">"threat_intel"</span>: { ... },
-    <span class="str">"errors"</span>: []
-  }
-]</code></pre>
-  <p>Optional fields (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>) are only present in the response when requested.</p>
+  <p>Results are wrapped in a <code>results</code> envelope, so every response &mdash; success or error &mdash; is a JSON object. The envelope leaves room for response-level fields to be added later without breaking clients.</p>
+  <pre><code>{
+  <span class="str">"results"</span>: [
+    {
+      <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
+      <span class="str">"inputs"</span>: [<span class="str">"HTTPS://Example.COM/"</span>, <span class="str">"example.com"</span>],
+      <span class="str">"dns"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">true</span>, <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>] },
+      <span class="str">"ssl"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, ... },
+      <span class="str">"errors"</span>: []
+    }
+  ]
+}</code></pre>
+
+  <h4>Identifying Results</h4>
+  <p><code>results</code> contains <strong>one element per unique normalized domain</strong>:</p>
+  <ul>
+    <li><code>domain</code> &mdash; the normalized form. Match results by this field.</li>
+    <li><code>inputs</code> &mdash; the original request entries, verbatim, that mapped to this domain. Use it to reconcile results against your request without reimplementing normalization.</li>
+  </ul>
+  <p><strong>Array position is not part of the API contract.</strong> Do not assume <code>results[i]</code> corresponds to <code>domains[i]</code> &mdash; duplicates collapse and ordering is not guaranteed.</p>
+  <p>Each result contains exactly the lookups you requested, plus <code>domain</code>, <code>inputs</code>, and <code>errors</code>. Nothing else is included.</p>
+
+  <h4>Per-Lookup <code>cache_hit</code></h4>
+  <p>Every lookup object carries its own <code>cache_hit</code> flag: <code>true</code> when that lookup was served from cache, <code>false</code> when it was fetched live. There is no top-level <code>cache_hit</code> &mdash; different fields in the same result routinely differ, because each lookup is cached separately with its own TTL. See <a href="#caching">Caching</a>.</p>
 
   <h3 id="invalid-domains">Invalid Domains</h3>
   <p>Invalid domains in a multi-domain request do not fail the entire request. They are included in the response with a validation error while valid domains return normally:</p>
-  <pre><code>[
-  {
-    <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
-    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
-    <span class="str">"whois"</span>: { <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>, ... },
-    <span class="str">"dns"</span>: { ... },
-    <span class="str">"ssl"</span>: { ... },
-    <span class="str">"headers"</span>: { ... }
-  },
-  {
-    <span class="str">"domain"</span>: <span class="str">"notadomain"</span>,
-    <span class="str">"errors"</span>: [{ <span class="str">"lookup"</span>: <span class="str">"validation"</span>, <span class="str">"message"</span>: <span class="str">"invalid domain name"</span> }]
-  }
-]</code></pre>
+  <pre><code>{
+  <span class="str">"results"</span>: [
+    {
+      <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
+      <span class="str">"inputs"</span>: [<span class="str">"example.com"</span>],
+      <span class="str">"whois"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>, ... },
+      <span class="str">"dns"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">true</span>, ... }
+    },
+    {
+      <span class="str">"domain"</span>: <span class="str">"notadomain"</span>,
+      <span class="str">"inputs"</span>: [<span class="str">"notadomain"</span>],
+      <span class="str">"errors"</span>: [{ <span class="str">"lookup"</span>: <span class="str">"validation"</span>, <span class="str">"message"</span>: <span class="str">"invalid domain name"</span> }]
+    }
+  ]
+}</code></pre>
+  <p>A request whose only domain is invalid returns <code>400</code>.</p>
 
   <!-- Response Field Reference -->
   <h2 id="response-fields">Response Fields</h2>
@@ -415,6 +395,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>domain_name</code></td><td><code>string</code></td><td>The registered domain name</td></tr>
       <tr><td><code>registrar</code></td><td><code>string</code></td><td>Registrar (e.g., GoDaddy, Namecheap)</td></tr>
       <tr><td><code>created_date</code></td><td><code>string</code></td><td>Registration date -- new domains are higher risk</td></tr>
@@ -444,6 +425,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>a</code></td><td><code>string[]</code></td><td>IPv4 addresses</td></tr>
       <tr><td><code>aaaa</code></td><td><code>string[]</code></td><td>IPv6 addresses</td></tr>
       <tr><td><code>mx</code></td><td><code>object[]</code></td><td>Mail servers (<code>host</code>, <code>priority</code>)</td></tr>
@@ -465,6 +447,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>subject</code></td><td><code>string</code></td><td>Entity the certificate was issued to</td></tr>
       <tr><td><code>issuer</code></td><td><code>string</code></td><td>Certificate authority</td></tr>
       <tr><td><code>not_before</code></td><td><code>string</code></td><td>Start of validity period</td></tr>
@@ -493,6 +476,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code (200, 301, 404, etc.)</td></tr>
       <tr><td><code>headers</code></td><td><code>object</code></td><td>Raw response headers as key-value pairs</td></tr>
       <tr><td><code>security_headers</code></td><td><code>object</code></td><td>Security header audit (see below)</td></tr>
@@ -531,6 +515,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code from probing the domain</td></tr>
       <tr><td><code>png</code></td><td><code>string</code></td><td>Base64-encoded PNG image (empty for non-200 responses)</td></tr>
     </tbody>
@@ -546,6 +531,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>score</code></td><td><code>int</code></td><td>Risk score from 0 (clean) to 100 (maximum risk)</td></tr>
       <tr><td><code>risk</code></td><td><code>string</code></td><td><code>clean</code>, <code>low</code>, <code>medium</code>, or <code>high</code></td></tr>
       <tr><td><code>providers</code></td><td><code>array</code></td><td>Per-provider results</td></tr>
@@ -595,6 +581,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>raw</code></td><td><code>string</code></td><td>Full SPF TXT record</td></tr>
       <tr><td><code>version</code></td><td><code>string</code></td><td>SPF version (typically <code>spf1</code>)</td></tr>
       <tr><td><code>mechanisms</code></td><td><code>string[]</code></td><td>Parsed mechanisms (<code>include:</code>, <code>ip4:</code>, etc.)</td></tr>
@@ -650,6 +637,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>count</code></td><td><code>int</code></td><td>Number of subdomains returned</td></tr>
       <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (500)</td></tr>
       <tr><td><code>subdomains</code></td><td><code>array</code></td><td>Discovered subdomains</td></tr>
@@ -679,6 +667,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>count</code></td><td><code>int</code></td><td>Number of certificate entries returned</td></tr>
       <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (100)</td></tr>
       <tr><td><code>entries</code></td><td><code>array</code></td><td>Certificate log entries, sorted newest-first</td></tr>
@@ -719,6 +708,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>records</code></td><td><code>array</code></td><td>ASN records, deduplicated by ASN</td></tr>
     </tbody>
   </table>
@@ -751,10 +741,11 @@ resp = requests.post(
 
   <!-- fingerprint -->
   <h3 id="fingerprint"><code>fingerprint</code> -- Technology Fingerprinting</h3>
-  <p>Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. No extra HTTP requests are made -- detection uses the headers already fetched. Approximately 90 technologies are covered.</p>
+  <p>Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. No extra HTTP requests are made -- detection uses the headers already fetched, so requesting <code>headers</code> alongside it costs nothing extra. Approximately 90 technologies are covered.</p>
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether the underlying <code>headers</code> data was served from cache. Fingerprint has no cache entry of its own -- see <a href="#caching">Caching</a></td></tr>
       <tr><td><code>count</code></td><td><code>int</code></td><td>Number of detected technologies</td></tr>
       <tr><td><code>technologies</code></td><td><code>array</code></td><td>Detected technologies</td></tr>
     </tbody>
@@ -788,6 +779,7 @@ resp = requests.post(
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>
+      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
       <tr><td><code>risk_level</code></td><td><code>string</code></td><td>Aggregate risk: <code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, or <code>critical</code></td></tr>
       <tr><td><code>score</code></td><td><code>int</code></td><td>Weighted aggregate score (0--100)</td></tr>
       <tr><td><code>categories</code></td><td><code>string[]</code></td><td>Merged threat categories across all providers</td></tr>
@@ -849,101 +841,142 @@ resp = requests.post(
 
   <!-- Full Response Example -->
   <h2 id="full-response-example">Full Response Example</h2>
-  <p>A complete response with all optional features enabled (<code>screenshot</code>, <code>reputation</code>, <code>email_security</code>, <code>subdomains</code>, <code>ct_logs</code>, <code>bgp</code>, <code>fingerprint</code>, <code>threat_intel</code>):</p>
-  <pre><code>[
-  {
-    <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
-    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
-    <span class="str">"whois"</span>: {
-      <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>,
-      <span class="str">"registrar"</span>: <span class="str">"RESERVED-Internet Assigned Numbers Authority"</span>,
-      <span class="str">"created_date"</span>: <span class="str">"1995-08-14T04:00:00Z"</span>,
-      <span class="str">"expiry_date"</span>: <span class="str">"2025-08-13T04:00:00Z"</span>,
-      <span class="str">"name_servers"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>]
-    },
-    <span class="str">"dns"</span>: {
-      <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>],
-      <span class="str">"aaaa"</span>: [<span class="str">"2606:2800:220:1:248:1893:25c8:1946"</span>],
-      <span class="str">"ns"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>],
-      <span class="str">"txt"</span>: [<span class="str">"v=spf1 -all"</span>]
-    },
-    <span class="str">"ssl"</span>: {
-      <span class="str">"subject"</span>: <span class="str">"www.example.org"</span>,
-      <span class="str">"issuer"</span>: <span class="str">"DigiCert Global G2 TLS RSA SHA256 2020 CA1"</span>,
-      <span class="str">"not_after"</span>: <span class="str">"2025-03-01T23:59:59Z"</span>,
-      <span class="str">"expired"</span>: <span class="kw">false</span>,
-      <span class="str">"days_until_expiry"</span>: <span class="num">142</span>,
-      <span class="str">"sans"</span>: [<span class="str">"www.example.org"</span>, <span class="str">"example.net"</span>, <span class="str">"example.org"</span>]
-    },
-    <span class="str">"headers"</span>: {
-      <span class="str">"status_code"</span>: <span class="num">200</span>,
-      <span class="str">"headers"</span>: { <span class="str">"Server"</span>: <span class="str">"ECAcc (dcd/7D5A)"</span> },
-      <span class="str">"security_headers"</span>: {
-        <span class="str">"strict_transport_security"</span>: <span class="str">"max-age=31536000"</span>,
-        <span class="str">"x_content_type_options"</span>: <span class="str">"nosniff"</span>
-      }
-    },
-    <span class="str">"screenshot"</span>: {
-      <span class="str">"status_code"</span>: <span class="num">200</span>,
-      <span class="str">"png"</span>: <span class="str">"iVBORw0KGgoAAAANSUhEUgAA..."</span>
-    },
-    <span class="str">"reputation"</span>: {
-      <span class="str">"score"</span>: <span class="num">0</span>,
-      <span class="str">"risk"</span>: <span class="str">"clean"</span>,
-      <span class="str">"providers"</span>: [
-        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_dbl"</span> },
-        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"surbl"</span> },
-        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"uribl"</span> },
-        { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_zen"</span> }
-      ]
-    },
-    <span class="str">"email_security"</span>: {
-      <span class="str">"spf"</span>: { <span class="str">"raw"</span>: <span class="str">"v=spf1 -all"</span>, <span class="str">"version"</span>: <span class="str">"spf1"</span>, <span class="str">"all"</span>: <span class="str">"-all"</span> },
-      <span class="str">"dmarc"</span>: { <span class="str">"raw"</span>: <span class="str">"v=DMARC1; p=reject"</span>, <span class="str">"version"</span>: <span class="str">"DMARC1"</span>, <span class="str">"policy"</span>: <span class="str">"reject"</span> },
-      <span class="str">"dkim"</span>: [{ <span class="str">"selector"</span>: <span class="str">"default"</span>, <span class="str">"found"</span>: <span class="kw">false</span> }]
-    },
-    <span class="str">"subdomains"</span>: {
-      <span class="str">"count"</span>: <span class="num">2</span>,
-      <span class="str">"capped"</span>: <span class="kw">false</span>,
-      <span class="str">"subdomains"</span>: [
-        { <span class="str">"domain"</span>: <span class="str">"www.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> },
-        { <span class="str">"domain"</span>: <span class="str">"mail.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> }
-      ]
-    },
-    <span class="str">"ct_logs"</span>: {
-      <span class="str">"count"</span>: <span class="num">1</span>,
-      <span class="str">"capped"</span>: <span class="kw">false</span>,
-      <span class="str">"entries"</span>: [
-        { <span class="str">"logged_at"</span>: <span class="str">"2024-01-15T00:00:00"</span>, <span class="str">"issuer"</span>: <span class="str">"Let's Encrypt"</span>, <span class="str">"common_name"</span>: <span class="str">"example.com"</span>, <span class="str">"serial"</span>: <span class="str">"abc123"</span> }
-      ]
-    },
-    <span class="str">"bgp"</span>: {
-      <span class="str">"records"</span>: [
-        { <span class="str">"ip"</span>: <span class="str">"93.184.216.34"</span>, <span class="str">"asn"</span>: <span class="num">15133</span>, <span class="str">"prefix"</span>: <span class="str">"93.184.216.0/24"</span>, <span class="str">"country"</span>: <span class="str">"US"</span>, <span class="str">"description"</span>: <span class="str">"EDGECAST, US"</span> }
-      ]
-    },
-    <span class="str">"fingerprint"</span>: {
-      <span class="str">"count"</span>: <span class="num">1</span>,
-      <span class="str">"technologies"</span>: [
-        { <span class="str">"name"</span>: <span class="str">"ECAcc"</span>, <span class="str">"category"</span>: <span class="str">"cdn"</span>, <span class="str">"version"</span>: <span class="str">""</span>, <span class="str">"confidence"</span>: <span class="str">"header"</span> }
-      ]
-    },
-    <span class="str">"threat_intel"</span>: {
-      <span class="str">"risk_level"</span>: <span class="str">"none"</span>,
-      <span class="str">"score"</span>: <span class="num">0</span>,
-      <span class="str">"providers"</span>: [
-        { <span class="str">"provider"</span>: <span class="str">"virustotal"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> },
-        { <span class="str">"provider"</span>: <span class="str">"urlhaus"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> },
-        { <span class="str">"provider"</span>: <span class="str">"alienvault_otx"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> }
-      ]
-    },
-    <span class="str">"errors"</span>: []
-  }
-]</code></pre>
+  <p>A complete response for <code>"lookups": ["whois", "dns", "ssl", "headers", "screenshot", "reputation", "email_security", "subdomains", "ct_logs", "bgp", "fingerprint", "threat_intel"]</code>:</p>
+  <pre><code>{
+  <span class="str">"results"</span>: [
+    {
+      <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
+      <span class="str">"inputs"</span>: [<span class="str">"example.com"</span>],
+      <span class="str">"whois"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>,
+        <span class="str">"registrar"</span>: <span class="str">"RESERVED-Internet Assigned Numbers Authority"</span>,
+        <span class="str">"created_date"</span>: <span class="str">"1995-08-14T04:00:00Z"</span>,
+        <span class="str">"expiry_date"</span>: <span class="str">"2025-08-13T04:00:00Z"</span>,
+        <span class="str">"name_servers"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>]
+      },
+      <span class="str">"dns"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">true</span>,
+        <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>],
+        <span class="str">"aaaa"</span>: [<span class="str">"2606:2800:220:1:248:1893:25c8:1946"</span>],
+        <span class="str">"ns"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>],
+        <span class="str">"txt"</span>: [<span class="str">"v=spf1 -all"</span>]
+      },
+      <span class="str">"ssl"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"subject"</span>: <span class="str">"www.example.org"</span>,
+        <span class="str">"issuer"</span>: <span class="str">"DigiCert Global G2 TLS RSA SHA256 2020 CA1"</span>,
+        <span class="str">"not_after"</span>: <span class="str">"2025-03-01T23:59:59Z"</span>,
+        <span class="str">"expired"</span>: <span class="kw">false</span>,
+        <span class="str">"days_until_expiry"</span>: <span class="num">142</span>,
+        <span class="str">"sans"</span>: [<span class="str">"www.example.org"</span>, <span class="str">"example.net"</span>, <span class="str">"example.org"</span>]
+      },
+      <span class="str">"headers"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"status_code"</span>: <span class="num">200</span>,
+        <span class="str">"headers"</span>: { <span class="str">"Server"</span>: <span class="str">"ECAcc (dcd/7D5A)"</span> },
+        <span class="str">"security_headers"</span>: {
+          <span class="str">"strict_transport_security"</span>: <span class="str">"max-age=31536000"</span>,
+          <span class="str">"x_content_type_options"</span>: <span class="str">"nosniff"</span>
+        }
+      },
+      <span class="str">"screenshot"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"status_code"</span>: <span class="num">200</span>,
+        <span class="str">"png"</span>: <span class="str">"iVBORw0KGgoAAAANSUhEUgAA..."</span>
+      },
+      <span class="str">"reputation"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"score"</span>: <span class="num">0</span>,
+        <span class="str">"risk"</span>: <span class="str">"clean"</span>,
+        <span class="str">"providers"</span>: [
+          { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_dbl"</span> },
+          { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"surbl"</span> },
+          { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"uribl"</span> },
+          { <span class="str">"listed"</span>: <span class="kw">false</span>, <span class="str">"provider"</span>: <span class="str">"spamhaus_zen"</span> }
+        ]
+      },
+      <span class="str">"email_security"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">true</span>,
+        <span class="str">"spf"</span>: { <span class="str">"raw"</span>: <span class="str">"v=spf1 -all"</span>, <span class="str">"version"</span>: <span class="str">"spf1"</span>, <span class="str">"all"</span>: <span class="str">"-all"</span> },
+        <span class="str">"dmarc"</span>: { <span class="str">"raw"</span>: <span class="str">"v=DMARC1; p=reject"</span>, <span class="str">"version"</span>: <span class="str">"DMARC1"</span>, <span class="str">"policy"</span>: <span class="str">"reject"</span> },
+        <span class="str">"dkim"</span>: [{ <span class="str">"selector"</span>: <span class="str">"default"</span>, <span class="str">"found"</span>: <span class="kw">false</span> }]
+      },
+      <span class="str">"subdomains"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"count"</span>: <span class="num">2</span>,
+        <span class="str">"capped"</span>: <span class="kw">false</span>,
+        <span class="str">"subdomains"</span>: [
+          { <span class="str">"domain"</span>: <span class="str">"www.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> },
+          { <span class="str">"domain"</span>: <span class="str">"mail.example.com"</span>, <span class="str">"source"</span>: <span class="str">"crt.sh"</span> }
+        ]
+      },
+      <span class="str">"ct_logs"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"count"</span>: <span class="num">1</span>,
+        <span class="str">"capped"</span>: <span class="kw">false</span>,
+        <span class="str">"entries"</span>: [
+          { <span class="str">"logged_at"</span>: <span class="str">"2024-01-15T00:00:00"</span>, <span class="str">"issuer"</span>: <span class="str">"Let's Encrypt"</span>, <span class="str">"common_name"</span>: <span class="str">"example.com"</span>, <span class="str">"serial"</span>: <span class="str">"abc123"</span> }
+        ]
+      },
+      <span class="str">"bgp"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"records"</span>: [
+          { <span class="str">"ip"</span>: <span class="str">"93.184.216.34"</span>, <span class="str">"asn"</span>: <span class="num">15133</span>, <span class="str">"prefix"</span>: <span class="str">"93.184.216.0/24"</span>, <span class="str">"country"</span>: <span class="str">"US"</span>, <span class="str">"description"</span>: <span class="str">"EDGECAST, US"</span> }
+        ]
+      },
+      <span class="str">"fingerprint"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"count"</span>: <span class="num">1</span>,
+        <span class="str">"technologies"</span>: [
+          { <span class="str">"name"</span>: <span class="str">"ECAcc"</span>, <span class="str">"category"</span>: <span class="str">"cdn"</span>, <span class="str">"version"</span>: <span class="str">""</span>, <span class="str">"confidence"</span>: <span class="str">"header"</span> }
+        ]
+      },
+      <span class="str">"threat_intel"</span>: {
+        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+        <span class="str">"risk_level"</span>: <span class="str">"none"</span>,
+        <span class="str">"score"</span>: <span class="num">0</span>,
+        <span class="str">"providers"</span>: [
+          { <span class="str">"provider"</span>: <span class="str">"virustotal"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> },
+          { <span class="str">"provider"</span>: <span class="str">"urlhaus"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> },
+          { <span class="str">"provider"</span>: <span class="str">"alienvault_otx"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> }
+        ]
+      },
+      <span class="str">"errors"</span>: []
+    }
+  ]
+}</code></pre>
+
+  <p>Note the per-lookup <code>cache_hit</code> flags: <code>dns</code> and <code>email_security</code> came from cache here while the rest were fetched live. <code>fingerprint</code> reports the cache state of the <code>headers</code> data it was computed from.</p>
 
   <!-- Caching -->
   <h2 id="caching">Caching</h2>
-  <p>Results are cached for <strong>60 minutes</strong>. The <code>cache_hit</code> field on each response indicates whether data was served from cache or fetched live.</p>
+  <p>Results are cached <strong>per lookup, per domain</strong> &mdash; not per response. Each lookup object in the response carries its own <code>cache_hit</code> flag, so a single result routinely mixes cached and freshly fetched fields.</p>
+  <p>Because each lookup is cached independently, the combination you request has no effect on reuse: a <code>dns</code>-only request warms the same entry a later <code>dns</code> + <code>ssl</code> request reads from.</p>
+
+  <h4>TTLs</h4>
+  <p>Every lookup has its own TTL, reflecting how fast that data actually changes. Expiry is absolute &mdash; an expired entry is gone and the lookup is refetched. There is no stale serving.</p>
+  <table>
+    <thead><tr><th>Lookup</th><th>TTL</th></tr></thead>
+    <tbody>
+      <tr><td><code>whois</code>, <code>ct_logs</code>, <code>subdomains</code>, <code>bgp</code></td><td>24 hours</td></tr>
+      <tr><td><code>ssl</code>, <code>email_security</code></td><td>4 hours</td></tr>
+      <tr><td><code>screenshot</code></td><td>60 minutes</td></tr>
+      <tr><td><code>dns</code>, <code>headers</code>, <code>reputation</code>, <code>threat_intel</code></td><td>30 minutes</td></tr>
+    </tbody>
+  </table>
+
+  <h4><code>fingerprint</code> is never cached separately</h4>
+  <p>Technology fingerprinting is pure computation over the <code>headers</code> payload, so caching <code>headers</code> already caches it. That means:</p>
+  <ul>
+    <li>Requesting <code>headers</code> and <code>fingerprint</code> together fetches headers <strong>exactly once</strong> &mdash; no extra network call.</li>
+    <li>Requesting <code>fingerprint</code> alone fetches and caches headers internally, but the <code>headers</code> object is not returned.</li>
+    <li><code>fingerprint.cache_hit</code> reflects where its headers input came from.</li>
+    <li>Fingerprint rule updates take effect immediately &mdash; there is no stale fingerprint TTL to wait out.</li>
+  </ul>
+
+  <h4>Cache failures never fail a request</h4>
+  <p>Caching is fail-open. If the cache is unreachable, every lookup is treated as a miss and fetched live. If a cached entry is unreadable, it is treated as a miss and overwritten by the fresh result. If a cache write fails, the lookup still succeeds and is returned normally. Cache problems never appear in the <code>errors</code> array &mdash; that is reserved for actual lookup failures.</p>
 
   <!-- Error Handling -->
   <h2 id="error-handling">Error Handling</h2>
@@ -951,8 +984,11 @@ resp = requests.post(
     <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
     <tbody>
       <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>domains</code> field, or invalid domain name</td></tr>
+      <tr><td><code>400 Bad Request</code></td><td><code>lookups</code> missing or empty after normalization &mdash; <code>lookups is required, e.g. ["dns", "ssl"]</code></td></tr>
+      <tr><td><code>400 Bad Request</code></td><td>Unrecognized lookup name &mdash; the message names the offending entry</td></tr>
+      <tr><td><code>400 Bad Request</code></td><td>More domains than your plan allows</td></tr>
       <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
-      <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint or feature</td></tr>
+      <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint, or a requested lookup &mdash; e.g. <code>screenshot requires a pro plan</code></td></tr>
       <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
       <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
       <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>

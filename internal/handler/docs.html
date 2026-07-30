@@ -312,9 +312,9 @@
             <small>Domain and IP intelligence with shared auth and rate limiting.</small>
           </li>
           <li>
-            <strong>60m</strong>
-            <span>Cache window</span>
-            <small>Responses surface <code>cache_hit</code> so clients can reason about freshness.</small>
+            <strong>30m&ndash;24h</strong>
+            <span>Cache windows</span>
+            <small>Each lookup caches on its own schedule and reports its own <code>cache_hit</code>.</small>
           </li>
           <li>
             <strong>1 MB</strong>
@@ -419,8 +419,8 @@
     <div>
       <p class="section-label">Freshness</p>
       <h2>Caching</h2>
-      <p>Results are cached for <strong>60 minutes</strong>. Each element returns <code>cache_hit</code> so you can distinguish cached and live responses inside batch results.</p>
-      <p>Use the same cached window expectations across Domain and IP workflows when deciding whether to fan out requests or reuse prior enrichments.</p>
+      <p>Domain results are cached <strong>per lookup, per domain</strong>, each with its own TTL &mdash; 30 minutes for fast-moving data like <code>dns</code> and <code>headers</code>, up to 24 hours for <code>whois</code> and <code>ct_logs</code>. Every lookup object reports its own <code>cache_hit</code>, so a single result can mix cached and live fields. See the <a href="/docs/domain#caching">Domain Intelligence</a> docs for the full table.</p>
+      <p>IP results are cached as a whole document for 60 minutes and report a single top-level <code>cache_hit</code>.</p>
     </div>
   </section>
 
