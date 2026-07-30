@@ -32,7 +32,8 @@ X-API-Key: {{adminKey}}
 X-Client-Request-ID: test-admin-001
 
 {
-  "domains": ["example.com"]
+  "domains": ["example.com"],
+  "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
 ### Domain lookup (basic key)
@@ -42,7 +43,8 @@ X-API-Key: {{lookupKey}}
 X-Client-Request-ID: test-lookup-001
 
 {
-  "domains": ["example.com", "example.org"]
+  "domains": ["example.com", "example.org"],
+  "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
 ### Domain lookup (pro key)
@@ -52,7 +54,8 @@ X-API-Key: {{proKey}}
 X-Client-Request-ID: test-pro-001
 
 {
-  "domains": ["example.com"]
+  "domains": ["example.com"],
+  "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
 ### Domain lookup (free key)
@@ -62,7 +65,8 @@ X-API-Key: {{freeKey}}
 X-Client-Request-ID: test-free-001
 
 {
-  "domains": ["example.com"]
+  "domains": ["example.com"],
+  "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
 ### Domain lookup - should return 400 (free key, too many domains)
@@ -71,7 +75,8 @@ Content-Type: application/json
 X-API-Key: {{freeKey}}
 
 {
-  "domains": ["example.com", "example.org"]
+  "domains": ["example.com", "example.org"],
+  "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
 ### Domain lookup with screenshot - should return 403 (free key)
@@ -81,7 +86,7 @@ X-API-Key: {{freeKey}}
 
 {
   "domains": ["example.com"],
-  "screenshot": true
+  "lookups": ["screenshot"]
 }
 
 ### Domain lookup with screenshot (admin key)
@@ -91,7 +96,7 @@ X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "screenshot": true
+  "lookups": ["screenshot"]
 }
 
 ### Domain lookup with screenshot - should return 403 (basic key)
@@ -101,7 +106,7 @@ X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
-  "screenshot": true
+  "lookups": ["screenshot"]
 }
 
 ### Domain lookup with reputation (admin key)
@@ -111,7 +116,7 @@ X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "reputation": true
+  "lookups": ["reputation"]
 }
 
 ### Domain lookup with reputation - should return 403 (basic key)
@@ -121,7 +126,7 @@ X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
-  "reputation": true
+  "lookups": ["reputation"]
 }
 
 ### Domain lookup with screenshot + reputation (admin key)
@@ -131,8 +136,7 @@ X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "screenshot": true,
-  "reputation": true
+  "lookups": ["screenshot", "reputation"]
 }
 
 ### Domain lookup with email security (basic key - all plans)
@@ -142,7 +146,7 @@ X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
-  "email_security": true
+  "lookups": ["email_security"]
 }
 
 ### Domain lookup with subdomains (admin key)
@@ -152,7 +156,7 @@ X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "subdomains": true
+  "lookups": ["subdomains"]
 }
 
 ### Domain lookup with subdomains (basic key - all plans)
@@ -162,7 +166,7 @@ X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
-  "subdomains": true
+  "lookups": ["subdomains"]
 }
 
 ### Domain lookup with CT logs (admin key)
@@ -172,7 +176,7 @@ X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "ct_logs": true
+  "lookups": ["ct_logs"]
 }
 
 ### Domain lookup with CT logs (basic key - all plans)
@@ -182,7 +186,7 @@ X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
-  "ct_logs": true
+  "lookups": ["ct_logs"]
 }
 
 ### Domain lookup with BGP/ASN (admin key)
@@ -192,7 +196,7 @@ X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "bgp": true
+  "lookups": ["bgp"]
 }
 
 ### Domain lookup with BGP/ASN (basic key - all plans)
@@ -202,7 +206,7 @@ X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
-  "bgp": true
+  "lookups": ["bgp"]
 }
 
 ### Domain lookup - should return 401 (no key)
@@ -210,7 +214,8 @@ POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 
 {
-  "domains": ["example.com"]
+  "domains": ["example.com"],
+  "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
 ### Info - should return 403 (basic key, admin only)
@@ -224,7 +229,7 @@ X-API-Key: {{adminKey}}
 
 {
   "domains": ["example.com"],
-  "fingerprint": true
+  "lookups": ["fingerprint"]
 }
 
 ### Domain lookup with fingerprint (basic key - all plans)
@@ -234,7 +239,76 @@ X-API-Key: {{lookupKey}}
 
 {
   "domains": ["example.com"],
-  "fingerprint": true
+  "lookups": ["fingerprint"]
+}
+
+### Domain lookup with headers + fingerprint — headers fetched once (admin key)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "lookups": ["headers", "fingerprint"]
+}
+
+### Domain lookup — lookup names are normalized and deduped (admin key)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["  Example.COM  ", "https://example.com/"],
+  "lookups": [" SSL ", "ssl", "DNS"]
+}
+
+### Domain lookup - should return 400 (lookups missing)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"]
+}
+
+### Domain lookup - should return 400 (lookups empty)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "lookups": []
+}
+
+### Domain lookup - should return 400 (lookups whitespace-only)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "lookups": ["  "]
+}
+
+### Domain lookup - should return 400 (unknown lookup name)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "lookups": ["dns", "banana"]
+}
+
+### Domain lookup - should return 403 (free key, threat_intel is pro-only)
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{freeKey}}
+
+{
+  "domains": ["example.com"],
+  "lookups": ["threat_intel"]
 }
 
 ### Invalidate auth cache (admin only)

@@ -9,11 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// ContextKeys lists every boolean gin context key that the request logger reads.
-// Handlers must set these keys so the logger can include them. Tests use this
-// slice as the single source of truth for drift detection.
-var ContextKeys = []string{}
-
 // IntContextKeys lists integer gin context keys logged per request.
 var IntContextKeys = []string{
 	"rate_limit",
@@ -72,14 +67,6 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 		if plan, exists := c.Get("api_key_plan"); exists {
 			if v, ok := plan.(string); ok {
 				fields = append(fields, zap.String("api_key_plan", v))
-			}
-		}
-
-		for _, key := range ContextKeys {
-			if val, exists := c.Get(key); exists {
-				if v, ok := val.(bool); ok {
-					fields = append(fields, zap.Bool(key, v))
-				}
 			}
 		}
 

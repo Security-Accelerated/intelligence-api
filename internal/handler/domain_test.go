@@ -712,3 +712,50 @@ func TestDomainLookup_OversizedBody_Returns413(t *testing.T) {
 		t.Fatalf("status = %d, want 413; body: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestDomainLookup_RecordsDemandOnRejectedRequests(t *testing.T) {
+	// Validation failures still publish what the caller asked for, so usage
+	// analytics reflect attempted demand rather than only successful requests.
+	cases := []struct {
+		name       string
+		plan       string
+		body       string
+		wantStatus int
+		wantLookup string
+	}{
+		{"plan-gated 403", planFree, `{"domains":["example.com"],"lookups":["screenshot"]}`, http.StatusForbidden, "screenshot"},
+		{"unknown name 400", planPro, `{"domains":["example.com"],"lookups":["banana"]}`, http.StatusBadRequest, "banana"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			r := gin.New()
+			h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+			var lookups []string
+			var domainCount int
+			h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+				c.Set("api_key_plan", tc.plan)
+				c.Next()
+				if v, ok := c.Get("lookups_requested"); ok {
+					lookups, _ = v.([]string)
+				}
+				if v, ok := c.Get("domain_count"); ok {
+					domainCount, _ = v.(int)
+				}
+			})
+
+			w := post(r, tc.body)
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.wantStatus, w.Body.String())
+			}
+			if !slices.Contains(lookups, tc.wantLookup) {
+				t.Errorf("lookups_requested = %v, want it to contain %q", lookups, tc.wantLookup)
+			}
+			if domainCount != 1 {
+				t.Errorf("domain_count = %d, want 1", domainCount)
+			}
+		})
+	}
+}

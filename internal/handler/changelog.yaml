@@ -1,6 +1,42 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.52.0
+  date: 2026-07-30
+  changes:
+    - text: "BREAKING: domain lookups now require a `lookups` array naming exactly which lookups to run. The per-feature booleans (screenshot, reputation, email_security, subdomains, ct_logs, bgp, fingerprint, threat_intel) are gone, and whois/dns/ssl/headers are no longer implicit — nothing runs unless you ask for it"
+      audience: public
+    - text: "BREAKING: lookup responses are now wrapped in a `results` envelope instead of a bare JSON array, so every response is a JSON object"
+      audience: public
+    - text: "BREAKING: the top-level `cache_hit` field is gone. Each lookup object now carries its own `cache_hit`, since lookups are cached independently"
+      audience: public
+    - text: "Each result now reports the normalized `domain` plus an `inputs` array listing the original request entries that mapped to it. Match results by `domain` — array position is not part of the contract"
+      audience: public
+    - text: "Domains that normalize to the same name are deduplicated into a single result. Plan domain limits still count the entries you submit"
+      audience: public
+    - text: "Lookup names and domains are trimmed, lowercased, and deduplicated before validation, so `[\" SSL \", \"ssl\"]` and `Example.COM` behave as expected"
+      audience: public
+    - text: "Results are now cached per lookup rather than per response, each with its own TTL — 30 minutes for dns/headers/reputation/threat_intel, 4 hours for ssl/email_security, 24 hours for whois/ct_logs/subdomains/bgp, 60 minutes for screenshot. A lookup you fetched yesterday is reusable today regardless of what else you request alongside it"
+      audience: public
+    - text: "Requesting headers and fingerprint together now costs a single headers fetch. Fingerprint has no cache entry of its own, so fingerprint rule updates take effect immediately"
+      audience: public
+    - text: "New 400 responses for a missing/empty `lookups` array and for unrecognized lookup names; requesting a lookup outside your plan returns 403 naming that lookup"
+      audience: public
+    - text: "Cache keys are now flat `lookup:<domain>:<name>` entries; the composite sorted-suffix key builder has been removed"
+      audience: internal
+    - text: "service.Lookup() issues a single MGET for all requested lookups and spawns goroutines only for the misses; each goroutine writes its own result with that lookup's TTL"
+      audience: internal
+    - text: "Cache failures are fail-open throughout — read errors and corrupt entries degrade to live lookups (overwriting the bad entry), and failed writes are logged without affecting the response"
+      audience: internal
+    - text: "Replaced redis.cache_ttl with cache.default_ttl plus per-lookup cache.ttl.* keys; env overrides work per Viper convention (CACHE_TTL_WHOIS, CACHE_DEFAULT_TTL)"
+      audience: internal
+    - text: "request_log now records per-lookup cache_hits/cache_misses counts instead of a per-request cache_hit boolean, and tracks the four base lookups alongside the optional ones (migration 012)"
+      audience: internal
+    - text: "Admin usage endpoint reports cache hit rate from per-lookup counts and includes whois/dns/ssl/headers in feature_usage"
+      audience: internal
+    - text: "/v1/info cache section now reports default_ttl plus the resolved per-lookup TTL table"
+      audience: internal
+
 - version: v0.51.0
   date: 2026-04-16
   changes:

@@ -101,7 +101,7 @@ PRO="${SMOKE_PRO_KEY:-test-pro-key}"
 FREE="${SMOKE_FREE_KEY:-test-free-key}"
 FREE2="${SMOKE_FREE_KEY_2:-test-free-key-2}"
 
-DOMAIN='{"domains":["example.com"]}'
+DOMAIN='{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}'
 
 echo ""
 echo "=== Docs ==="
@@ -127,47 +127,52 @@ post 200 "lookup (admin)"      "/v1/domain/lookup" "$ADMIN" "$DOMAIN"
 post 200 "lookup (pro)"        "/v1/domain/lookup" "$PRO"   "$DOMAIN"
 post 200 "lookup (basic)"      "/v1/domain/lookup" "$BASIC" "$DOMAIN"
 post 200 "lookup (free)"       "/v1/domain/lookup" "$FREE"  "$DOMAIN"
-post 400 "free plan max domains" "/v1/domain/lookup" "$FREE" '{"domains":["a.com","b.com"]}'
+post 400 "free plan max domains" "/v1/domain/lookup" "$FREE" '{"domains":["a.com","b.com"],"lookups":["dns"]}'
 post 401 "lookup (no key)"     "/v1/domain/lookup" ""       "$DOMAIN"
 post 401 "lookup (wrong key)"  "/v1/domain/lookup" "totally-wrong-key" "$DOMAIN"
 
 echo ""
 echo "=== Domain Lookup — Pro Options ==="
-post 200 "screenshot (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"screenshot":true}'
-post 200 "screenshot (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"screenshot":true}'
-post 403 "screenshot (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"screenshot":true}'
-post 403 "screenshot (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"screenshot":true}'
-post 200 "reputation (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"reputation":true}'
-post 200 "reputation (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"reputation":true}'
-post 403 "reputation (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"reputation":true}'
-post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"reputation":true}'
-post 200 "screenshot+reputation (admin)" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"screenshot":true,"reputation":true}'
-post 200 "threat_intel (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"threat_intel":true}'
-post 200 "threat_intel (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"threat_intel":true}'
-post 403 "threat_intel (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"threat_intel":true}'
-post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"threat_intel":true}'
+post 200 "screenshot (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot"]}'
+post 200 "screenshot (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["screenshot"]}'
+post 403 "screenshot (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["screenshot"]}'
+post 403 "screenshot (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"lookups":["screenshot"]}'
+post 200 "reputation (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["reputation"]}'
+post 200 "reputation (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["reputation"]}'
+post 403 "reputation (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["reputation"]}'
+post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["reputation"]}'
+post 200 "screenshot+reputation (admin)" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot","reputation"]}'
+post 200 "threat_intel (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["threat_intel"]}'
+post 200 "threat_intel (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["threat_intel"]}'
+post 403 "threat_intel (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["threat_intel"]}'
+post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["threat_intel"]}'
 
 echo ""
 echo "=== Domain Lookup — All-Plan Options ==="
-post 200 "email_security (admin)"  "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"email_security":true}'
-post 200 "email_security (pro)"    "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"email_security":true}'
-post 200 "email_security (basic)"  "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"email_security":true}'
-post 200 "email_security (free)"   "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"email_security":true}'
-post 200 "subdomains (admin)"      "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"subdomains":true}'
-post 200 "subdomains (basic)"      "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"subdomains":true}'
-post 200 "ct_logs (admin)"         "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"ct_logs":true}'
-post 200 "ct_logs (basic)"         "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"ct_logs":true}'
-post 200 "bgp (admin)"             "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"bgp":true}'
-post 200 "bgp (basic)"             "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"bgp":true}'
-post 200 "fingerprint (admin)"     "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"fingerprint":true}'
-post 200 "fingerprint (basic)"     "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"fingerprint":true}'
+post 200 "email_security (admin)"  "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["email_security"]}'
+post 200 "email_security (pro)"    "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["email_security"]}'
+post 200 "email_security (basic)"  "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["email_security"]}'
+post 200 "email_security (free)"   "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["email_security"]}'
+post 200 "subdomains (admin)"      "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["subdomains"]}'
+post 200 "subdomains (basic)"      "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["subdomains"]}'
+post 200 "ct_logs (admin)"         "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["ct_logs"]}'
+post 200 "ct_logs (basic)"         "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["ct_logs"]}'
+post 200 "bgp (admin)"             "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["bgp"]}'
+post 200 "bgp (basic)"             "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["bgp"]}'
+post 200 "fingerprint (admin)"     "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["fingerprint"]}'
+post 200 "fingerprint (basic)"     "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["fingerprint"]}'
 
 echo ""
 echo "=== Domain Lookup — Validation ==="
-post 400 "empty domains"       "/v1/domain/lookup" "$ADMIN" '{"domains":[]}'
+post 400 "empty domains"       "/v1/domain/lookup" "$ADMIN" '{"domains":[],"lookups":["dns"]}'
 post 400 "missing domains"     "/v1/domain/lookup" "$ADMIN" '{}'
-post 400 "invalid domain"      "/v1/domain/lookup" "$ADMIN" '{"domains":["notadomain"]}'
-post 400 "raw IP"              "/v1/domain/lookup" "$ADMIN" '{"domains":["1.2.3.4"]}'
+post 400 "invalid domain"      "/v1/domain/lookup" "$ADMIN" '{"domains":["notadomain"],"lookups":["dns"]}'
+post 400 "raw IP"              "/v1/domain/lookup" "$ADMIN" '{"domains":["1.2.3.4"],"lookups":["dns"]}'
+post 400 "missing lookups"     "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"]}'
+post 400 "empty lookups"       "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":[]}'
+post 400 "blank lookups"       "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["  "]}'
+post 400 "unknown lookup"      "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["dns","banana"]}'
+post 200 "lookup names normalized" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":[" DNS ","dns"]}'
 
 echo ""
 echo "=== Admin ==="
@@ -203,53 +208,85 @@ check_json "GET /hello returns {message: hello world}" \
     '.message == "hello world"' \
     "$HOST/v1/hello"
 
-check_json "lookup response is JSON array with domain field" \
-    '.[0].domain' \
+check_json "lookup response is a results envelope with domain field" \
+    '.results[0].domain == "example.com"' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
 
 check_json "lookup response has whois populated" \
-    '.[0].whois.domain_name' \
+    '.results[0].whois.domain_name' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
 
 check_json "lookup response has dns populated" \
-    '.[0].dns' \
+    '.results[0].dns' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
 
 check_json "lookup response has ssl populated" \
-    '.[0].ssl.subject' \
+    '.results[0].ssl.subject' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
 
 check_json "lookup response has headers populated" \
-    '.[0].headers.status_code' \
+    '.results[0].headers.status_code' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
 
 echo ""
 echo "=== Multi-Domain Batch ==="
-post 200 "basic 3 domains" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com","example.org","example.net"]}'
+post 200 "basic 3 domains" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com","example.org","example.net"],"lookups":["dns"]}'
 check_json "basic batch returns 3 results" \
-    'length == 3' \
+    '.results | length == 3' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $BASIC" \
-    -d '{"domains":["example.com","example.org","example.net"]}'
-post 200 "pro 3 domains" "/v1/domain/lookup" "$PRO" '{"domains":["example.com","example.org","example.net"]}'
+    -d '{"domains":["example.com","example.org","example.net"],"lookups":["dns"]}'
+post 200 "pro 3 domains" "/v1/domain/lookup" "$PRO" '{"domains":["example.com","example.org","example.net"],"lookups":["dns"]}'
 
 echo ""
 echo "=== All Features Combined ==="
 check_json "all features return populated fields" \
-    '.[0].email_security and .[0].subdomains and .[0].bgp and .[0].fingerprint and .[0].ct_logs' \
+    '.results[0] | .email_security and .subdomains and .bgp and .fingerprint and .ct_logs' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d '{"domains":["example.com"],"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true}'
+    -d '{"domains":["example.com"],"lookups":["email_security","subdomains","ct_logs","bgp","fingerprint"]}'
+
+echo ""
+echo "=== Selectable Lookups ==="
+check_json "response contains only requested lookups" \
+    '.results[0] | has("dns") and has("bgp") and (has("whois") | not) and (has("ssl") | not)' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["example.com"],"lookups":["dns","bgp"]}'
+
+check_json "each lookup carries its own cache_hit" \
+    '.results[0] | (.dns.cache_hit | type == "boolean") and (.ssl.cache_hit | type == "boolean")' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["example.com"],"lookups":["dns","ssl"]}'
+
+check_json "no top-level cache_hit" \
+    '.results[0] | has("cache_hit") | not' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["example.com"],"lookups":["dns"]}'
+
+check_json "duplicate domains dedupe and report inputs verbatim" \
+    '.results | length == 1 and (.[0].domain == "example.com") and (.[0].inputs | length == 2)' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["HTTPS://Example.COM/","example.com"],"lookups":["dns"]}'
+
+check_json "fingerprint-only omits headers from the response" \
+    '.results[0] | has("fingerprint") and (has("headers") | not)' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["example.com"],"lookups":["fingerprint"]}'
 
 echo ""
 echo "=== Security Headers ==="
@@ -275,7 +312,7 @@ echo "=== Body Size Limit ==="
 # Send a >1MB payload. MaxBytesReader surfaces through Gin's binding layer as 400.
 # Written to a temp file because the shell can't pass >1MB as a CLI argument.
 big_body_file=$(mktemp)
-python3 -c "print('{\"domains\":[\"' + 'x'*1048577 + '\"]}')" > "$big_body_file"
+python3 -c "print('{\"lookups\":[\"dns\"],\"domains\":[\"' + 'x'*1048577 + '\"]}')" > "$big_body_file"
 check 413 "oversized body (>1MB) rejected" \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \

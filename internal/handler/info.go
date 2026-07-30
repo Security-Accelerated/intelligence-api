@@ -54,10 +54,10 @@ type cacheStats struct {
 	DefaultTTL    string            `json:"default_ttl"`
 	LookupTTLs    map[string]string `json:"lookup_ttls,omitempty"`
 	AuthCacheTTL  string            `json:"auth_cache_ttl"`
-	PingMs        *float64 `json:"ping_ms,omitempty"`
-	KeyCount      *int64   `json:"key_count,omitempty"`
-	MemoryUsed    string   `json:"memory_used,omitempty"`
-	AuthCacheSize *int     `json:"auth_cache_size,omitempty"`
+	PingMs        *float64          `json:"ping_ms,omitempty"`
+	KeyCount      *int64            `json:"key_count,omitempty"`
+	MemoryUsed    string            `json:"memory_used,omitempty"`
+	AuthCacheSize *int              `json:"auth_cache_size,omitempty"`
 }
 
 func (h *Handler) Info(c *gin.Context) {

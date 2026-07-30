@@ -172,6 +172,11 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 	lookups := normalizeLookups(req.Lookups)
 	groups := groupDomains(req.Domains)
 
+	// Published before validation so usage tracking and request logs capture
+	// attempted demand, including on requests that go on to be rejected.
+	c.Set("domain_count", len(req.Domains))
+	c.Set("lookups_requested", lookups)
+
 	if len(lookups) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": `lookups is required, e.g. ["dns", "ssl"]`})
 		return
@@ -211,9 +216,6 @@ func (h *Handler) DomainLookup(c *gin.Context) {
 			return
 		}
 	}
-
-	c.Set("domain_count", len(req.Domains))
-	c.Set("lookups_requested", lookups)
 
 	results := make([]*domain.DomainResponse, len(groups))
 	var valid []int
