@@ -14,4 +14,4 @@ INSERT INTO api_keys (customer_id, key_hash) VALUES
     (3, encode(digest('test-pro-key', 'sha256'), 'hex')),
     (4, encode(digest('test-free-key', 'sha256'), 'hex')),
     (5, encode(digest('test-free-key-2', 'sha256'), 'hex'))
-ON CONFLICT (customer_id) DO NOTHING;
+ON CONFLICT (key_hash) DO NOTHING;
