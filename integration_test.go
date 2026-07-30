@@ -2384,9 +2384,56 @@ func TestIntegration_AdminChangelog_AdminAllowed(t *testing.T) {
 	if body == "" || body[0] != '[' {
 		t.Errorf("expected JSON array, got %q", body[:min(len(body), 50)])
 	}
-	// Should include both public and internal entries (unfiltered)
-	if !strings.Contains(body, "public") || !strings.Contains(body, "internal") {
-		t.Error("admin changelog should include both public and internal audience entries")
+	// The admin endpoint is unfiltered, so it must return at least as many
+	// versions as the docs page renders — and strictly more whenever any entry
+	// is marked internal. Asserting that relationship rather than the presence
+	// of both audience strings keeps the test honest when the data changes:
+	// every entry is internal immediately before v1.0 (see issue #51), and an
+	// assertion on literal audience values silently breaks then.
+	var adminVersions []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &adminVersions); err != nil {
+		t.Fatalf("unmarshal admin changelog: %v", err)
+	}
+	if len(adminVersions) == 0 {
+		t.Fatal("admin changelog is empty")
+	}
+
+	docsResp := httptest.NewRecorder()
+	r.ServeHTTP(docsResp, httptest.NewRequest(http.MethodGet, "/docs", nil))
+	if docsResp.Code != http.StatusOK {
+		t.Fatalf("/docs status = %d, want %d", docsResp.Code, http.StatusOK)
+	}
+	docsBody := docsResp.Body.String()
+
+	// Derive from the unfiltered admin payload which versions the docs page
+	// ought to render, then compare against what it actually rendered.
+	// Comparing the two sets fails in both directions — an internal-only
+	// version leaking onto the public page, or a public one going missing —
+	// where counting hidden versions passed as soon as anything was hidden,
+	// including when /docs returned an error page containing no versions at all.
+	for _, v := range adminVersions {
+		version, _ := v["version"].(string)
+		if version == "" {
+			t.Fatalf("admin changelog entry has no version: %v", v)
+		}
+
+		changes, _ := v["changes"].([]any)
+		wantRendered := false
+		for _, c := range changes {
+			change, _ := c.(map[string]any)
+			if audience, _ := change["audience"].(string); audience == "public" {
+				wantRendered = true
+				break
+			}
+		}
+
+		if got := strings.Contains(docsBody, version); got != wantRendered {
+			if wantRendered {
+				t.Errorf("version %s has public changes but is not on the docs page", version)
+			} else {
+				t.Errorf("version %s has only internal changes but appears on the docs page", version)
+			}
+		}
 	}
 }
 

@@ -1,26 +1,28 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 #
-# Every pre-1.0 entry is deliberately marked internal. The public "What's New"
-# section on /docs starts clean at v1.0 rather than exposing the churn of
-# getting there; the admin endpoint (GET /v1/admin/changelog) still returns
-# everything unfiltered. Mark new entries public from v1.0 onward.
+# Pre-1.0 entries stay public for now: an empty release-notes section on a live
+# docs page reads worse than a detailed one, and there is no reason to hide the
+# history while the product is pre-launch. They get flipped to internal
+# immediately before v1.0 ships so the customer-facing notes start clean — see
+# issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
+# way, so nothing is ever lost operationally.
 
 - version: v0.55.0
   date: 2026-07-30
   changes:
     - text: "BREAKING: IP lookups now take the same `lookups` array as domain lookups. The `threat_intel` boolean is gone; valid names are geo, asn, reverse_dns, abuse_contact and threat_intel"
-      audience: internal
+      audience: public
     - text: "BREAKING: IP responses are wrapped in a `results` envelope and the top-level `cache_hit` is replaced by a per-lookup `cache_hit`, matching the domain endpoint"
-      audience: internal
+      audience: public
     - text: "IP results now report the canonicalized `ip` plus an `inputs` array of the original entries that mapped to it. Addresses that canonicalize to the same value are deduplicated, so 2001:DB8::1 and 2001:db8:0:0:0:0:0:1 return one result"
-      audience: internal
+      audience: public
     - text: "IP lookups are cached individually with their own TTLs — 24h for abuse_contact, 6h for reverse_dns, 30m for threat_intel — so a slow RDAP lookup no longer shortens everything else's cache lifetime"
-      audience: internal
+      audience: public
     - text: "geo and asn are no longer cached at all. They read a local database with no network call, so recomputing them is faster than a cache round trip; their cache_hit is always false"
-      audience: internal
+      audience: public
     - text: "Requesting a domain-only lookup name (such as whois) on the IP endpoint now returns 400 rather than being silently ignored"
-      audience: internal
+      audience: public
     - text: "IP cache keys use a separate `ip:<ip>:<lookup>` namespace, so threat_intel on the two endpoints cannot collide"
       audience: internal
     - text: "Extracted the per-lookup runner machinery into service/runner.go, shared by both services; service/whole_response.go and its copyViaJSON/goLookup helpers are deleted with no remaining callers"
@@ -36,29 +38,29 @@
   date: 2026-07-30
   changes:
     - text: "BREAKING: domain lookups now require a `lookups` array naming exactly which lookups to run. The per-feature booleans (screenshot, reputation, email_security, subdomains, ct_logs, bgp, fingerprint, threat_intel) are gone, and whois/dns/ssl/headers are no longer implicit — nothing runs unless you ask for it"
-      audience: internal
+      audience: public
     - text: "BREAKING: lookup responses are now wrapped in a `results` envelope instead of a bare JSON array, so every response is a JSON object"
-      audience: internal
+      audience: public
     - text: "BREAKING: the top-level `cache_hit` field is gone. Each lookup object now carries its own `cache_hit`, since lookups are cached independently"
-      audience: internal
+      audience: public
     - text: "Each result now reports the normalized `domain` plus an `inputs` array listing the original request entries that mapped to it. Match results by `domain` — array position is not part of the contract"
-      audience: internal
+      audience: public
     - text: "Domains that normalize to the same name are deduplicated into a single result. Plan domain limits still count the entries you submit"
-      audience: internal
+      audience: public
     - text: "Lookup names and domains are trimmed, lowercased, and deduplicated before validation, so `[\" SSL \", \"ssl\"]` and `Example.COM` behave as expected"
-      audience: internal
+      audience: public
     - text: "Results are now cached per lookup rather than per response, each with its own TTL — 30 minutes for dns/headers/reputation/threat_intel, 4 hours for ssl/email_security, 24 hours for whois/ct_logs/subdomains/bgp, 60 minutes for screenshot. A lookup you fetched yesterday is reusable today regardless of what else you request alongside it"
-      audience: internal
+      audience: public
     - text: "Requesting headers and fingerprint together now costs a single headers fetch. Fingerprint has no cache entry of its own, so fingerprint rule updates take effect immediately"
-      audience: internal
+      audience: public
     - text: "New 400 responses for a missing/empty `lookups` array and for unrecognized lookup names; requesting a lookup outside your plan returns 403 naming that lookup"
-      audience: internal
+      audience: public
     - text: "`dns_security` (DNSSEC + CAA) is now selected like any other lookup rather than via its own flag"
-      audience: internal
+      audience: public
     - text: "BREAKING: the aggregate `risk` score is now opt-in. Add \"risk\" to `lookups` to get it — it still costs no extra network call and scores over whatever else you requested"
-      audience: internal
+      audience: public
     - text: "Domain lookups no longer cache failures. Per-lookup TTLs mean one flaky provider can no longer shorten every other lookup's cache lifetime, and a failing lookup is retried rather than remembered. IP lookups still negative-cache, since they are cached as a single document"
-      audience: internal
+      audience: public
     - text: "Cache keys are now flat `lookup:<domain>:<name>` entries; the composite sorted-suffix key builder has been removed"
       audience: internal
     - text: "service.Lookup() issues a single MGET for all requested lookups and spawns goroutines only for the misses; each goroutine writes its own result with that lookup's TTL"
@@ -84,7 +86,7 @@
   date: 2026-06-12
   changes:
     - text: "Improved reliability under load: heavy lookups are now bounded and isolated so one slow or failing lookup can't affect other requests"
-      audience: internal
+      audience: public
     - text: "Panic recovery in all lookup goroutines — a panicking lookup degrades to a per-lookup error instead of killing the process"
       audience: internal
     - text: "Provisioned API key plaintext is blanked on retrieval and expired rows are swept on an interval (billing.cleanup_interval, default 10m)"
@@ -102,21 +104,21 @@
   date: 2026-06-11
   changes:
     - text: "Every domain lookup now includes an aggregate risk score (0–100 with risk level and per-component breakdown) computed from all returned data"
-      audience: internal
+      audience: public
     - text: "New dns_security option — DNSSEC deployment (DS/DNSKEY, signing algorithms) and CAA records, available on all plans"
-      audience: internal
+      audience: public
     - text: "email_security now also checks MTA-STS (including the published policy), TLS-RPT, and BIMI"
-      audience: internal
+      audience: public
     - text: "New GET /v1/usage — view your own request counts, cache hit rate, and feature usage"
-      audience: internal
+      audience: public
     - text: "New POST /v1/keys/rotate — self-service API key rotation; old keys keep working for a 24h grace window"
-      audience: internal
+      audience: public
     - text: "Machine-readable OpenAPI 3.1 spec now served at /docs/openapi.yaml"
-      audience: internal
+      audience: public
     - text: "All responses now include Strict-Transport-Security, Referrer-Policy, and Content-Security-Policy headers"
-      audience: internal
+      audience: public
     - text: "Failed lookups are now retried sooner: error responses cache for a short negative TTL instead of the full cache window"
-      audience: internal
+      audience: public
     - text: "Removed all inline JavaScript from docs and checkout pages; scripts are now served as external files under a strict page CSP"
       audience: internal
     - text: "Concurrent identical lookups now coalesce via singleflight; lookups detached from client cancellation"
@@ -130,7 +132,7 @@
   date: 2026-04-16
   changes:
     - text: "Subdomain enumeration is now subject to a tighter per-plan domain cap (subdomain.max_domains.*). The config keys and defaults shipped earlier; this is the missing enforcement"
-      audience: internal
+      audience: public
     - text: "MaxMind license key is now redacted from any wrapped error originating from the database download client"
       audience: internal
     - text: "Replaced time.Sleep-based test synchronization in billing and notification tests with channel-driven waits"
@@ -150,7 +152,7 @@
   date: 2026-04-04
   changes:
     - text: "Domain normalization now strips any URL scheme (ftp, ssh, etc.), not just http/https"
-      audience: internal
+      audience: public
     - text: "Fixed normalization ordering to prevent path @-sign from poisoning hostname extraction"
       audience: internal
 
@@ -158,7 +160,7 @@
   date: 2026-04-04
   changes:
     - text: "Domain inputs with paths, ports, query strings, and fragments are now normalized instead of rejected"
-      audience: internal
+      audience: public
 
 - version: v0.49.2
   date: 2026-04-04
@@ -226,7 +228,7 @@
   date: 2026-04-03
   changes:
     - text: "DNS lookups now use external resolvers (Google, Cloudflare, OpenDNS) with automatic fallback"
-      audience: internal
+      audience: public
     - text: "RDAP abuse contact queries go directly to regional RIR endpoints instead of rdap.org bootstrap"
       audience: internal
     - text: "Global RDAP rate limiter (10 req/s) prevents upstream abuse under load"
@@ -258,11 +260,11 @@
   date: 2026-03-29
   changes:
     - text: "New endpoint: POST /v1/ip/lookup — GeoIP, ASN, reverse DNS, abuse contact, and threat intelligence for IP addresses"
-      audience: internal
+      audience: public
     - text: "IP threat intelligence requires a pro plan (same as domain threat_intel)"
-      audience: internal
+      audience: public
     - text: "GeoIP and ASN data powered by MaxMind GeoLite2 databases (loaded from disk, refreshable via admin endpoint)"
-      audience: internal
+      audience: public
     - text: "Admin endpoint POST /v1/admin/geoip/refresh for hot-reloading MaxMind databases"
       audience: internal
     - text: "Abuse contact lookup uses RDAP (structured JSON) instead of raw WHOIS parsing"
@@ -280,7 +282,7 @@
     - text: "Removed unique constraint on customer name to allow multiple customers with the same name"
       audience: internal
     - text: "Domain input validation now rejects ports, paths, query strings, fragments, and userinfo"
-      audience: internal
+      audience: public
     - text: "Domain names are lowercased during normalization for consistent caching"
       audience: internal
     - text: "Removed dead code in Stripe checkout handler"
@@ -306,7 +308,7 @@
   date: 2026-03-22
   changes:
     - text: "Partial lookup failures now include error_count in the response for better client-side observability"
-      audience: internal
+      audience: public
     - text: "Added info.sh script for pretty-printing admin status endpoint"
       audience: internal
     - text: "Decoupled test targets from dependency upgrades to prevent build breakage"
@@ -328,9 +330,9 @@
     - text: "Added GET /v1/admin/usage endpoint for aggregated API usage statistics"
       audience: internal
     - text: "VirusTotal provider is now best-effort when rate-limited instead of failing the whole lookup"
-      audience: internal
+      audience: public
     - text: "Added threat intelligence section to API docs"
-      audience: internal
+      audience: public
 
 - version: v0.35.0
   date: 2026-03-18
@@ -342,11 +344,11 @@
   date: 2026-03-17
   changes:
     - text: "Added Stripe billing integration with webhook handling and API key provisioning"
-      audience: internal
+      audience: public
     - text: "New /billing/success page for post-checkout key retrieval"
-      audience: internal
+      audience: public
     - text: "Customer Portal link for subscription management"
-      audience: internal
+      audience: public
     - text: "Pushover notifications on billing events (signup, plan change, cancellation, payment failure)"
       audience: internal
 
@@ -354,67 +356,67 @@
   date: 2026-03-16
   changes:
     - text: "Added threat intelligence lookups — VirusTotal, URLhaus, and AlienVault OTX with weighted scoring"
-      audience: internal
+      audience: public
     - text: "Threat intel available for pro and admin plans via threat_intel option"
-      audience: internal
+      audience: public
 
 - version: v0.32.0
   date: 2026-03-15
   changes:
     - text: "Added BGP/ASN lookups with origin AS, prefix, and RIR information"
-      audience: internal
+      audience: public
     - text: "BGP data available for all plans via bgp option"
-      audience: internal
+      audience: public
 
 - version: v0.31.0
   date: 2026-03-14
   changes:
     - text: "Added certificate transparency log lookups via crt.sh"
-      audience: internal
+      audience: public
     - text: "CT log data available for all plans via ct_logs option"
-      audience: internal
+      audience: public
 
 - version: v0.30.0
   date: 2026-03-13
   changes:
     - text: "Added technology fingerprinting — detects web servers, frameworks, CDNs, and more from HTTP headers"
-      audience: internal
+      audience: public
     - text: "~90 built-in detection rules, hot-reloadable via admin endpoint"
-      audience: internal
+      audience: public
 
 - version: v0.19.0
   date: 2026-03-05
   changes:
     - text: "Added subdomain enumeration via certificate transparency data"
-      audience: internal
+      audience: public
     - text: "Subdomain results included in domain lookup response via subdomains option"
-      audience: internal
+      audience: public
 
 - version: v0.18.0
   date: 2026-03-04
   changes:
     - text: "Added X-Client-Request-ID header support for client-supplied request correlation"
-      audience: internal
+      audience: public
 
 - version: v0.16.0
   date: 2026-03-02
   changes:
     - text: "Added email security analysis — SPF, DKIM, and DMARC record validation"
-      audience: internal
+      audience: public
     - text: "Email security available for all plans via email_security option"
-      audience: internal
+      audience: public
 
 - version: v0.15.0
   date: 2026-02-28
   changes:
     - text: "Plan-based limits on domains per request — free: 1, basic: 5, pro: 20"
-      audience: internal
+      audience: public
 
 - version: v0.13.0
   date: 2026-02-26
   changes:
     - text: "Added per-plan rate limiting — free: 5/min, basic: 30/min, pro: 120/min"
-      audience: internal
+      audience: public
     - text: "SSRF prevention hardened — blocks connections to private/reserved IP ranges"
       audience: internal
 
@@ -422,28 +424,28 @@
   date: 2026-02-20
   changes:
     - text: "Added domain reputation lookups with multi-provider scoring (Spamhaus, Google Safe Browsing, PhishTank)"
-      audience: internal
+      audience: public
     - text: "Reputation available for pro and admin plans via reputation option"
-      audience: internal
+      audience: public
 
 - version: v0.6.0
   date: 2026-02-15
   changes:
     - text: "Added page screenshot capture via headless Chrome"
-      audience: internal
+      audience: public
     - text: "Screenshots available for pro and admin plans via screenshot option"
-      audience: internal
+      audience: public
 
 - version: v0.3.0
   date: 2026-02-10
   changes:
     - text: "Support for multiple domains per request via domains array"
-      audience: internal
+      audience: public
 
 - version: v0.1.0
   date: 2026-02-05
   changes:
     - text: "Initial release — WHOIS, DNS, SSL, and HTTP header lookups with Redis caching"
-      audience: internal
+      audience: public
     - text: "API key authentication with plan-based access control"
-      audience: internal
+      audience: public
