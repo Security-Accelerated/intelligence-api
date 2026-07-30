@@ -9,11 +9,17 @@ RUN go build -ldflags "-X main.version=${VERSION}" -o /app/intelligence-api ./cm
 
 FROM alpine:3.21
 
-RUN apk add --no-cache chromium
+RUN apk add --no-cache chromium su-exec
 RUN adduser -D -u 1000 appuser
 RUN mkdir -p /data/maxmind && chown appuser:appuser /data/maxmind
 COPY --from=build /app/intelligence-api /usr/local/bin/intelligence-api
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-USER appuser
+# No USER directive: the entrypoint starts as root purely to chown the mounted
+# volume, then execs the application as appuser via su-exec. A Fly volume mounts
+# root-owned and there is no uid/gid option on mounts, so this is the only way a
+# non-root process can write to its own volume.
 EXPOSE 8080
-ENTRYPOINT ["intelligence-api"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["intelligence-api"]

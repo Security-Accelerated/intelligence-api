@@ -196,6 +196,7 @@ Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, las
 
 - **Docker Compose** for local dev (API + Redis + PostgreSQL with healthchecks)
 - **Fly.io** for production deployment (iad region, auto-stop/start machines)
+- **Fly volume `maxmind_data`** mounted at `/data/maxmind`, persisting the GeoIP databases. Machine filesystems are a blank slate on every start, so without it the ~80MB databases are re-downloaded on each cold start. Fly requires **one volume per machine** — two machines, two volumes. Volumes mount root-owned and Fly offers no uid/gid option, so `docker-entrypoint.sh` chowns the mount as root and then execs the app as `appuser` via `su-exec`; the container no longer sets `USER`, though the application itself still runs unprivileged. Without that step the GeoIP download fails with permission denied on every boot, silently.
 - **Neon** for production PostgreSQL
 - **Upstash** for production Redis (via Fly)
 - **GitHub Actions** — three workflows:
