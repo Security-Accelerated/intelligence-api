@@ -362,7 +362,8 @@ Content-Type: application/json
 X-API-Key: {{adminKey}}
 
 {
-  "ips": ["8.8.8.8"]
+  "ips": ["8.8.8.8"],
+  "lookups": ["geo", "asn", "reverse_dns", "abuse_contact"]
 }
 
 ### IP lookup with threat intel (pro key)
@@ -372,7 +373,7 @@ X-API-Key: {{proKey}}
 
 {
   "ips": ["8.8.8.8"],
-  "threat_intel": true
+  "lookups": ["threat_intel"]
 }
 
 ### IP lookup - should return 403 (free key, threat intel)
@@ -382,7 +383,26 @@ X-API-Key: {{freeKey}}
 
 {
   "ips": ["8.8.8.8"],
-  "threat_intel": true
+  "lookups": ["threat_intel"]
+}
+
+### IP lookup - should return 400 (lookups missing)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "ips": ["8.8.8.8"]
+}
+
+### IP lookup - should return 400 (whois is a domain-only lookup)
+POST {{host}}/v1/ip/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "ips": ["8.8.8.8"],
+  "lookups": ["whois"]
 }
 
 ### IP lookup - should return 401 (no key)
@@ -390,7 +410,8 @@ POST {{host}}/v1/ip/lookup
 Content-Type: application/json
 
 {
-  "ips": ["8.8.8.8"]
+  "ips": ["8.8.8.8"],
+  "lookups": ["geo", "asn", "reverse_dns", "abuse_contact"]
 }
 
 ### IP lookup - should return 400 (private IP)
@@ -399,7 +420,8 @@ Content-Type: application/json
 X-API-Key: {{adminKey}}
 
 {
-  "ips": ["192.168.1.1"]
+  "ips": ["192.168.1.1"],
+  "lookups": ["geo", "asn", "reverse_dns", "abuse_contact"]
 }
 
 ### IP lookup - multiple IPs (admin key)
@@ -408,7 +430,8 @@ Content-Type: application/json
 X-API-Key: {{adminKey}}
 
 {
-  "ips": ["8.8.8.8", "1.1.1.1"]
+  "ips": ["8.8.8.8", "1.1.1.1"],
+  "lookups": ["geo", "asn", "reverse_dns", "abuse_contact"]
 }
 
 ### My usage (any plan)

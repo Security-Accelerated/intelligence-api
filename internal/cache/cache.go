@@ -24,3 +24,14 @@ type Cache interface {
 	MGet(ctx context.Context, keys []string) ([][]byte, error)
 	Set(ctx context.Context, key string, data []byte, ttl time.Duration) error
 }
+
+// IPLookupKeyPrefix namespaces per-lookup IP cache entries, keeping them
+// distinct from domain entries. Keys have the shape "ip:<ip>:<lookup_name>".
+const IPLookupKeyPrefix = "ip:"
+
+// IPLookupKey builds the cache key for a single lookup on a single IP. The IP
+// must already be canonicalized (netip.Addr.String()); like LookupKey this
+// never re-normalizes its inputs.
+func IPLookupKey(ip, lookupName string) string {
+	return IPLookupKeyPrefix + ip + ":" + lookupName
+}

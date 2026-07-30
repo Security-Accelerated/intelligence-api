@@ -58,7 +58,14 @@ type LookupOptions struct {
 
 // Has reports whether the named lookup was requested.
 func (o LookupOptions) Has(name string) bool {
-	return slices.Contains(o.Lookups, name)
+	return sliceContains(o.Lookups, name)
+}
+
+// sliceContains is a tiny shared helper so the domain and IP option types read
+// identically. Lookup sets are at most a dozen entries, so a linear scan beats
+// building a map per request.
+func sliceContains(haystack []string, needle string) bool {
+	return slices.Contains(haystack, needle)
 }
 
 // CacheStats reports how many of the requested lookups were served from cache

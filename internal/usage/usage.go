@@ -55,8 +55,9 @@ type UsageSummary struct {
 }
 
 // LookupColumns lists the request_log boolean columns that track which lookups
-// each request asked for. It must stay in sync with domain.AllLookupNames and
-// with the request_log schema — a test asserts the former.
+// each request asked for. It must stay in sync with the union of
+// domain.AllLookupNames and domain.AllIPLookupNames, and with the request_log
+// schema — a test asserts the former.
 var LookupColumns = []string{
 	"whois",
 	"dns",
@@ -72,6 +73,11 @@ var LookupColumns = []string{
 	"threat_intel",
 	"dns_security",
 	"risk",
+	// IP lookups. threat_intel is shared with the domain catalog above.
+	"geo",
+	"asn",
+	"reverse_dns",
+	"abuse_contact",
 }
 
 // NoopRecorder silently discards all entries.

@@ -64,7 +64,10 @@ func init() {
 	config.SetDefault("cache.ttl.reputation", "30m")
 	config.SetDefault("cache.ttl.threat_intel", "30m")
 	config.SetDefault("cache.ttl.screenshot", "60m")
-	config.SetDefault("redis.negative_cache_ttl", "5m")
+	// IP lookups. geo and asn are absent deliberately: they read a local
+	// MaxMind mmap and are never cached, so a TTL would be meaningless.
+	config.SetDefault("cache.ttl.reverse_dns", "6h")
+	config.SetDefault("cache.ttl.abuse_contact", "24h")
 	config.SetDefault("auth.cache_ttl", "5m")
 	config.SetDefault("auth.rotation_grace", "24h")
 	config.SetDefault("screenshot.max_concurrent", 4)

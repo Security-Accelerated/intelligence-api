@@ -141,6 +141,8 @@ var testCacheTTLs = map[string]time.Duration{
 	domain.LookupReputationName:    25 * time.Minute,
 	domain.LookupThreatIntelName:   35 * time.Minute,
 	domain.LookupDNSSecurityName:   6 * time.Hour,
+	domain.LookupReverseDNSName:    6 * time.Hour,
+	domain.LookupAbuseContactName:  24 * time.Hour,
 }
 
 // decodeResults unwraps the {"results": [...]} envelope returned by the domain
@@ -152,6 +154,21 @@ func decodeResults(t *testing.T, w *httptest.ResponseRecorder) []*domain.DomainR
 		t.Fatalf("failed to unmarshal response envelope: %v\nbody: %s", err, w.Body.String())
 	}
 	return env.Results
+}
+
+// decodeIPResults unwraps the {"results": [...]} envelope from the IP endpoint.
+func decodeIPResults(t *testing.T, w *httptest.ResponseRecorder) []*domain.IPResponse {
+	t.Helper()
+	var env domain.IPResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("failed to unmarshal IP response envelope: %v\nbody: %s", err, w.Body.String())
+	}
+	return env.Results
+}
+
+// ipRedisKey returns the namespaced Redis key for a per-lookup IP cache entry.
+func ipRedisKey(ip, lookupName string) string {
+	return "intel:" + cache.IPLookupKey(ip, lookupName)
 }
 
 // redisKey returns the namespaced Redis key for a per-lookup cache entry, as
@@ -301,7 +318,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	})
 
 	// IP service with stubs
-	ipSvc := service.NewIPService(rc, defaultTestTTL, time.Minute, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
+	ipSvc := service.NewIPService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
 	ipSvc.SetLookups(
 		func(_ net.IP) (*domain.GeoIPInfo, error) {
 			return &domain.GeoIPInfo{Country: "United States", CountryCode: "US", City: "Mountain View", Latitude: 37.386, Longitude: -122.084}, nil
@@ -1930,7 +1947,7 @@ func TestIntegration_IPLookup_FullFlow(t *testing.T) {
 	r, _ := setupRouter(t)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8"]}`))
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -1939,8 +1956,7 @@ func TestIntegration_IPLookup_FullFlow(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var results []*domain.IPResponse
-	json.Unmarshal(w.Body.Bytes(), &results)
+	results := decodeIPResults(t, w)
 
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
@@ -1964,34 +1980,109 @@ func TestIntegration_IPLookup_FullFlow(t *testing.T) {
 }
 
 func TestIntegration_IPLookup_Caching(t *testing.T) {
-	r, _ := setupRouter(t)
+	r, mr := setupRouter(t)
 
-	body := `{"ips":["8.8.8.8"]}`
-
-	// First request — cache miss
-	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-API-Key", "test-lookup-key")
-	r.ServeHTTP(w1, req1)
-
-	var r1 []*domain.IPResponse
-	json.Unmarshal(w1.Body.Bytes(), &r1)
-	if r1[0].CacheHit {
-		t.Error("first request should be a cache miss")
+	post := func(body string) []*domain.IPResponse {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-lookup-key")
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+		return decodeIPResults(t, w)
 	}
 
-	// Second request — cache hit
-	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-API-Key", "test-lookup-key")
-	r.ServeHTTP(w2, req2)
+	body := `{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}`
 
-	var r2 []*domain.IPResponse
-	json.Unmarshal(w2.Body.Bytes(), &r2)
-	if !r2[0].CacheHit {
-		t.Error("second request should be a cache hit")
+	first := post(body)
+	for _, f := range []struct {
+		name string
+		hit  bool
+	}{
+		{"geo", first[0].Geo.CacheHit},
+		{"asn", first[0].ASN.CacheHit},
+		{"reverse_dns", first[0].ReverseDNS.CacheHit},
+		{"abuse_contact", first[0].AbuseContact.CacheHit},
+	} {
+		if f.hit {
+			t.Errorf("first request: %s cache_hit = true, want false", f.name)
+		}
+	}
+
+	// Only the network-backed lookups get keys. geo and asn read a local
+	// MaxMind mmap, so caching them would cost more than recomputing.
+	for _, name := range []string{domain.LookupReverseDNSName, domain.LookupAbuseContactName} {
+		if !mr.Exists(ipRedisKey("8.8.8.8", name)) {
+			t.Errorf("expected redis key for %s", name)
+		}
+	}
+	for _, name := range []string{domain.LookupGeoName, domain.LookupASNName} {
+		if mr.Exists(ipRedisKey("8.8.8.8", name)) {
+			t.Errorf("%s must never be cached", name)
+		}
+	}
+
+	second := post(body)
+	if !second[0].ReverseDNS.CacheHit {
+		t.Error("second request: reverse_dns cache_hit = false, want true")
+	}
+	if !second[0].AbuseContact.CacheHit {
+		t.Error("second request: abuse_contact cache_hit = false, want true")
+	}
+	// Uncached lookups never become hits, however many times they are asked for.
+	if second[0].Geo.CacheHit || second[0].ASN.CacheHit {
+		t.Error("geo/asn cache_hit = true, want false (never cached)")
+	}
+}
+
+func TestIntegration_IPLookup_PerLookupTTLs(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["reverse_dns","abuse_contact"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-lookup-key")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	for _, tc := range []struct {
+		lookup string
+		ttl    time.Duration
+	}{
+		{domain.LookupReverseDNSName, 6 * time.Hour},
+		{domain.LookupAbuseContactName, 24 * time.Hour},
+	} {
+		if got := mr.TTL(ipRedisKey("8.8.8.8", tc.lookup)); got != tc.ttl {
+			t.Errorf("TTL(%s) = %v, want %v", tc.lookup, got, tc.ttl)
+		}
+	}
+}
+
+func TestIntegration_IPLookup_KeyspaceSeparateFromDomains(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["threat_intel"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	// Same lookup name on both endpoints — the namespaces must not collide.
+	if !mr.Exists(ipRedisKey("8.8.8.8", domain.LookupThreatIntelName)) {
+		t.Error("IP threat_intel missing from the ip: keyspace")
+	}
+	if mr.Exists(redisKey("8.8.8.8", domain.LookupThreatIntelName)) {
+		t.Error("IP threat_intel leaked into the domain lookup: keyspace")
 	}
 }
 
@@ -2001,7 +2092,7 @@ func TestIntegration_IPLookup_ThreatIntelProOnly(t *testing.T) {
 	// Basic plan — should be forbidden
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8"],"threat_intel":true}`))
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["threat_intel"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key") // basic plan
 	r.ServeHTTP(w, req)
@@ -2013,7 +2104,7 @@ func TestIntegration_IPLookup_ThreatIntelProOnly(t *testing.T) {
 	// Pro plan — should succeed
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8"],"threat_intel":true}`))
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["threat_intel"]}`))
 	req2.Header.Set("Content-Type", "application/json")
 	req2.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w2, req2)
@@ -2022,8 +2113,7 @@ func TestIntegration_IPLookup_ThreatIntelProOnly(t *testing.T) {
 		t.Fatalf("pro plan with threat_intel: status = %d, want %d; body: %s", w2.Code, http.StatusOK, w2.Body.String())
 	}
 
-	var results []*domain.IPResponse
-	json.Unmarshal(w2.Body.Bytes(), &results)
+	results := decodeIPResults(t, w2)
 	if results[0].ThreatIntel == nil {
 		t.Error("expected threat_intel to be populated for pro plan")
 	}
@@ -2044,7 +2134,7 @@ func TestIntegration_IPLookup_PrivateIPRejected(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			body := `{"ips":["` + tt.ip + `"]}`
+			body := `{"ips":["` + tt.ip + `"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}`
 			req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("X-API-Key", "test-admin-key")
@@ -2063,7 +2153,7 @@ func TestIntegration_IPLookup_MaxIPsPerPlan(t *testing.T) {
 	// Free plan allows 1 IP — send 2
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1"]}`))
+		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
 	r.ServeHTTP(w, req)
@@ -2077,7 +2167,7 @@ func TestIntegration_IPLookup_NoAuth(t *testing.T) {
 	r, _ := setupRouter(t)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8"]}`))
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -2104,7 +2194,7 @@ func TestIntegration_IPLookup_IPv6(t *testing.T) {
 	r, _ := setupRouter(t)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["2001:4860:4860::8888"]}`))
+		strings.NewReader(`{"ips":["2001:4860:4860::8888"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -2118,7 +2208,7 @@ func TestIntegration_IPLookup_MultipleIPs(t *testing.T) {
 	r, _ := setupRouter(t)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1"]}`))
+		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key") // pro allows up to 20
 	r.ServeHTTP(w, req)
@@ -2127,8 +2217,7 @@ func TestIntegration_IPLookup_MultipleIPs(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var results []*domain.IPResponse
-	json.Unmarshal(w.Body.Bytes(), &results)
+	results := decodeIPResults(t, w)
 	if len(results) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(results))
 	}
@@ -2589,5 +2678,103 @@ func TestIntegration_FailedLookupIsNotCached(t *testing.T) {
 		if !mr.Exists(redisKey("fail.example", name)) {
 			t.Errorf("expected %s to be cached after a successful lookup", name)
 		}
+	}
+}
+
+func TestIntegration_IPLookups_RequiredAndValidated(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	post := func(body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-admin-key")
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"missing", `{"ips":["8.8.8.8"]}`, "lookups is required"},
+		{"empty", `{"ips":["8.8.8.8"],"lookups":[]}`, "lookups is required"},
+		{"blank", `{"ips":["8.8.8.8"],"lookups":["  "]}`, "lookups is required"},
+		{"unknown", `{"ips":["8.8.8.8"],"lookups":["geo","nope"]}`, "nope"},
+		{"domain-only name", `{"ips":["8.8.8.8"],"lookups":["whois"]}`, "whois"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := post(tc.body)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.want) {
+				t.Errorf("body = %s, want it to mention %q", w.Body.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestIntegration_IPLookup_ReturnsExactlyRequestedFields(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["geo","reverse_dns"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var env struct {
+		Results []map[string]json.RawMessage `json:"results"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	want := map[string]bool{"ip": true, "inputs": true, "geo": true, "reverse_dns": true}
+	for k := range env.Results[0] {
+		if !want[k] {
+			t.Errorf("response contains unrequested field %q; body: %s", k, w.Body.String())
+		}
+	}
+	for k := range want {
+		if _, ok := env.Results[0][k]; !ok {
+			t.Errorf("response missing expected field %q; body: %s", k, w.Body.String())
+		}
+	}
+}
+
+func TestIntegration_IPLookup_DedupesAndRecordsInputs(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
+		strings.NewReader(`{"ips":[" 8.8.8.8 ","8.8.8.8","1.1.1.1"],"lookups":["geo"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "test-admin-key")
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	results := decodeIPResults(t, w)
+	if len(results) != 2 {
+		t.Fatalf("len(results) = %d, want 2 unique canonical addresses", len(results))
+	}
+	var google *domain.IPResponse
+	for _, res := range results {
+		if res.IP == "8.8.8.8" {
+			google = res
+		}
+	}
+	if google == nil {
+		t.Fatalf("no result for 8.8.8.8: %+v", results)
+	}
+	if len(google.Inputs) != 2 || google.Inputs[0] != " 8.8.8.8 " {
+		t.Errorf("inputs = %v, want both verbatim entries", google.Inputs)
 	}
 }

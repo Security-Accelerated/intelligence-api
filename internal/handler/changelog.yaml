@@ -1,6 +1,32 @@
 # Changelog — Intelligence API
 # audience: public (shown on docs page), internal (admin/ops only)
 
+- version: v0.55.0
+  date: 2026-07-30
+  changes:
+    - text: "BREAKING: IP lookups now take the same `lookups` array as domain lookups. The `threat_intel` boolean is gone; valid names are geo, asn, reverse_dns, abuse_contact and threat_intel"
+      audience: public
+    - text: "BREAKING: IP responses are wrapped in a `results` envelope and the top-level `cache_hit` is replaced by a per-lookup `cache_hit`, matching the domain endpoint"
+      audience: public
+    - text: "IP results now report the canonicalized `ip` plus an `inputs` array of the original entries that mapped to it. Addresses that canonicalize to the same value are deduplicated, so 2001:DB8::1 and 2001:db8:0:0:0:0:0:1 return one result"
+      audience: public
+    - text: "IP lookups are cached individually with their own TTLs — 24h for abuse_contact, 6h for reverse_dns, 30m for threat_intel — so a slow RDAP lookup no longer shortens everything else's cache lifetime"
+      audience: public
+    - text: "geo and asn are no longer cached at all. They read a local database with no network call, so recomputing them is faster than a cache round trip; their cache_hit is always false"
+      audience: public
+    - text: "Requesting a domain-only lookup name (such as whois) on the IP endpoint now returns 400 rather than being silently ignored"
+      audience: public
+    - text: "IP cache keys use a separate `ip:<ip>:<lookup>` namespace, so threat_intel on the two endpoints cannot collide"
+      audience: internal
+    - text: "Extracted the per-lookup runner machinery into service/runner.go, shared by both services; service/whole_response.go and its copyViaJSON/goLookup helpers are deleted with no remaining callers"
+      audience: internal
+    - text: "Negative caching removed from the IP service too, and redis.negative_cache_ttl deleted — per-lookup keys made it unnecessary on both endpoints"
+      audience: internal
+    - text: "A missing GeoIP database is now classified as an expected error rather than special-cased in the IP service, so it still does not trigger alerts"
+      audience: internal
+    - text: "request_log gains geo/asn/reverse_dns/abuse_contact columns (migration 015)"
+      audience: internal
+
 - version: v0.54.0
   date: 2026-07-30
   changes:

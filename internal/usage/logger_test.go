@@ -78,8 +78,10 @@ func TestUsageLogger_FlushInsertsCacheAndLookupColumns(t *testing.T) {
 			3, 1, // cache_hits, cache_misses
 			true, true, false, false, // whois, dns, ssl, headers
 			// screenshot, reputation, email_security, subdomains, ct_logs, bgp,
-			// fingerprint, threat_intel, dns_security, risk
+			// fingerprint, threat_intel, dns_security, risk,
+			// geo, asn, reverse_dns, abuse_contact
 			false, false, false, false, false, false, false, false, false, false,
+			false, false, false, false,
 			sqlmock.AnyArg(), // created_at
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -98,14 +100,27 @@ func TestUsageLogger_FlushInsertsCacheAndLookupColumns(t *testing.T) {
 // TestLookupColumns_MatchesDomainCatalog guards against the request_log schema
 // drifting away from the set of lookups the API accepts. A new lookup needs a
 // matching column and migration before it can be tracked.
-func TestLookupColumns_MatchesDomainCatalog(t *testing.T) {
-	if len(LookupColumns) != len(domain.AllLookupNames) {
-		t.Fatalf("LookupColumns has %d entries, domain.AllLookupNames has %d",
-			len(LookupColumns), len(domain.AllLookupNames))
+func TestLookupColumns_MatchesLookupCatalogs(t *testing.T) {
+	want := map[string]bool{}
+	for _, n := range domain.AllLookupNames {
+		want[n] = true
 	}
-	for _, name := range domain.AllLookupNames {
+	for _, n := range domain.AllIPLookupNames {
+		want[n] = true
+	}
+
+	if len(LookupColumns) != len(want) {
+		t.Errorf("LookupColumns has %d entries, the two catalogs union to %d",
+			len(LookupColumns), len(want))
+	}
+	for name := range want {
 		if !slices.Contains(LookupColumns, name) {
 			t.Errorf("LookupColumns is missing %q", name)
+		}
+	}
+	for _, name := range LookupColumns {
+		if !want[name] {
+			t.Errorf("LookupColumns has %q, which is in neither catalog", name)
 		}
 	}
 }
