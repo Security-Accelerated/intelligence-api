@@ -2384,9 +2384,33 @@ func TestIntegration_AdminChangelog_AdminAllowed(t *testing.T) {
 	if body == "" || body[0] != '[' {
 		t.Errorf("expected JSON array, got %q", body[:min(len(body), 50)])
 	}
-	// Should include both public and internal entries (unfiltered)
-	if !strings.Contains(body, "public") || !strings.Contains(body, "internal") {
-		t.Error("admin changelog should include both public and internal audience entries")
+	// The admin endpoint is unfiltered, so it must return at least as many
+	// versions as the docs page renders — and strictly more whenever any entry
+	// is marked internal. Asserting that relationship rather than the presence
+	// of both audience strings keeps the test honest when the data changes:
+	// every entry is internal immediately before v1.0 (see issue #51), and an
+	// assertion on literal audience values silently breaks then.
+	var adminVersions []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &adminVersions); err != nil {
+		t.Fatalf("unmarshal admin changelog: %v", err)
+	}
+	if len(adminVersions) == 0 {
+		t.Fatal("admin changelog is empty")
+	}
+
+	docsResp := httptest.NewRecorder()
+	r.ServeHTTP(docsResp, httptest.NewRequest(http.MethodGet, "/docs", nil))
+	docsBody := docsResp.Body.String()
+
+	hidden := 0
+	for _, v := range adminVersions {
+		version, _ := v["version"].(string)
+		if version != "" && !strings.Contains(docsBody, version) {
+			hidden++
+		}
+	}
+	if hidden == 0 && !strings.Contains(body, "internal") {
+		t.Error("expected the admin changelog to expose entries the docs page does not")
 	}
 }
 
