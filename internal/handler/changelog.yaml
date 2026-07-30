@@ -27,7 +27,6 @@
       audience: internal
     - text: "Volumes mount root-owned with no uid/gid option, so docker-entrypoint.sh chowns the mount as root and execs the app as appuser via su-exec. The Dockerfile no longer sets USER; the application still runs unprivileged. An unwritable mount warns loudly and keeps serving rather than crash-looping the machine over one degraded lookup"
       audience: internal
-      audience: internal
 
 - version: v0.56.0
   date: 2026-07-30
