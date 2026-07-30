@@ -44,7 +44,7 @@ func newInfoRouter(version string, rc *cache.RedisCache, cr AuthCacheStats) *gin
 	if rc != nil {
 		status.Cache.Addr = rc.Client().Options().Addr
 	}
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, rc, cr, nil, status)
+	h := New(Deps{RedisCache: rc, AuthCacheStats: cr, Status: status})
 	// Simulate admin auth so RequireAdmin passes
 	r.GET("/v1/info", func(c *gin.Context) {
 		c.Set("api_key_plan", "admin")
@@ -201,7 +201,7 @@ func TestInfo_VersionField(t *testing.T) {
 func TestInfo_NoStatusConfigured(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(Deps{})
 	r.GET("/v1/info", h.Info)
 
 	w := httptest.NewRecorder()

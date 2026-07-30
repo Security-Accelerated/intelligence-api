@@ -367,8 +367,17 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	usageQ := &stubUsageQueryer{}
 	usageRec := &recordingRecorder{}
 
-	h := handler.New(svc, ipSvc, fpSvc, nil, usageQ, nil, nil, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
-		System: config.SystemStatus{Version: "test"},
+	h := handler.New(handler.Deps{
+		DomainService:      svc,
+		IPService:          ipSvc,
+		FingerprintService: fpSvc,
+		UsageService:       usageQ,
+		Config:             cfg,
+		RedisCache:         rc,
+		AuthCacheStats:     cachedRepo,
+		Status: &config.StatusSnapshot{
+			System: config.SystemStatus{Version: "test"},
+		},
 	})
 	h.RegisterRoutes(r)
 	h.RegisterProtectedRoutes(r, authMW, rateLimitMW, middleware.UsageLog(usageRec))
