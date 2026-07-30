@@ -899,7 +899,7 @@ resp = requests.post(
   <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span> \
   <span class="flag">-d</span> <span class="str">'{
     "domains": ["example.com"],
-    "dns_security": true
+    "lookups": ["dns_security"]
   }'</span></code></pre>
   <p>The <code>dns_security</code> object in the response:</p>
   <pre><code>{
@@ -920,7 +920,7 @@ resp = requests.post(
 
   <!-- risk -->
   <h3 id="risk"><code>risk</code> -- Aggregate Risk Score</h3>
-  <p>A computed 0--100 weighted risk score included in <strong>every</strong> domain lookup response &mdash; no request flag needed and no extra network calls made. The score is derived from whichever lookups are present in the response and renormalized over the weights of the components that have data.</p>
+  <p>A computed 0--100 weighted risk score. Only present when <code>risk</code> is included in <code>lookups</code>. It makes no extra network calls and is never cached &mdash; the score is derived from whichever <em>other</em> requested lookups landed on the response, renormalized over the weights of the components that have data. Its <code>cache_hit</code> is <code>true</code> only when every scoring input came from cache.</p>
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
     <tbody>

@@ -96,21 +96,34 @@ func (ul *UsageLogger) run() {
 	}
 }
 
+// maxBindParams is PostgreSQL's hard limit on bind parameters per statement.
+// The steady-state flush is bounded by batchThreshold, but the shutdown drain
+// collapses whatever is left in the channel into one batch — so a large
+// usage.buffer_size could otherwise build a statement that the server rejects
+// outright, dropping every entry in it.
+const maxBindParams = 65535
+
 func (ul *UsageLogger) flush(entries []UsageEntry) {
 	if len(entries) == 0 || ul.db == nil {
 		return
 	}
 
+	// Split oversized batches rather than losing them. Column count grows with
+	// the lookup catalog, so the safe row count is derived, not hardcoded.
+	if perRow := len(ul.columns()); perRow > 0 {
+		if maxRows := maxBindParams / perRow; len(entries) > maxRows {
+			for start := 0; start < len(entries); start += maxRows {
+				end := min(start+maxRows, len(entries))
+				ul.flush(entries[start:end])
+			}
+			return
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Fixed metadata columns, followed by one boolean column per lookup, then
-	// created_at. LookupColumns must match the request_log schema.
-	baseColumns := []string{
-		"customer_id", "api_key_id", "plan", "method", "path", "status_code",
-		"latency_ms", "domain_count", "ip_count", "cache_hits", "cache_misses",
-	}
-	columns := append(append(append([]string{}, baseColumns...), LookupColumns...), "created_at")
+	columns := ul.columns()
 	cols := len(columns)
 
 	// Build a multi-row INSERT for efficiency.
@@ -147,6 +160,17 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 	if _, err := ul.db.ExecContext(ctx, query, args...); err != nil {
 		ul.logger.Error("failed to flush usage entries", zap.Error(err), zap.Int("count", len(entries)))
 	}
+}
+
+// columns lists the request_log columns written per entry: fixed metadata,
+// then one boolean per lookup, then created_at. LookupColumns must match the
+// request_log schema.
+func (ul *UsageLogger) columns() []string {
+	base := []string{
+		"customer_id", "api_key_id", "plan", "method", "path", "status_code",
+		"latency_ms", "domain_count", "ip_count", "cache_hits", "cache_misses",
+	}
+	return append(append(base, LookupColumns...), "created_at")
 }
 
 func nilIfZero(v int) any {

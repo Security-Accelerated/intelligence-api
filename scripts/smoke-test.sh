@@ -257,17 +257,17 @@ check_json "lookup response has headers populated" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d "$DOMAIN"
 
-check_json "lookup response has risk score" \
-    '.[0].risk.risk_level' \
-    -X POST "$HOST/v1/domain/lookup" \
-    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d "$DOMAIN"
-
 check_json "dns_security response has dnssec field" \
-    '.[0].dns_security.dnssec' \
+    '.results[0].dns_security.dnssec' \
     -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d '{"domains":["example.com"],"dns_security":true}'
+    -d '{"domains":["example.com"],"lookups":["dns_security"]}'
+
+check_json "risk scores over the other requested lookups" \
+    '.results[0].risk | .score >= 0 and (.components | length) > 0' \
+    -X POST "$HOST/v1/domain/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
 
 echo ""
 echo "=== Multi-Domain Batch ==="

@@ -109,3 +109,42 @@ func TestLookupColumns_MatchesDomainCatalog(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageLogger_FlushChunksOversizedBatches(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	ul := &UsageLogger{db: db, logger: zap.NewNop()}
+	perRow := len(ul.columns())
+	maxRows := maxBindParams / perRow
+
+	// One row past the limit must split into two statements rather than build a
+	// single INSERT that PostgreSQL rejects outright.
+	entries := make([]UsageEntry, maxRows+1)
+	for i := range entries {
+		entries[i] = UsageEntry{Method: "POST", Path: "/v1/domain/lookup", StatusCode: 200}
+	}
+
+	mock.ExpectExec("INSERT INTO request_log").WillReturnResult(sqlmock.NewResult(1, int64(maxRows)))
+	mock.ExpectExec("INSERT INTO request_log").WillReturnResult(sqlmock.NewResult(1, 1))
+
+	ul.flush(entries)
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+func TestUsageLogger_FlushStaysUnderBindParamLimit(t *testing.T) {
+	ul := &UsageLogger{}
+	perRow := len(ul.columns())
+	if perRow == 0 {
+		t.Fatal("no columns")
+	}
+	if got := (maxBindParams / perRow) * perRow; got > maxBindParams {
+		t.Errorf("max chunk uses %d bind params, over the %d limit", got, maxBindParams)
+	}
+}

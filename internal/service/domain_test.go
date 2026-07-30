@@ -341,8 +341,8 @@ func TestLookup_AllHit_NoLookupFunctionsCalled(t *testing.T) {
 	mc.seed(t, key("example.com", domain.LookupSSLName), &domain.SSLInfo{Subject: "cached.example.com"})
 
 	var dnsCalls, sslCalls int
-	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { dnsCalls++; return okDNS(nil, "") }
-	svc.lookupSSL = func(context.Context, string) (*domain.SSLInfo, error) { sslCalls++; return okSSL(nil, "") }
+	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { dnsCalls++; return okDNS(context.TODO(), "") }
+	svc.lookupSSL = func(context.Context, string) (*domain.SSLInfo, error) { sslCalls++; return okSSL(context.TODO(), "") }
 
 	resp, stats := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupSSLName))
 
@@ -418,10 +418,10 @@ func TestLookup_MixedHitMiss_OnlyMissesFetched(t *testing.T) {
 	mc.seed(t, key("example.com", domain.LookupDNSName), &domain.DNSInfo{A: []string{"9.9.9.9"}})
 
 	var dnsCalls, whoisCalls int
-	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { dnsCalls++; return okDNS(nil, "") }
+	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { dnsCalls++; return okDNS(context.TODO(), "") }
 	svc.lookupWhois = func(context.Context, string) (*domain.WhoisInfo, error) {
 		whoisCalls++
-		return okWhois(nil, "")
+		return okWhois(context.TODO(), "")
 	}
 
 	resp, stats := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupWhoisName))
@@ -613,13 +613,13 @@ func TestLookup_OnlyRequestedLookupsRun(t *testing.T) {
 	}
 	svc.lookupWhois = func(context.Context, string) (*domain.WhoisInfo, error) {
 		count("whois")
-		return okWhois(nil, "")
+		return okWhois(context.TODO(), "")
 	}
-	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { count("dns"); return okDNS(nil, "") }
-	svc.lookupSSL = func(context.Context, string) (*domain.SSLInfo, error) { count("ssl"); return okSSL(nil, "") }
+	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { count("dns"); return okDNS(context.TODO(), "") }
+	svc.lookupSSL = func(context.Context, string) (*domain.SSLInfo, error) { count("ssl"); return okSSL(context.TODO(), "") }
 	svc.lookupHeaders = func(context.Context, string) (*domain.HeadersInfo, error) {
 		count("headers")
-		return okHeaders(nil, "")
+		return okHeaders(context.TODO(), "")
 	}
 
 	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
@@ -731,7 +731,7 @@ func TestLookup_HeadersAndFingerprint_FetchHeadersExactlyOnce(t *testing.T) {
 		mu.Lock()
 		headerCalls++
 		mu.Unlock()
-		return okHeaders(nil, "")
+		return okHeaders(context.TODO(), "")
 	}
 
 	resp, stats := svc.Lookup(context.Background(), "example.com",
@@ -790,7 +790,7 @@ func TestLookup_FingerprintCacheHitMirrorsHeadersSource(t *testing.T) {
 	var headerCalls int
 	svc.lookupHeaders = func(context.Context, string) (*domain.HeadersInfo, error) {
 		headerCalls++
-		return okHeaders(nil, "")
+		return okHeaders(context.TODO(), "")
 	}
 
 	resp, stats := svc.Lookup(context.Background(), "example.com", opts(domain.LookupFingerprintName))
@@ -817,7 +817,7 @@ func TestLookup_FingerprintWarmedByEarlierHeadersRequest(t *testing.T) {
 	var headerCalls int
 	svc.lookupHeaders = func(context.Context, string) (*domain.HeadersInfo, error) {
 		headerCalls++
-		return okHeaders(nil, "")
+		return okHeaders(context.TODO(), "")
 	}
 	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupFingerprintName))
 
@@ -887,7 +887,7 @@ func TestLookup_KeysAreIndependentOfRequestedCombination(t *testing.T) {
 	svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
 
 	var dnsCalls int
-	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { dnsCalls++; return okDNS(nil, "") }
+	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) { dnsCalls++; return okDNS(context.TODO(), "") }
 
 	resp, stats := svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupSSLName))
 
@@ -953,7 +953,7 @@ func TestLookup_DomainNameReachesLookups(t *testing.T) {
 	var got string
 	svc.lookupDNS = func(_ context.Context, d string) (*domain.DNSInfo, error) {
 		got = d
-		return okDNS(nil, "")
+		return okDNS(context.TODO(), "")
 	}
 	svc.Lookup(context.Background(), "sub.example.org", opts(domain.LookupDNSName))
 	if got != "sub.example.org" {
@@ -999,7 +999,7 @@ func TestLookup_SubdomainMaxResults_Passed(t *testing.T) {
 	var got int
 	svc.SetSubdomainLookup(func(_ context.Context, _ string, o domain.SubdomainOptions) (*domain.SubdomainInfo, error) {
 		got = o.MaxResults
-		return okSubdomains(nil, "", o)
+		return okSubdomains(context.TODO(), "", o)
 	})
 	svc.Lookup(context.Background(), "example.com", opts(domain.LookupSubdomainsName))
 	if got != 42 {
@@ -1014,7 +1014,7 @@ func TestLookup_CTLogsMaxEntries_Passed(t *testing.T) {
 	var got int
 	svc.SetCTLogsLookup(func(_ context.Context, _ string, max int) (*domain.CTLogsInfo, error) {
 		got = max
-		return okCTLogs(nil, "", max)
+		return okCTLogs(context.TODO(), "", max)
 	})
 	svc.Lookup(context.Background(), "example.com", opts(domain.LookupCTLogsName))
 	if got != 7 {
@@ -1029,7 +1029,7 @@ func TestLookup_ScreenshotTimeout_Passed(t *testing.T) {
 	var got time.Duration
 	svc.lookupScreenshot = func(_ context.Context, _ string, timeout time.Duration) (*domain.ScreenshotInfo, error) {
 		got = timeout
-		return okScreenshot(nil, "", timeout)
+		return okScreenshot(context.TODO(), "", timeout)
 	}
 	svc.Lookup(context.Background(), "example.com", opts(domain.LookupScreenshotName))
 	if got != 3*time.Second {
@@ -1044,7 +1044,7 @@ func TestLookup_AppliesLookupTimeout(t *testing.T) {
 	var deadlineSet bool
 	svc.lookupDNS = func(ctx context.Context, _ string) (*domain.DNSInfo, error) {
 		_, deadlineSet = ctx.Deadline()
-		return okDNS(nil, "")
+		return okDNS(context.TODO(), "")
 	}
 	svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
 	if !deadlineSet {
@@ -1064,7 +1064,7 @@ func TestLookup_DetachedFromParentCancellation(t *testing.T) {
 			return nil, ctx.Err()
 		default:
 		}
-		return okDNS(nil, "")
+		return okDNS(context.TODO(), "")
 	}
 
 	// The fetch is shared with coalesced callers via singleflight, so one
@@ -1092,7 +1092,7 @@ func TestLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
 	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) {
 		calls.Add(1)
 		<-release // hold the fetch open so the others pile up behind it
-		return okDNS(nil, "")
+		return okDNS(context.TODO(), "")
 	}
 
 	const callers = 8
@@ -1138,7 +1138,7 @@ func TestLookup_SingleflightSharesAcrossDifferentLookupSets(t *testing.T) {
 	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) {
 		dnsCalls.Add(1)
 		<-release
-		return okDNS(nil, "")
+		return okDNS(context.TODO(), "")
 	}
 
 	// Per-lookup keying means overlapping-but-different requests still share
@@ -1208,7 +1208,7 @@ func TestLookup_ScreenshotSemaphoreCapsConcurrency(t *testing.T) {
 		}
 		<-release
 		inFlight.Add(-1)
-		return okScreenshot(nil, "", 0)
+		return okScreenshot(context.TODO(), "", 0)
 	}
 
 	var wg sync.WaitGroup
@@ -1245,7 +1245,7 @@ func TestLookup_ScreenshotQueueTimeout(t *testing.T) {
 	var called atomic.Int32
 	svc.lookupScreenshot = func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error) {
 		called.Add(1)
-		return okScreenshot(nil, "", 0)
+		return okScreenshot(context.TODO(), "", 0)
 	}
 
 	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupScreenshotName))

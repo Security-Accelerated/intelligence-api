@@ -107,10 +107,6 @@ An array naming which lookups to run. It must be present and non-empty — there
 
 Requesting a lookup your plan does not include returns `403 Forbidden`. An unrecognized name returns `400 Bad Request` naming the offending entry.
 
-The optional `dns_security` field (default `false`) checks DNSSEC deployment (DS records at the parent, DNSKEY records at the zone, signing algorithms) and CAA records via raw DNS queries. Available to **all plans**.
-
-Every response also includes a computed `risk` object — a 0–100 weighted aggregate score with per-component breakdown derived from whichever lookups were performed (threat intel, reputation, SSL expiry, security headers, email security, domain age). No extra network calls are made; see the [`risk`](#risk--aggregate-risk-score-all-plans-automatic) section below.
-
 **Example:**
 ```sh
 curl -X POST http://localhost:8080/v1/domain/lookup \
@@ -571,7 +567,7 @@ Rules are stored in PostgreSQL and loaded into memory at startup. The default ru
 
 ### `dns_security` — DNSSEC & CAA (All Plans)
 
-Checks DNSSEC deployment and CAA records via raw DNS queries against the configured resolvers. Only present when `"dns_security": true` is included in the request.
+Checks DNSSEC deployment and CAA records via raw DNS queries against the configured resolvers. Only present when `"dns_security"` is included in `lookups`.
 
 **`dnssec`** — DNSSEC deployment status:
 
@@ -593,7 +589,7 @@ Missing DNSSEC means DNS responses can be spoofed; missing CAA means any certifi
 
 ### `risk` — Aggregate Risk Score (All Plans)
 
-A computed 0–100 weighted risk score included in every domain lookup response — no request flag needed and no extra network calls made. The score is derived from whichever lookups are present in the response, renormalized over the weights of the components that have data.
+A computed 0–100 weighted risk score. Only present when `"risk"` is included in `lookups`. It makes no extra network calls and is never cached — the score is derived from whichever *other* requested lookups landed on the response, renormalized over the weights of the components that have data. Its `cache_hit` is `true` only when every scoring input came from cache.
 
 | Field | What it means |
 |-------|---------------|
