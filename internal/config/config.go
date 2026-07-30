@@ -126,6 +126,9 @@ func init() {
 	config.SetDefault("maxmind.db_path", "/data/maxmind")
 	config.SetDefault("maxmind.city_db", "GeoLite2-City.mmdb")
 	config.SetDefault("maxmind.asn_db", "GeoLite2-ASN.mmdb")
+	// MaxMind publishes GeoLite2 updates twice a week. Refresh anything older
+	// than this at startup; 0 disables the check and pins whatever is on disk.
+	config.SetDefault("maxmind.max_age", "168h")
 	config.SetDefault("ip.lookup_timeout", "30s")
 	config.SetDefault("ip.max_ips.free", 1)
 	config.SetDefault("ip.max_ips.basic", 5)

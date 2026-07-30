@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/security-accelerated/intelligence-api/internal/auth"
@@ -244,32 +243,10 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("usage tracking enabled", zap.Any("config", status.Services.Usage))
 
-	// GeoIP reader — always created so the admin refresh endpoint can bootstrap
-	// databases on fresh deployments. Lookups gracefully return errors until
-	// databases are loaded (either from disk at startup or via admin refresh).
-	dbPath := cfg.GetString("maxmind.db_path")
-	cityPath := filepath.Join(dbPath, cfg.GetString("maxmind.city_db"))
-	asnPath := filepath.Join(dbPath, cfg.GetString("maxmind.asn_db"))
-	var geoReader *domain.GeoIPReader
-	if _, err := os.Stat(cityPath); err == nil {
-		geoReader, err = domain.NewGeoIPReader(cityPath, asnPath)
-		if err != nil {
-			logger.Warn("failed to load MaxMind databases, using empty reader", zap.Error(err))
-			geoReader = domain.NewEmptyGeoIPReader()
-		} else {
-			geoStatus := config.GeoIPStatus{
-				Enabled: true,
-				CityDB:  cfg.GetString("maxmind.city_db"),
-				ASNDB:   cfg.GetString("maxmind.asn_db"),
-				DBPath:  dbPath,
-			}
-			status.SetGeoIPStatus(geoStatus)
-			logger.Info("geoip databases loaded", zap.Any("config", geoStatus))
-		}
-	} else {
-		geoReader = domain.NewEmptyGeoIPReader()
-		logger.Info("geoip databases not found, use POST /v1/admin/geoip/refresh to bootstrap", zap.String("path", cityPath))
-	}
+	// GeoIP reader — always created so lookups degrade gracefully and the admin
+	// refresh endpoint has something to reload into. Databases are opened from
+	// disk when present and downloaded in the background when not.
+	geoReader := initGeoIP(ctx, cfg, logger, status)
 	defer func() {
 		if err := geoReader.Close(); err != nil {
 			logger.Error("geoip reader close failed", zap.Error(err))
