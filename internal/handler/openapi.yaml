@@ -23,14 +23,20 @@ paths:
       summary: Domain intelligence lookup
       description: |
         Performs concurrent intelligence lookups for one or more domains.
-        WHOIS, DNS, SSL, and HTTP header lookups always run; the remaining
-        lookups are opt-in via boolean request flags.
+        Name exactly what you want in the required `lookups` array: nothing
+        runs unless you ask for it, and there is no default set and no "all"
+        value. An unrecognized name returns 400.
 
         Per-plan limits on the number of domains per request: free = 1,
-        basic = 5, pro = 20.
+        basic = 5, pro = 20. The limit counts the entries you submit, before
+        deduplication.
 
-        The `screenshot`, `reputation`, and `threat_intel` flags require a
-        pro (or admin) plan; lower plans receive HTTP 403 when requesting them.
+        Requesting `screenshot`, `reputation`, or `threat_intel` requires a
+        pro (or admin) plan; lower plans receive HTTP 403 naming the lookup.
+
+        Results are returned in a `results` envelope, one element per unique
+        normalized domain. Match results by the `domain` field rather than by
+        array position.
 
         Individual lookup failures do not fail the request — they are reported
         in each result's `errors` array alongside whatever data was gathered.
@@ -72,15 +78,22 @@ paths:
       operationId: ipLookup
       summary: IP intelligence lookup
       description: |
-        Performs concurrent intelligence lookups for one or more IP addresses:
-        GeoIP, ASN, reverse DNS, and abuse contact always run; threat
-        intelligence is opt-in via the `threat_intel` flag.
+        Performs concurrent intelligence lookups for one or more IP addresses.
+        Name exactly what you want in the required `lookups` array: nothing
+        runs unless you ask for it. Domain-only names such as `whois` return
+        400 on this endpoint.
 
         Per-plan limits on the number of IPs per request: free = 1, basic = 5,
-        pro = 20.
+        pro = 20. The limit counts the entries you submit, before
+        deduplication.
 
-        The `threat_intel` flag requires a pro (or admin) plan; lower plans
-        receive HTTP 403 when requesting it.
+        Requesting `threat_intel` requires a pro (or admin) plan; lower plans
+        receive HTTP 403 naming the lookup.
+
+        Results are returned in a `results` envelope, one element per unique
+        canonicalized IP. Match results by the `ip` field rather than by array
+        position. `geo` and `asn` are never cached, so their `cache_hit` is
+        always false.
 
         Private, loopback, link-local, multicast, and other non-globally-routable
         addresses are rejected.
@@ -1060,7 +1073,11 @@ components:
           type: object
           additionalProperties:
             type: integer
-          description: Request counts keyed by feature flag.
+          description: >
+            Counts keyed by lookup name, counting lookups *requested* however
+            they were served — a cache hit does not make a lookup look less
+            used. Cache behaviour is reported separately by cache_hits and
+            cache_misses.
         requests_by_path:
           type: object
           additionalProperties:
