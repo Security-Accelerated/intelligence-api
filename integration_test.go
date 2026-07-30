@@ -2400,17 +2400,40 @@ func TestIntegration_AdminChangelog_AdminAllowed(t *testing.T) {
 
 	docsResp := httptest.NewRecorder()
 	r.ServeHTTP(docsResp, httptest.NewRequest(http.MethodGet, "/docs", nil))
+	if docsResp.Code != http.StatusOK {
+		t.Fatalf("/docs status = %d, want %d", docsResp.Code, http.StatusOK)
+	}
 	docsBody := docsResp.Body.String()
 
-	hidden := 0
+	// Derive from the unfiltered admin payload which versions the docs page
+	// ought to render, then compare against what it actually rendered.
+	// Comparing the two sets fails in both directions — an internal-only
+	// version leaking onto the public page, or a public one going missing —
+	// where counting hidden versions passed as soon as anything was hidden,
+	// including when /docs returned an error page containing no versions at all.
 	for _, v := range adminVersions {
 		version, _ := v["version"].(string)
-		if version != "" && !strings.Contains(docsBody, version) {
-			hidden++
+		if version == "" {
+			t.Fatalf("admin changelog entry has no version: %v", v)
 		}
-	}
-	if hidden == 0 && !strings.Contains(body, "internal") {
-		t.Error("expected the admin changelog to expose entries the docs page does not")
+
+		changes, _ := v["changes"].([]any)
+		wantRendered := false
+		for _, c := range changes {
+			change, _ := c.(map[string]any)
+			if audience, _ := change["audience"].(string); audience == "public" {
+				wantRendered = true
+				break
+			}
+		}
+
+		if got := strings.Contains(docsBody, version); got != wantRendered {
+			if wantRendered {
+				t.Errorf("version %s has public changes but is not on the docs page", version)
+			} else {
+				t.Errorf("version %s has only internal changes but appears on the docs page", version)
+			}
+		}
 	}
 }
 

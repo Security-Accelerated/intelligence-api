@@ -56,19 +56,39 @@ func startDNSServer(t *testing.T, zone testZone) (string, *atomic.Int32) {
 		}
 
 		name := req.Question[0].Name
-		add := func(format string, values ...string) {
+		addFor := func(owner, format string, values ...string) {
 			for _, v := range values {
-				if rr, err := dns.NewRR(name + " 60 IN " + format + " " + v); err == nil {
+				if rr, err := dns.NewRR(owner + " 60 IN " + format + " " + v); err == nil {
 					m.Answer = append(m.Answer, rr)
 				}
 			}
 		}
+		add := func(format string, values ...string) { addFor(name, format, values...) }
+
+		// aliased reports whether name is the owner of the zone's CNAME. Such a
+		// name has no records of its own (RFC 1034 §3.6.2), so address queries
+		// for it must be answered with the CNAME followed by the target's
+		// records rather than with a bare A. This is not pedantry: Go's
+		// LookupCNAME takes the canonical name from the address responses, not
+		// from the CNAME query, so a zone that serves both a CNAME and a direct
+		// A for one name gives an answer that varies with query ordering.
+		aliased := zone.CNAME != "" && name != zone.CNAME
 
 		switch req.Question[0].Qtype {
 		case dns.TypeA:
-			add("A", zone.A...)
+			if aliased {
+				add("CNAME", zone.CNAME)
+				addFor(zone.CNAME, "A", zone.A...)
+			} else {
+				add("A", zone.A...)
+			}
 		case dns.TypeAAAA:
-			add("AAAA", zone.AAAA...)
+			if aliased {
+				add("CNAME", zone.CNAME)
+				addFor(zone.CNAME, "AAAA", zone.AAAA...)
+			} else {
+				add("AAAA", zone.AAAA...)
+			}
 		case dns.TypeMX:
 			add("MX", zone.MX...)
 		case dns.TypeNS:

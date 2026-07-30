@@ -28,13 +28,16 @@ var DefaultDNSPerServerTimeout = 2 * time.Second
 // NewExternalResolver creates a net.Resolver that queries the given servers in
 // order, moving to the next one when a server fails to answer.
 //
-// Failover cannot be done at dial time. UDP is connectionless, so
-// net.Dialer.DialContext succeeds for any syntactically valid address — it
-// sends no packet and verifies nothing — which means a dial-time loop always
-// selects the first server and never reaches the rest. Real failover therefore
-// has to happen around the query itself, which is what failoverConn does: it
-// retries the pending query against the next server when the current one goes
-// quiet.
+// Failover happens in two places, because neither alone is sufficient.
+//
+// Dialing catches the servers that are unreachable outright — no route, bad
+// address — and dialNext walks past those. But it cannot catch the common case:
+// UDP is connectionless, so net.Dialer.DialContext succeeds for any routable
+// address, sending no packet and verifying nothing. A dial-only loop therefore
+// settles on the first server and never reaches the rest, however dead that
+// server is. The real failover has to happen around the query itself, which is
+// what failoverConn.Read does: it retries the pending query against the next
+// server when the current one goes quiet.
 func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resolver {
 	if len(servers) == 0 {
 		return net.DefaultResolver
@@ -55,7 +58,7 @@ func NewExternalResolver(servers []string, dialTimeout time.Duration) *net.Resol
 				dialer:  &net.Dialer{Timeout: dialTimeout},
 				perTry:  DefaultDNSPerServerTimeout,
 			}
-			if err := c.dialCurrent(ctx); err != nil {
+			if err := c.dialNext(ctx); err != nil {
 				return nil, err
 			}
 
@@ -111,14 +114,33 @@ type failoverConn struct {
 	ctx      context.Context
 }
 
-func (c *failoverConn) dialCurrent(ctx context.Context) error {
-	conn, err := c.dialer.DialContext(ctx, c.network, c.servers[c.idx])
-	if err != nil {
-		return err
+// dialNext connects to the first server at or after c.idx that accepts a
+// connection, leaving c.idx pointing at whichever one that was.
+//
+// Dial errors have to cascade just as read failures do. Dialing a connected UDP
+// socket sends nothing, but it does perform a route lookup — so a server with
+// no route to it (an IPv6 resolver on a host with no IPv6 connectivity, say)
+// fails here with ENETUNREACH. Returning that error would strand the lookup on
+// an unusable server while working ones sit further down the list.
+func (c *failoverConn) dialNext(ctx context.Context) error {
+	var lastErr error
+	for ; c.idx < len(c.servers); c.idx++ {
+		conn, err := c.dialer.DialContext(ctx, c.network, c.servers[c.idx])
+		if err == nil {
+			c.ctx = ctx
+			c.conn = conn
+			return nil
+		}
+		lastErr = err
+		// The caller gave up or ran out of time: the rest would fail the same.
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	c.ctx = ctx
-	c.conn = conn
-	return nil
+	if lastErr == nil {
+		lastErr = errors.New("no DNS servers available")
+	}
+	return lastErr
 }
 
 // Write records the query so it can be replayed against the next server, then
@@ -153,7 +175,7 @@ func (c *failoverConn) Read(b []byte) (int, error) {
 		// This server is not answering: move to the next and replay the query.
 		_ = c.conn.Close()
 		c.idx++
-		if dialErr := c.dialCurrent(c.ctx); dialErr != nil {
+		if dialErr := c.dialNext(c.ctx); dialErr != nil {
 			return 0, dialErr
 		}
 		if len(c.query) > 0 {
