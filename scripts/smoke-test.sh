@@ -367,7 +367,7 @@ else
 fi
 
 echo "=== IP Lookup — Auth ==="
-IP='{"ips":["8.8.8.8"]}'
+IP='{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
 post 200 "admin key" /v1/ip/lookup "$ADMIN" "$IP"
 post 200 "basic key" /v1/ip/lookup "$BASIC" "$IP"
 post 200 "pro key" /v1/ip/lookup "$PRO" "$IP"
@@ -376,31 +376,53 @@ post 401 "no key" /v1/ip/lookup "" "$IP"
 post 401 "bad key" /v1/ip/lookup "invalid-key" "$IP"
 
 echo "=== IP Lookup — Pro Options ==="
-post 200 "threat_intel (admin)" /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"threat_intel":true}'
-post 200 "threat_intel (pro)" /v1/ip/lookup "$PRO" '{"ips":["8.8.8.8"],"threat_intel":true}'
-post 403 "threat_intel (basic)" /v1/ip/lookup "$BASIC" '{"ips":["8.8.8.8"],"threat_intel":true}'
-post 403 "threat_intel (free)" /v1/ip/lookup "$FREE" '{"ips":["8.8.8.8"],"threat_intel":true}'
+post 200 "threat_intel (admin)" /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
+post 200 "threat_intel (pro)" /v1/ip/lookup "$PRO" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
+post 403 "threat_intel (basic)" /v1/ip/lookup "$BASIC" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
+post 403 "threat_intel (free)" /v1/ip/lookup "$FREE" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
 
 echo "=== IP Lookup — Validation ==="
-post 400 "invalid IP" /v1/ip/lookup "$ADMIN" '{"ips":["not-an-ip"]}'
-post 400 "private IP" /v1/ip/lookup "$ADMIN" '{"ips":["127.0.0.1"]}'
-post 400 "metadata IP" /v1/ip/lookup "$ADMIN" '{"ips":["169.254.169.254"]}'
-post 400 "empty array" /v1/ip/lookup "$ADMIN" '{"ips":[]}'
+post 400 "invalid IP" /v1/ip/lookup "$ADMIN" '{"ips":["not-an-ip"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
+post 400 "private IP" /v1/ip/lookup "$ADMIN" '{"ips":["127.0.0.1"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
+post 400 "metadata IP" /v1/ip/lookup "$ADMIN" '{"ips":["169.254.169.254"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
+post 400 "empty array" /v1/ip/lookup "$ADMIN" '{"ips":[],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
+post 400 "missing lookups"    /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"]}'
+post 400 "empty lookups"      /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"lookups":[]}'
+post 400 "unknown lookup"     /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"lookups":["geo","banana"]}'
+post 400 "domain-only lookup" /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"lookups":["whois"]}'
+
+check_json "IP response contains only requested lookups" \
+    '.results[0] | has("geo") and (has("asn") | not) and (has("reverse_dns") | not)' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":["8.8.8.8"],"lookups":["geo"]}'
+
+check_json "IP lookups carry their own cache_hit" \
+    '.results[0] | (.geo.cache_hit | type == "boolean") and (.reverse_dns.cache_hit | type == "boolean")' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":["8.8.8.8"],"lookups":["geo","reverse_dns"]}'
+
+check_json "IP addresses dedupe and report inputs verbatim" \
+    '.results | length == 1 and (.[0].inputs | length == 2)' \
+    -X POST "$HOST/v1/ip/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"ips":[" 8.8.8.8 ","8.8.8.8"],"lookups":["geo"]}'
 post 400 "missing field" /v1/ip/lookup "$ADMIN" '{}'
 
 echo "=== IP Lookup — Response Validation ==="
-check_json "IP response has ip field" '.[0].ip == "8.8.8.8"' \
+check_json "IP response has ip field" '.results[0].ip == "8.8.8.8"' \
     -X POST "$HOST/v1/ip/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d '{"ips":["8.8.8.8"]}'
-check_json "IP response has reverse_dns" '.[0].reverse_dns != null' \
+    -d '{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
+check_json "IP response has reverse_dns" '.results[0].reverse_dns != null' \
     -X POST "$HOST/v1/ip/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d '{"ips":["8.8.8.8"]}'
-check_json "IP response has abuse_contact" '.[0].abuse_contact != null' \
+    -d '{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
+check_json "IP response has abuse_contact" '.results[0].abuse_contact != null' \
     -X POST "$HOST/v1/ip/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d '{"ips":["8.8.8.8"]}'
+    -d '{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
 
 echo "=== GeoIP Admin ==="
 # Note: admin success test omitted — refresh downloads from MaxMind (requires real license key)

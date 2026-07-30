@@ -614,21 +614,54 @@ Each component entry contains:
 ```json
 {
   "ips": ["8.8.8.8", "1.1.1.1"],
-  "threat_intel": true
+  "lookups": ["geo", "asn", "reverse_dns"]
 }
 ```
 
-| Field | Type | Plan | Description |
-|-------|------|------|-------------|
-| `ips` | `string[]` | All | IP addresses to look up (required) |
-| `threat_intel` | `bool` | Pro/Admin | Enable threat intelligence from VirusTotal, URLhaus, AlienVault OTX |
+Both fields are **required**, and the endpoint follows the same contract as the domain lookup: `lookups` must be non-empty, names are trimmed/lowercased/deduplicated before validation, and results come back in a `{"results": [...]}` envelope with per-lookup `cache_hit`.
+
+#### `ips`
+
+An array of IP addresses. Each is canonicalized before use, so `2001:DB8::1` and `2001:db8:0:0:0:0:0:1` are the same address, collapse to one result, and share one cache key. Entries that canonicalize to the same address are deduplicated. Plan IP limits count the entries you submitted, not the unique addresses they collapse into.
+
+Private, loopback, link-local, multicast, unspecified, and CGNAT addresses are rejected at input validation.
+
+#### `lookups`
+
+| Lookup | Plan | Description |
+|--------|------|-------------|
+| `geo` | All | Country, city, region, coordinates, timezone (MaxMind GeoLite2) |
+| `asn` | All | ASN number, organization, network (MaxMind GeoLite2 ASN) |
+| `reverse_dns` | All | PTR record hostnames |
+| `abuse_contact` | All | Network owner, country, abuse email (via RDAP) |
+| `threat_intel` | **Pro** | VirusTotal, URLhaus, and AlienVault OTX with a composite risk score |
+
+The IP and domain catalogs are separate. `threat_intel` appears in both and behaves the same way; every other name belongs to one endpoint only, so asking for `whois` on an IP returns `400`.
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "ip": "8.8.8.8",
+      "inputs": [" 8.8.8.8 "],
+      "geo": { "cache_hit": false, "country": "United States", "city": "Mountain View" },
+      "asn": { "cache_hit": false, "asn": 15169, "organization": "GOOGLE" },
+      "reverse_dns": { "cache_hit": true, "hostnames": ["dns.google"] },
+      "errors": []
+    }
+  ]
+}
+```
+
+Each element carries the canonicalized `ip` and the verbatim `inputs` that mapped to it. As with domains, **array position is not part of the API contract** — match results by `ip`.
 
 **Response fields:**
 
 | Field | Description |
 |-------|-------------|
 | `ip` | The queried IP address (canonicalized) |
-| `cache_hit` | Whether the result was served from Redis cache |
+| `inputs` | The original request entries, verbatim, that canonicalized to this address |
 | `geo` | GeoIP: country, city, region, coordinates, timezone (MaxMind GeoLite2) |
 | `asn` | ASN number, organization, network (MaxMind GeoLite2 ASN) |
 | `reverse_dns` | PTR record hostnames |
@@ -636,7 +669,9 @@ Each component entry contains:
 | `threat_intel` | Aggregated threat intelligence with risk score and per-provider results |
 | `errors` | Per-lookup errors (partial failures still return other fields) |
 
-Private, loopback, link-local, multicast, unspecified, and CGNAT IPs are rejected at input validation.
+#### `geo` and `asn` are never cached
+
+Both read a local MaxMind memory-mapped database with no network call, so a Redis round trip would cost *more* than simply doing the lookup again. They are recomputed on every request and their `cache_hit` is always `false` — which is accurate, since the data really was produced for that request. Only `reverse_dns`, `abuse_contact` and `threat_intel` get cache entries.
 
 ### `GET /v1/usage` — My Usage (All Plans)
 
@@ -739,10 +774,11 @@ The changelog is maintained in `changelog.yaml` at the project root (symlink to 
 Lookup results are cached in Redis **per lookup, per domain** — not per response. Each key holds one lookup's result for one domain:
 
 ```
-lookup:<domain>:<lookup_name>
+lookup:<domain>:<lookup_name>     # domain lookups, e.g. lookup:example.net:ssl
+ip:<ip>:<lookup_name>             # IP lookups, e.g. ip:8.8.8.8:reverse_dns
 ```
 
-For example, `lookup:example.net:ssl`. Keys are built only from the normalized domain and lookup name, so the combination of lookups you request has no effect on cache reuse: a `dns`-only request warms the same `lookup:example.com:dns` entry that a later `dns` + `ssl` request reads from.
+The two namespaces are separate, so `threat_intel` on a domain and on an IP never collide. Keys are built only from the normalized domain and lookup name, so the combination of lookups you request has no effect on cache reuse: a `dns`-only request warms the same `lookup:example.com:dns` entry that a later `dns` + `ssl` request reads from.
 
 Each lookup object in the response carries its own `cache_hit` flag, so a single result can mix cached and freshly fetched fields. Redis stores the lookup payload and nothing else — no request metadata, no cache flags, no timestamps.
 
@@ -764,6 +800,9 @@ Every lookup has its own TTL, reflecting how fast that data actually changes. An
 | `threat_intel` | 30m |
 | `screenshot` | 60m |
 | `dns_security` | 4h |
+| `reverse_dns` *(IP)* | 6h |
+| `abuse_contact` *(IP)* | 24h |
+| `geo`, `asn` *(IP)* | never cached — local database reads |
 | *(anything else)* | `cache.default_ttl` (60m) |
 
 Override individually with env vars — `CACHE_TTL_WHOIS=48h`, `CACHE_DEFAULT_TTL=30m` — or in the config file under `cache.ttl.*`.
@@ -918,7 +957,10 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `009_request_log_threat_intel.sql` — adds `threat_intel` column to the `request_log` table
 - `010_drop_name_unique.sql` — drops the unique constraint on `customers.name` (allows same-name Stripe signups)
 - `011_request_log_ip.sql` — adds `ip_count` column to `request_log` for IP lookup analytics
-- `012_request_log_cache_metrics.sql` — replaces the per-request `cache_hit` boolean with `cache_hits`/`cache_misses` counts, and adds `whois`/`dns`/`ssl`/`headers` columns now that the base lookups are individually selectable
+- `012_key_rotation.sql` — drops the one-key-per-customer constraint and adds `api_keys.expires_at` for self-service rotation
+- `013_request_log_dns_security.sql` — adds `dns_security` column to `request_log`
+- `014_request_log_cache_metrics.sql` — replaces the per-request `cache_hit` boolean with `cache_hits`/`cache_misses` counts, and adds `whois`/`dns`/`ssl`/`headers`/`risk` columns now that the base lookups and the risk score are individually selectable
+- `015_request_log_ip_lookups.sql` — adds `geo`/`asn`/`reverse_dns`/`abuse_contact` columns now that IP lookups are individually selectable
 - `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:

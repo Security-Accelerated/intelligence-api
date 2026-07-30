@@ -122,16 +122,29 @@
     <span class="method">POST</span>
     <span class="path">/v1/ip/lookup</span>
   </div>
-  <p>Submit one or more IP addresses for concurrent intelligence gathering. Core lookups (geo, ASN, reverse DNS, abuse contact) are available on all plans. Threat intelligence requires a <span class="tag tag-pro">Pro</span> plan.</p>
+  <p>Submit one or more IP addresses and choose exactly which lookups to run via the <code>lookups</code> array &mdash; there is no default set. All requested lookups run concurrently.</p>
 
   <h3 id="request-body">Request Body</h3>
   <table>
     <thead><tr><th>Field</th><th>Type</th><th>Plan</th><th>Description</th></tr></thead>
     <tbody>
-      <tr><td><code>ips</code></td><td><code>string[]</code></td><td>All</td><td>Array of IPv4 or IPv6 addresses to look up (required)</td></tr>
-      <tr><td><code>threat_intel</code></td><td><code>bool</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query VirusTotal, URLhaus, and AlienVault OTX for threat data</td></tr>
+      <tr><td><code>ips</code></td><td><code>string[]</code></td><td>All</td><td>Array of IPv4 or IPv6 addresses (required). Canonicalized before use, so <code>2001:DB8::1</code> and <code>2001:db8:0:0:0:0:0:1</code> are one address, one result, one cache key. Entries that canonicalize to the same address are deduplicated; plan limits count the entries you submitted.</td></tr>
+      <tr><td><code>lookups</code></td><td><code>string[]</code></td><td>All</td><td>Which lookups to run (required, non-empty). Names are trimmed, lowercased and deduplicated.</td></tr>
     </tbody>
   </table>
+
+  <h4>Valid Lookups</h4>
+  <table>
+    <thead><tr><th>Name</th><th>Plan</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>geo</code></td><td>All</td><td>Country, city, region, coordinates, timezone (MaxMind GeoLite2).</td></tr>
+      <tr><td><code>asn</code></td><td>All</td><td>ASN number, organization, network (MaxMind GeoLite2 ASN).</td></tr>
+      <tr><td><code>reverse_dns</code></td><td>All</td><td>PTR record hostnames.</td></tr>
+      <tr><td><code>abuse_contact</code></td><td>All</td><td>Network owner, country, abuse email (via RDAP).</td></tr>
+      <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>VirusTotal, URLhaus, and AlienVault OTX with a composite risk score.</td></tr>
+    </tbody>
+  </table>
+  <p>The IP and domain catalogs are separate. <code>threat_intel</code> appears in both; every other name belongs to one endpoint only, so asking for <code>whois</code> on an IP returns <code>400</code>.</p>
 
   <h4 id="validation">Input Validation</h4>
   <p>IP addresses are validated and canonicalized using Go's <code>netip.ParseAddr</code>. The following are rejected with a <code>400</code> response:</p>
@@ -156,7 +169,7 @@
   <span class="flag">-H</span> <span class="str">'X-Client-Request-ID: req-001'</span> \
   <span class="flag">-d</span> <span class="str">'{
     "ips": ["8.8.8.8", "1.1.1.1"],
-    "threat_intel": true
+    "lookups": ["geo", "asn", "reverse_dns"]
   }'</span></code></pre>
   </div>
   <div id="tab-python" class="lang-panel">
@@ -288,11 +301,14 @@ resp = requests.post(
 ]</code></pre>
 
   <h2 id="full-response-example">Full Response Example</h2>
-  <pre><code>[
+  <p>Results are wrapped in a <code>results</code> envelope. Each element carries the canonicalized <code>ip</code> and the verbatim <code>inputs</code> that mapped to it &mdash; match results by <code>ip</code>, not by array position. Every lookup object carries its own <code>cache_hit</code>; note that <code>geo</code> and <code>asn</code> are always <code>false</code> because they are never cached.</p>
+  <pre><code>{
+  <span class="str">"results"</span>: [
   {
     <span class="str">"ip"</span>: <span class="str">"8.8.8.8"</span>,
-    <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+    <span class="str">"inputs"</span>: [<span class="str">"8.8.8.8"</span>],
     <span class="str">"geo"</span>: {
+      <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
       <span class="str">"continent"</span>: <span class="str">"North America"</span>,
       <span class="str">"continent_code"</span>: <span class="str">"NA"</span>,
       <span class="str">"country"</span>: <span class="str">"United States"</span>,
@@ -306,13 +322,16 @@ resp = requests.post(
       <span class="str">"accuracy_radius"</span>: <span class="num">1000</span>
     },
     <span class="str">"asn"</span>: {
+      <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
       <span class="str">"asn"</span>: <span class="num">15169</span>,
       <span class="str">"organization"</span>: <span class="str">"GOOGLE"</span>
     },
     <span class="str">"reverse_dns"</span>: {
+      <span class="str">"cache_hit"</span>: <span class="kw">true</span>,
       <span class="str">"hostnames"</span>: [<span class="str">"dns.google"</span>]
     },
     <span class="str">"abuse_contact"</span>: {
+      <span class="str">"cache_hit"</span>: <span class="kw">true</span>,
       <span class="str">"network"</span>: <span class="str">"8.8.8.0 - 8.8.8.255"</span>,
       <span class="str">"organization"</span>: <span class="str">"Google LLC"</span>,
       <span class="str">"country"</span>: <span class="str">"US"</span>,
@@ -320,15 +339,18 @@ resp = requests.post(
     },
     <span class="str">"errors"</span>: []
   }
-]</code></pre>
+  ]
+}</code></pre>
 
   <h2 id="error-handling">Error Handling</h2>
   <table>
     <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
     <tbody>
       <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>ips</code> field, or non-routable IP address</td></tr>
+      <tr><td><code>400 Bad Request</code></td><td><code>lookups</code> missing or empty after normalization &mdash; <code>lookups is required, e.g. ["geo", "asn"]</code></td></tr>
+      <tr><td><code>400 Bad Request</code></td><td>Unrecognized lookup name (including domain-only names such as <code>whois</code>) &mdash; the message names the offending entry</td></tr>
       <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
-      <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this feature (e.g. <code>threat_intel</code> requires Pro)</td></tr>
+      <tr><td><code>403 Forbidden</code></td><td>A requested lookup is outside your plan &mdash; e.g. <code>threat_intel requires a pro plan</code></td></tr>
       <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
       <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
       <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
@@ -341,7 +363,20 @@ resp = requests.post(
   <div class="note">Partial lookup failures are different from HTTP errors. When individual lookups fail (e.g., reverse DNS timeout), the request still returns <code>200 OK</code> with successful lookups populated and failures listed in the <code>errors</code> array.</div>
 
   <h2 id="caching">Caching</h2>
-  <p>Results are cached for <strong>60 minutes</strong>. The <code>cache_hit</code> field on each response indicates whether data was served from cache or fetched live.</p>
+  <p>Results are cached <strong>per lookup, per IP</strong> under <code>ip:&lt;ip&gt;:&lt;lookup&gt;</code> &mdash; a namespace separate from domain lookups, so <code>threat_intel</code> on the two endpoints never collides. Each lookup object carries its own <code>cache_hit</code>, so one result can mix cached and freshly fetched fields.</p>
+  <table>
+    <thead><tr><th>Lookup</th><th>TTL</th></tr></thead>
+    <tbody>
+      <tr><td><code>abuse_contact</code></td><td>24 hours</td></tr>
+      <tr><td><code>reverse_dns</code></td><td>6 hours</td></tr>
+      <tr><td><code>threat_intel</code></td><td>30 minutes</td></tr>
+      <tr><td><code>geo</code>, <code>asn</code></td><td>never cached</td></tr>
+    </tbody>
+  </table>
+  <h4><code>geo</code> and <code>asn</code> are never cached</h4>
+  <p>Both read a local MaxMind memory-mapped database with no network call, so a Redis round trip would cost <em>more</em> than simply doing the lookup again. They are recomputed on every request and their <code>cache_hit</code> is always <code>false</code> &mdash; which is accurate, since the data really was produced for that request.</p>
+  <h4>Cache failures never fail a request</h4>
+  <p>Caching is fail-open: an unreachable cache means every lookup is fetched live, an unreadable entry is treated as a miss and overwritten, and a failed write still returns the fetched result. Failed lookups are never cached &mdash; a failing lookup is retried on the next request rather than remembered.</p>
 
   <h2 id="request-correlation">Request Correlation</h2>
   <p>You can pass an optional <code>X-Client-Request-ID</code> header with your own correlation ID for end-to-end tracing. The API echoes it back in the response headers and includes it in server-side logs.</p>

@@ -75,7 +75,7 @@ POST /v1/domain/lookup
 POST /v1/ip/lookup
 {
   "ips": ["8.8.8.8"],
-  "threat_intel": true
+  "lookups": ["geo", "asn", "reverse_dns", "abuse_contact", "threat_intel"]
 }
 ```
 
