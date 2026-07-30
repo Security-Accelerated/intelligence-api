@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"html"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -423,6 +427,65 @@ func TestDocs_ExamplesUseCurrentRequestContract(t *testing.T) {
 		})
 	}
 }
+
+// TestDocs_GoExamplesCompile builds the Go example from each docs page. The
+// examples are self-contained stdlib-only programs that customers copy verbatim,
+// so a redeclared variable or missing import is a real defect — and one that no
+// amount of string matching against the markup would catch. This exists because
+// exactly that shipped: both pages declared `body` for the request payload and
+// then again for the decoded response.
+func TestDocs_GoExamplesCompile(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go toolchain not available")
+	}
+	for _, tc := range []struct {
+		name string
+		html string
+	}{
+		{"/docs/domain", docsDomainHTML},
+		{"/docs/ip", docsIPHTML},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := exampleSource(t, tc.html, "go")
+			if !strings.HasPrefix(src, "package main") {
+				t.Fatalf("example is not a standalone program, got prefix %.20q", src)
+			}
+
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(src), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "go.mod"),
+				[]byte("module docsexample\n\ngo 1.25\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			// -o os.DevNull: we care about compilation, not the artifact.
+			cmd := exec.Command("go", "build", "-o", os.DevNull, ".")
+			cmd.Dir = dir
+			// Inherit the module cache but keep the build off the network;
+			// the examples import nothing outside the standard library.
+			cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod", "GOPROXY=off")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Errorf("go example does not compile: %v\n%s\n--- source ---\n%s", err, out, src)
+			}
+		})
+	}
+}
+
+// exampleSource returns one language panel's example as plain text, with markup
+// stripped and HTML entities decoded — i.e. what a customer gets by copying it.
+func exampleSource(t *testing.T, page, lang string) string {
+	t.Helper()
+	panel := extractPanel(t, page, lang)
+	code := panel[strings.Index(panel, ">")+1:]
+	if i := strings.Index(code, "<code"); i != -1 {
+		code = code[strings.Index(code[i:], ">")+i+1:]
+	}
+	return html.UnescapeString(tagPattern.ReplaceAllString(code, ""))
+}
+
+var tagPattern = regexp.MustCompile(`<[^>]*>`)
 
 // extractPanel returns the markup of one language panel.
 func extractPanel(t *testing.T, html, lang string) string {

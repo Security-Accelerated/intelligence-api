@@ -364,11 +364,11 @@ resp = requests.post(
     }
 
     <span class="cmt">// Results are wrapped in a "results" envelope.</span>
-    <span class="kw">var</span> body struct {
+    <span class="kw">var</span> response struct {
         Results []<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span> <span class="str">`json:"results"`</span>
     }
-    json.NewDecoder(resp.Body).Decode(&body)
-    fmt.Println(body.Results[<span class="num">0</span>][<span class="str">"domain"</span>])
+    json.NewDecoder(resp.Body).Decode(&response)
+    fmt.Println(response.Results[<span class="num">0</span>][<span class="str">"domain"</span>])
 }</code></pre>
   </div>
 
