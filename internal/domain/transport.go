@@ -13,7 +13,7 @@ import (
 // self-signed, or otherwise invalid certificates. MaxResponseHeaderBytes
 // caps header memory to prevent abuse from malicious servers.
 var safeTransport = &http.Transport{
-	TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+	TLSClientConfig:        &tls.Config{InsecureSkipVerify: true},
 	DialContext:            safenet.SafeDialer(10 * time.Second).DialContext,
 	MaxResponseHeaderBytes: 1 << 20, // 1 MB
 }

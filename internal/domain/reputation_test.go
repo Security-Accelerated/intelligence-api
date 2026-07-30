@@ -104,10 +104,10 @@ func TestClassifyZENResponse(t *testing.T) {
 
 func TestReverseIPv4(t *testing.T) {
 	tests := []struct {
-		name    string
-		ip      string
-		want    string
-		wantOK  bool
+		name   string
+		ip     string
+		want   string
+		wantOK bool
 	}{
 		{"normal", "1.2.3.4", "4.3.2.1", true},
 		{"all same", "10.10.10.10", "10.10.10.10", true},
@@ -163,7 +163,7 @@ func TestScoreReputation(t *testing.T) {
 		wantRisk  string
 	}{
 		{
-			name:      "all clean",
+			name: "all clean",
 			providers: []*ProviderResult{
 				{Listed: false, Provider: "spamhaus_dbl"},
 				{Listed: false, Provider: "surbl"},
@@ -174,7 +174,7 @@ func TestScoreReputation(t *testing.T) {
 			wantRisk:  "clean",
 		},
 		{
-			name:      "single listing - DBL phishing",
+			name: "single listing - DBL phishing",
 			providers: []*ProviderResult{
 				{Listed: true, Category: "phishing", Provider: "spamhaus_dbl"},
 				{Listed: false, Provider: "surbl"},
@@ -183,7 +183,7 @@ func TestScoreReputation(t *testing.T) {
 			wantRisk:  "medium",
 		},
 		{
-			name:      "single listing - URIBL grey (low)",
+			name: "single listing - URIBL grey (low)",
 			providers: []*ProviderResult{
 				{Listed: false, Provider: "spamhaus_dbl"},
 				{Listed: true, Category: "grey", Provider: "uribl"},
@@ -192,7 +192,7 @@ func TestScoreReputation(t *testing.T) {
 			wantRisk:  "low",
 		},
 		{
-			name:      "multiple listings",
+			name: "multiple listings",
 			providers: []*ProviderResult{
 				{Listed: true, Category: "malware", Provider: "spamhaus_dbl"},
 				{Listed: true, Category: "malware", Provider: "surbl"},
@@ -203,18 +203,18 @@ func TestScoreReputation(t *testing.T) {
 			wantRisk:  "high",
 		},
 		{
-			name:      "cap at 100",
+			name: "cap at 100",
 			providers: []*ProviderResult{
-				{Listed: true, Category: "malware", Provider: "spamhaus_dbl"},    // 40
-				{Listed: true, Category: "malware", Provider: "surbl"},           // 30
-				{Listed: true, Category: "red", Provider: "uribl"},               // 20
+				{Listed: true, Category: "malware", Provider: "spamhaus_dbl"},      // 40
+				{Listed: true, Category: "malware", Provider: "surbl"},             // 30
+				{Listed: true, Category: "red", Provider: "uribl"},                 // 20
 				{Listed: true, Category: "xbl_exploits", Provider: "spamhaus_zen"}, // 20
 			},
 			wantScore: 100,
 			wantRisk:  "high",
 		},
 		{
-			name:      "boundary - score 29 is low",
+			name: "boundary - score 29 is low",
 			providers: []*ProviderResult{
 				{Listed: true, Category: "spam", Provider: "spamhaus_dbl"}, // 25
 			},
@@ -222,7 +222,7 @@ func TestScoreReputation(t *testing.T) {
 			wantRisk:  "low",
 		},
 		{
-			name:      "boundary - score 30 is medium",
+			name: "boundary - score 30 is medium",
 			providers: []*ProviderResult{
 				{Listed: true, Category: "spam", Provider: "spamhaus_dbl"}, // 25
 				{Listed: true, Category: "grey", Provider: "uribl"},        // 5
@@ -231,7 +231,7 @@ func TestScoreReputation(t *testing.T) {
 			wantRisk:  "medium",
 		},
 		{
-			name:      "boundary - score 60 is high",
+			name: "boundary - score 60 is high",
 			providers: []*ProviderResult{
 				{Listed: true, Category: "phishing", Provider: "spamhaus_dbl"}, // 35
 				{Listed: true, Category: "spam", Provider: "uribl"},            // 15
@@ -241,7 +241,7 @@ func TestScoreReputation(t *testing.T) {
 			wantRisk:  "high",
 		},
 		{
-			name:      "SURBL stacking - malware+abuse",
+			name: "SURBL stacking - malware+abuse",
 			providers: []*ProviderResult{
 				{Listed: true, Category: "abuse+malware", Provider: "surbl"}, // 15+30=45
 			},

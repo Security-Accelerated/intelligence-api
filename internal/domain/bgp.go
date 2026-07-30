@@ -127,4 +127,3 @@ func lookupCymruASName(ctx context.Context, asn int) (string, error) {
 
 	return strings.TrimSpace(parts[4]), nil
 }
-
