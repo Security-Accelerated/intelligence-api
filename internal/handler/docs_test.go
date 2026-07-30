@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -347,4 +348,92 @@ func TestDocs_DetailPagesNoFooter(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestDocs_LanguageTabsHavePanels guards the docs example tabs: the switcher in
+// docs.js resolves a tab's data-lang to a #tab-<lang> panel, so a tab without a
+// panel silently does nothing when clicked, and a panel without a tab is
+// unreachable. Neither shows up as a build or template failure.
+func TestDocs_LanguageTabsHavePanels(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		html string
+	}{
+		{"/docs/domain", docsDomainHTML},
+		{"/docs/ip", docsIPHTML},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tabs := map[string]bool{}
+			for _, m := range regexp.MustCompile(`data-lang="([^"]+)"`).FindAllStringSubmatch(tc.html, -1) {
+				tabs[m[1]] = true
+			}
+			panels := map[string]bool{}
+			for _, m := range regexp.MustCompile(`id="tab-([^"]+)"`).FindAllStringSubmatch(tc.html, -1) {
+				panels[m[1]] = true
+			}
+
+			if len(tabs) == 0 {
+				t.Fatal("no language tabs found")
+			}
+			for lang := range tabs {
+				if !panels[lang] {
+					t.Errorf("tab %q has no #tab-%s panel — clicking it does nothing", lang, lang)
+				}
+			}
+			for lang := range panels {
+				if !tabs[lang] {
+					t.Errorf("panel #tab-%s has no tab — it is unreachable", lang)
+				}
+			}
+			for _, want := range []string{"curl", "javascript", "python", "go"} {
+				if !tabs[want] {
+					t.Errorf("missing %q example tab", want)
+				}
+			}
+		})
+	}
+}
+
+// TestDocs_ExamplesUseCurrentRequestContract catches example code left on the
+// pre-v0.54.0 contract. Both endpoints now require a `lookups` array and return
+// a `results` envelope; an example that omits either is wrong in a way no other
+// test would notice.
+func TestDocs_ExamplesUseCurrentRequestContract(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		html string
+	}{
+		{"/docs/domain", docsDomainHTML},
+		{"/docs/ip", docsIPHTML},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Every example sends a request, so all must name lookups.
+			for _, lang := range []string{"curl", "javascript", "python", "go"} {
+				if panel := extractPanel(t, tc.html, lang); !strings.Contains(panel, "lookups") {
+					t.Errorf("%s example does not send a lookups array", lang)
+				}
+			}
+			// Only the ones that parse a response can read the envelope; the
+			// curl example stops at the request.
+			for _, lang := range []string{"javascript", "python", "go"} {
+				if panel := extractPanel(t, tc.html, lang); !strings.Contains(panel, "results") {
+					t.Errorf("%s example does not read the results envelope", lang)
+				}
+			}
+		})
+	}
+}
+
+// extractPanel returns the markup of one language panel.
+func extractPanel(t *testing.T, html, lang string) string {
+	t.Helper()
+	start := strings.Index(html, `id="tab-`+lang+`"`)
+	if start == -1 {
+		t.Fatalf("no panel for %q", lang)
+	}
+	end := strings.Index(html[start:], "</code></pre>")
+	if end == -1 {
+		t.Fatalf("unterminated panel for %q", lang)
+	}
+	return html[start : start+end]
 }
