@@ -18,8 +18,6 @@ redis:
   addr: redis:6379
   password: ""
   db: 0
-  negative_cache_ttl: 5m   # TTL for IP responses containing lookup errors
-                           # (domain lookups cache per lookup and never cache failures)
 
 # Domain lookup results are cached per lookup under `lookup:<domain>:<name>`,
 # so each lookup expires on its own schedule. Anything not listed under `ttl`
@@ -41,6 +39,10 @@ cache:
     reputation: 30m
     threat_intel: 30m
     screenshot: 60m
+    # IP lookups. geo and asn are absent deliberately: they read a local MaxMind
+    # mmap and are never cached, so a TTL would be meaningless.
+    reverse_dns: 6h
+    abuse_contact: 24h
 
 auth:
   cache_ttl: 5m

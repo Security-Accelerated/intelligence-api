@@ -65,12 +65,11 @@ type DatabaseConfig struct {
 }
 
 type CacheConfig struct {
-	Addr             string            `json:"addr"`
-	DB               int               `json:"db"`
-	DefaultTTL       string            `json:"default_ttl"`
-	LookupTTLs       map[string]string `json:"lookup_ttls"`
-	NegativeCacheTTL string            `json:"negative_cache_ttl"`
-	AuthCacheTTL     string            `json:"auth_cache_ttl"`
+	Addr         string            `json:"addr"`
+	DB           int               `json:"db"`
+	DefaultTTL   string            `json:"default_ttl"`
+	LookupTTLs   map[string]string `json:"lookup_ttls"`
+	AuthCacheTTL string            `json:"auth_cache_ttl"`
 }
 
 type LookupConfig struct {
@@ -185,12 +184,11 @@ func NewStatusSnapshot(version string, lookupNames []string) *StatusSnapshot {
 			ConnMaxIdleTime: cfg.GetDuration("postgres.conn_max_idle_time").String(),
 		},
 		Cache: CacheConfig{
-			Addr:             cfg.GetString("redis.addr"),
-			DB:               cfg.GetInt("redis.db"),
-			DefaultTTL:       DefaultCacheTTL(cfg).String(),
-			LookupTTLs:       lookupTTLs,
-			NegativeCacheTTL: cfg.GetDuration("redis.negative_cache_ttl").String(),
-			AuthCacheTTL:     cfg.GetDuration("auth.cache_ttl").String(),
+			Addr:         cfg.GetString("redis.addr"),
+			DB:           cfg.GetInt("redis.db"),
+			DefaultTTL:   DefaultCacheTTL(cfg).String(),
+			LookupTTLs:   lookupTTLs,
+			AuthCacheTTL: cfg.GetDuration("auth.cache_ttl").String(),
 		},
 		Lookups: LookupConfig{
 			Timeout:                 cfg.GetDuration("domain.lookup_timeout").String(),

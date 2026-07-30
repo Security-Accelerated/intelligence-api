@@ -45,6 +45,12 @@ func isExpectedError(err error) bool {
 		return true
 	}
 
+	// GeoIP databases not yet bootstrapped — a deployment state, not a fault.
+	// The admin refresh endpoint exists to resolve it.
+	if errors.Is(err, domain.ErrDBNotLoaded) {
+		return true
+	}
+
 	// Match common upstream error messages that aren't wrapped as typed errors.
 	msg := err.Error()
 	expectedPatterns := []string{

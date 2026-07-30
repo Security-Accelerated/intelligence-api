@@ -132,12 +132,10 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Services
 	defaultCacheTTL := config.DefaultCacheTTL(cfg)
-	cacheTTLs := config.CacheTTLs(cfg, domain.AllLookupNames)
-	// Domain lookups no longer negative-cache: per-lookup TTLs already stop one
-	// flaky provider from shortening everything else's lifetime, and a failing
-	// lookup is better retried than remembered. IP responses are still cached as
-	// a single document, so negative caching still earns its keep there.
-	negativeCacheTTL := cfg.GetDuration("redis.negative_cache_ttl")
+	cacheTTLs := config.CacheTTLs(cfg, append(append([]string{}, domain.AllLookupNames...), domain.AllIPLookupNames...))
+	// Neither service negative-caches any more: with per-lookup TTLs, one flaky
+	// provider can no longer shorten everything else's lifetime, and a failing
+	// lookup is better retried than remembered.
 
 	fpService := service.NewFingerprintService(db)
 	fpSource := "database"
@@ -289,8 +287,7 @@ func Run(logger *zap.Logger, version string) error {
 	}
 
 	// IP intelligence service
-	// IP responses are cached as a whole document, so they use the default TTL.
-	ipService := service.NewIPService(redisCache, defaultCacheTTL, negativeCacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
+	ipService := service.NewIPService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
 
 	// HTTP
 	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, keyRotationSvc, geoReader, cfg, redisCache, cachedRepo, db, status)

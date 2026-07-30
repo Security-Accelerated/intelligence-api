@@ -55,7 +55,7 @@ type DomainLookupService interface {
 }
 
 type IPLookupService interface {
-	Lookup(ctx context.Context, ip string, opts domain.IPLookupOptions) (*domain.IPResponse, bool)
+	Lookup(ctx context.Context, ip string, opts domain.IPLookupOptions) (*domain.IPResponse, domain.CacheStats)
 }
 
 // GeoIPRefresher downloads and hot-reloads MaxMind databases.
