@@ -49,8 +49,8 @@ func TestIsPrivateIP(t *testing.T) {
 		{"2606:4700::1", false},   // public IPv6
 		{"198.17.255.255", false}, // just below benchmarking range
 		{"198.20.0.0", false},     // just above benchmarking range
-		{"192.0.3.1", false},   // just above TEST-NET-1
-		{"203.0.114.0", false}, // just above TEST-NET-3
+		{"192.0.3.1", false},      // just above TEST-NET-1
+		{"203.0.114.0", false},    // just above TEST-NET-3
 	}
 
 	for _, tt := range tests {

@@ -101,15 +101,15 @@ func TestStripeService_NotifyMultiple(t *testing.T) {
 // --- Mock types for webhook handler tests ---
 
 type mockBillingRepo struct {
-	updatePlanCalls  []struct{ customerID, plan string }
-	downgradeCalls   []string
-	provisionCalls   []provisionCall
-	updatePlanErr    error
-	downgradeErr     error
-	customerExists   bool
+	updatePlanCalls   []struct{ customerID, plan string }
+	downgradeCalls    []string
+	provisionCalls    []provisionCall
+	updatePlanErr     error
+	downgradeErr      error
+	customerExists    bool
 	customerExistsErr error
-	provisionErr     error
-	provisionID      int
+	provisionErr      error
+	provisionID       int
 }
 
 type provisionCall struct {

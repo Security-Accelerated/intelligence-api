@@ -58,9 +58,9 @@ func (p *URLhausProvider) Query(ctx context.Context, domain string) (*ThreatInte
 		QueryStatus string `json:"query_status"`
 		URLCount    int    `json:"url_count"`
 		URLs        []struct {
-			Threat  string   `json:"threat"`
-			Tags    []string `json:"tags"`
-			URLStatus string `json:"url_status"`
+			Threat    string   `json:"threat"`
+			Tags      []string `json:"tags"`
+			URLStatus string   `json:"url_status"`
 		} `json:"urls"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
