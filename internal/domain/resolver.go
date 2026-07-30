@@ -255,5 +255,13 @@ func InitResolver(servers []string, dialTimeout time.Duration) {
 		servers = DefaultDNSServers
 	}
 	activeDNSServers = servers
-	*net.DefaultResolver = *NewExternalResolver(servers, dialTimeout)
+
+	// Assign the fields rather than copying the struct. net.Resolver carries an
+	// internal singleflight.Group containing a mutex, so whole-struct
+	// assignment copies a lock — harmless at startup, when nothing is in
+	// flight, but it is what `go vet` warns about and there is no reason to do
+	// it when setting two fields has the same effect.
+	r := NewExternalResolver(servers, dialTimeout)
+	net.DefaultResolver.PreferGo = r.PreferGo
+	net.DefaultResolver.Dial = r.Dial
 }

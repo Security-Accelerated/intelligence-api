@@ -6,6 +6,11 @@ import (
 	"testing"
 )
 
+// These exercise LookupDNS against a loopback DNS server rather than the real
+// internet. Previously they queried example.com and skipped on failure, which
+// meant the assertions silently stopped running whenever the network was
+// unavailable — coverage looked green while testing nothing.
+
 func TestLookupDNS_CancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -20,6 +25,9 @@ func TestLookupDNS_CancelledContext(t *testing.T) {
 }
 
 func TestLookupDNS_NonexistentDomain(t *testing.T) {
+	addr, _ := startDNSServer(t, testZone{NXDOMAIN: true})
+	useLocalResolver(t, addr)
+
 	info, err := LookupDNS(context.Background(), "this-domain-does-not-exist-xyz-42.invalid")
 	if err == nil {
 		t.Fatal("expected error for nonexistent domain, got nil")
@@ -30,64 +38,121 @@ func TestLookupDNS_NonexistentDomain(t *testing.T) {
 }
 
 func TestLookupDNS_CNAMEFiltersSelf(t *testing.T) {
-	// Most non-CNAME domains return "domain." from LookupCNAME, which the
-	// implementation should filter out (cname != domain+".").
+	// A domain that is not a CNAME: the resolver reports the name itself, which
+	// LookupDNS must filter out rather than report as a real CNAME.
+	addr, _ := startDNSServer(t, testZone{
+		A:     []string{"93.184.216.34"},
+		CNAME: "example.com.",
+	})
+	useLocalResolver(t, addr)
+
 	info, err := LookupDNS(context.Background(), "example.com")
 	if err != nil {
-		t.Skipf("skipping: DNS lookup failed (network unavailable?): %v", err)
+		t.Fatalf("lookup: %v", err)
 	}
 	if info == nil {
-		t.Skip("skipping: got nil info for example.com")
+		t.Fatal("expected non-nil info")
 	}
-
-	// example.com is not a CNAME — the self-referencing "example.com." should
-	// be filtered out.
 	if info.CNAME != "" {
-		t.Errorf("expected empty CNAME for example.com (self-referencing CNAME should be filtered), got %q", info.CNAME)
+		t.Errorf("CNAME = %q, want empty — a self-referencing CNAME must be filtered", info.CNAME)
+	}
+}
+
+func TestLookupDNS_RealCNAMEIsKept(t *testing.T) {
+	// The complement of the test above: a CNAME pointing elsewhere is a genuine
+	// record and must survive the self-reference filter.
+	addr, _ := startDNSServer(t, testZone{
+		A:     []string{"93.184.216.34"},
+		CNAME: "target.example.net.",
+	})
+	useLocalResolver(t, addr)
+
+	info, err := LookupDNS(context.Background(), "example.com")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if info.CNAME != "target.example.net." {
+		t.Errorf("CNAME = %q, want the real target preserved", info.CNAME)
 	}
 }
 
 func TestLookupDNS_PartialSuccess(t *testing.T) {
-	// example.com should have at least A records. Even if some record types
-	// are empty, we should get a non-nil response with whatever resolved.
+	// Only A records exist; every other type comes back empty. The lookup must
+	// still return what resolved rather than failing outright.
+	addr, _ := startDNSServer(t, testZone{A: []string{"93.184.216.34"}})
+	useLocalResolver(t, addr)
+
 	info, err := LookupDNS(context.Background(), "example.com")
 	if err != nil {
-		t.Skipf("skipping: DNS lookup failed (network unavailable?): %v", err)
+		t.Fatalf("lookup: %v", err)
 	}
 	if info == nil {
-		t.Fatal("expected non-nil info for example.com")
+		t.Fatal("expected non-nil info")
 	}
-	if len(info.A) == 0 && len(info.AAAA) == 0 {
-		t.Error("expected at least one A or AAAA record for example.com")
+	if len(info.A) == 0 {
+		t.Error("expected the A record that does exist")
+	}
+	if len(info.MX) != 0 || len(info.NS) != 0 || len(info.TXT) != 0 {
+		t.Errorf("expected empty MX/NS/TXT, got %+v", info)
 	}
 }
 
 func TestLookupDNS_IPv4And6Separation(t *testing.T) {
-	// Verify that IPv4 addresses land in A and IPv6 addresses in AAAA.
+	addr, _ := startDNSServer(t, testZone{
+		A:    []string{"93.184.216.34"},
+		AAAA: []string{"2606:2800:220:1:248:1893:25c8:1946"},
+	})
+	useLocalResolver(t, addr)
+
 	info, err := LookupDNS(context.Background(), "example.com")
 	if err != nil {
-		t.Skipf("skipping: DNS lookup failed (network unavailable?): %v", err)
+		t.Fatalf("lookup: %v", err)
 	}
-	if info == nil {
-		t.Skip("skipping: got nil info for example.com")
+	if len(info.A) == 0 || len(info.AAAA) == 0 {
+		t.Fatalf("expected both A and AAAA, got %+v", info)
 	}
 
-	for _, addr := range info.A {
-		ip := net.ParseIP(addr)
-		if ip == nil || ip.To4() == nil {
-			t.Errorf("A record contains non-IPv4 address: %q", addr)
+	for _, a := range info.A {
+		if ip := net.ParseIP(a); ip == nil || ip.To4() == nil {
+			t.Errorf("A record contains non-IPv4 address: %q", a)
 		}
 	}
-	for _, addr := range info.AAAA {
-		ip := net.ParseIP(addr)
-		if ip == nil || ip.To4() != nil {
-			t.Errorf("AAAA record contains non-IPv6 address: %q", addr)
+	for _, a := range info.AAAA {
+		if ip := net.ParseIP(a); ip == nil || ip.To4() != nil {
+			t.Errorf("AAAA record contains non-IPv6 address: %q", a)
 		}
 	}
 }
 
+func TestLookupDNS_AllRecordTypes(t *testing.T) {
+	addr, _ := startDNSServer(t, testZone{
+		A:    []string{"93.184.216.34"},
+		AAAA: []string{"2606:2800:220:1:248:1893:25c8:1946"},
+		MX:   []string{"10 mail.example.com."},
+		NS:   []string{"a.iana-servers.net."},
+		TXT:  []string{"v=spf1 -all"},
+	})
+	useLocalResolver(t, addr)
+
+	info, err := LookupDNS(context.Background(), "example.com")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if len(info.MX) != 1 || info.MX[0].Host != "mail.example.com." || info.MX[0].Priority != 10 {
+		t.Errorf("MX = %+v, want one record host=mail.example.com. priority=10", info.MX)
+	}
+	if len(info.NS) != 1 || info.NS[0] != "a.iana-servers.net." {
+		t.Errorf("NS = %v", info.NS)
+	}
+	if len(info.TXT) != 1 || info.TXT[0] != "v=spf1 -all" {
+		t.Errorf("TXT = %v", info.TXT)
+	}
+}
+
 func TestLookupDNS_NXDOMAINReturnsNilAndError(t *testing.T) {
-	// .invalid TLD is guaranteed by RFC 6761 to never resolve.
+	addr, _ := startDNSServer(t, testZone{NXDOMAIN: true})
+	useLocalResolver(t, addr)
+
 	info, err := LookupDNS(context.Background(), "guaranteed-nxdomain.invalid")
 	if info != nil {
 		t.Errorf("expected nil info for nxdomain, got %+v", info)

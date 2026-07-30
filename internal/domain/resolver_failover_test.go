@@ -2,68 +2,17 @@ package domain
 
 import (
 	"context"
-	"net"
-	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/miekg/dns"
 )
-
-// answeringServer starts a local UDP DNS server that answers A queries with ip,
-// and returns its address plus a counter of queries it received.
-func answeringServer(t *testing.T, ip string) (string, *atomic.Int32) {
-	t.Helper()
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	var hits atomic.Int32
-	srv := &dns.Server{PacketConn: pc, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, req *dns.Msg) {
-		hits.Add(1)
-		m := new(dns.Msg)
-		m.SetReply(req)
-		if len(req.Question) > 0 && req.Question[0].Qtype == dns.TypeA {
-			rr, _ := dns.NewRR(req.Question[0].Name + " 60 IN A " + ip)
-			m.Answer = append(m.Answer, rr)
-		}
-		_ = w.WriteMsg(m)
-	})}
-	go func() { _ = srv.ActivateAndServe() }()
-	t.Cleanup(func() { _ = srv.Shutdown() })
-	return pc.LocalAddr().String(), &hits
-}
-
-// blackholeServer binds a UDP socket that accepts packets and never replies —
-// the failure mode that a dial-time failover loop cannot detect, because the
-// address is routable and the "connection" succeeds.
-func blackholeServer(t *testing.T) (string, *atomic.Int32) {
-	t.Helper()
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	var hits atomic.Int32
-	go func() {
-		buf := make([]byte, 512)
-		for {
-			if _, _, err := pc.ReadFrom(buf); err != nil {
-				return
-			}
-			hits.Add(1) // received, deliberately never answered
-		}
-	}()
-	t.Cleanup(func() { _ = pc.Close() })
-	return pc.LocalAddr().String(), &hits
-}
 
 func TestFailover_BlackholedFirstServer(t *testing.T) {
 	prev := DefaultDNSPerServerTimeout
 	DefaultDNSPerServerTimeout = 150 * time.Millisecond
 	t.Cleanup(func() { DefaultDNSPerServerTimeout = prev })
 
-	dead, deadHits := blackholeServer(t)
-	live, liveHits := answeringServer(t, "203.0.113.10")
+	dead, deadHits := startBlackholeDNS(t)
+	live, liveHits := startDNSServer(t, testZone{A: []string{"203.0.113.10"}})
 
 	r := NewExternalResolver([]string{dead, live}, 2*time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -85,8 +34,8 @@ func TestFailover_BlackholedFirstServer(t *testing.T) {
 }
 
 func TestFailover_FirstServerAnswers_NoSecondQuery(t *testing.T) {
-	live, liveHits := answeringServer(t, "203.0.113.1")
-	unused, unusedHits := answeringServer(t, "203.0.113.2")
+	live, liveHits := startDNSServer(t, testZone{A: []string{"203.0.113.1"}})
+	unused, unusedHits := startDNSServer(t, testZone{A: []string{"203.0.113.2"}})
 
 	r := NewExternalResolver([]string{live, unused}, 2*time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -112,8 +61,8 @@ func TestFailover_AllServersBlackholed(t *testing.T) {
 	DefaultDNSPerServerTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { DefaultDNSPerServerTimeout = prev })
 
-	a, aHits := blackholeServer(t)
-	b, bHits := blackholeServer(t)
+	a, aHits := startBlackholeDNS(t)
+	b, bHits := startBlackholeDNS(t)
 
 	r := NewExternalResolver([]string{a, b}, 2*time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -132,7 +81,7 @@ func TestFailover_BoundedByCallerDeadline(t *testing.T) {
 	DefaultDNSPerServerTimeout = 5 * time.Second // deliberately longer than the caller's budget
 	t.Cleanup(func() { DefaultDNSPerServerTimeout = prev })
 
-	dead, _ := blackholeServer(t)
+	dead, _ := startBlackholeDNS(t)
 	r := NewExternalResolver([]string{dead, dead}, 2*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -149,7 +98,7 @@ func TestFailover_BoundedByCallerDeadline(t *testing.T) {
 }
 
 func TestFailover_SingleServerStillWorks(t *testing.T) {
-	live, _ := answeringServer(t, "203.0.113.5")
+	live, _ := startDNSServer(t, testZone{A: []string{"203.0.113.5"}})
 	r := NewExternalResolver([]string{live}, 2*time.Second)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

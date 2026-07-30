@@ -15,12 +15,14 @@ func TestNewExternalResolver_EmptyServers_ReturnsDefault(t *testing.T) {
 }
 
 func TestNewExternalResolver_NegativeTimeout_ReturnsValidResolver(t *testing.T) {
-	r := NewExternalResolver([]string{"8.8.8.8:53"}, -1*time.Second)
+	addr, _ := startDNSServer(t, testZone{A: []string{"203.0.113.7"}})
+
+	r := NewExternalResolver([]string{addr}, -1*time.Second)
 	if r == nil {
 		t.Fatal("expected non-nil resolver")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	addrs, err := r.LookupHost(ctx, "example.com")
 	if err != nil {
@@ -32,33 +34,46 @@ func TestNewExternalResolver_NegativeTimeout_ReturnsValidResolver(t *testing.T) 
 }
 
 func TestNewExternalResolver_ResolvesExternalDomain(t *testing.T) {
-	r := NewExternalResolver([]string{"8.8.8.8:53"}, 10*time.Second)
+	addr, hits := startDNSServer(t, testZone{A: []string{"203.0.113.8"}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	r := NewExternalResolver([]string{addr}, 5*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	addrs, err := r.LookupHost(ctx, "example.com")
 	if err != nil {
-		t.Fatalf("failed to resolve example.com: %v", err)
+		t.Fatalf("failed to resolve: %v", err)
 	}
-	if len(addrs) == 0 {
-		t.Error("expected at least one address for example.com")
+	if len(addrs) == 0 || addrs[0] != "203.0.113.8" {
+		t.Errorf("addrs = %v, want the configured server's answer", addrs)
+	}
+	if hits.Load() == 0 {
+		t.Error("the configured server was never queried — resolv.conf may have been used instead")
 	}
 }
 
 func TestNewExternalResolver_FallsBackToNextServer(t *testing.T) {
-	// First server is unreachable (TEST-NET), second is Google DNS
-	r := NewExternalResolver([]string{"192.0.2.1:53", "8.8.8.8:53"}, 2*time.Second)
+	// A blackholed first server: routable, accepts the packet, never answers.
+	// See TestFailover_* for the full matrix.
+	prev := DefaultDNSPerServerTimeout
+	DefaultDNSPerServerTimeout = 150 * time.Millisecond
+	t.Cleanup(func() { DefaultDNSPerServerTimeout = prev })
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	dead, _ := startBlackholeDNS(t)
+	live, _ := startDNSServer(t, testZone{A: []string{"203.0.113.9"}})
+
+	r := NewExternalResolver([]string{dead, live}, 2*time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	addrs, err := r.LookupHost(ctx, "example.com")
 	if err != nil {
 		t.Fatalf("fallback to second server failed: %v", err)
 	}
-	if len(addrs) == 0 {
-		t.Error("expected at least one address")
+	if len(addrs) == 0 || addrs[0] != "203.0.113.9" {
+		t.Errorf("addrs = %v, want the second server's answer", addrs)
 	}
 }
 
@@ -75,16 +90,43 @@ func TestNewExternalResolver_RespectsContextCancellation(t *testing.T) {
 }
 
 func TestInitResolver_SetsDefaultServers(t *testing.T) {
+	prevDial, prevPreferGo := net.DefaultResolver.Dial, net.DefaultResolver.PreferGo
+	prevActive := activeDNSServers
+	t.Cleanup(func() {
+		net.DefaultResolver.Dial = prevDial
+		net.DefaultResolver.PreferGo = prevPreferGo
+		activeDNSServers = prevActive
+	})
+
+	// Empty input falls back to the built-in list and installs a working
+	// resolver on net.DefaultResolver. Asserted on the wiring rather than by
+	// resolving a real name, so it holds with no network.
 	InitResolver(nil, 0)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	if got := ActiveDNSServers(); len(got) != len(DefaultDNSServers) {
+		t.Errorf("ActiveDNSServers() = %v, want the defaults", got)
+	}
+	if net.DefaultResolver.Dial == nil {
+		t.Error("InitResolver did not install a Dial hook")
+	}
+	if !net.DefaultResolver.PreferGo {
+		t.Error("InitResolver must set PreferGo so the Dial hook is used")
+	}
 
+	// And with explicit servers, a real lookup goes to them.
+	addr, hits := startDNSServer(t, testZone{A: []string{"203.0.113.11"}})
+	InitResolver([]string{addr}, time.Second)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	addrs, err := net.DefaultResolver.LookupHost(ctx, "example.com")
 	if err != nil {
-		t.Fatalf("InitResolver failed to configure working resolver: %v", err)
+		t.Fatalf("InitResolver failed to configure a working resolver: %v", err)
 	}
-	if len(addrs) == 0 {
-		t.Error("expected at least one address")
+	if len(addrs) == 0 || addrs[0] != "203.0.113.11" {
+		t.Errorf("addrs = %v, want the configured server's answer", addrs)
+	}
+	if hits.Load() == 0 {
+		t.Error("configured server was never queried")
 	}
 }
