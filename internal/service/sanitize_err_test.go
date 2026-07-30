@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/likexian/whois"
+	whoisparser "github.com/likexian/whois-parser"
 	"net"
 	"net/netip"
 	"testing"
@@ -106,29 +108,58 @@ func TestIsExpectedError_DNSError(t *testing.T) {
 	}
 }
 
+// These previously asserted on message text, which is what the substring-based
+// classifier keyed on. They now construct the errors the lookups really
+// produce, so a dependency rewording its messages cannot quietly change what
+// pages us. The exhaustive matrix lives in domain/errors_test.go.
+
 func TestIsExpectedError_WhoisNotFound(t *testing.T) {
-	if !isExpectedError(errors.New("whoisparser: domain is not found")) {
+	if !isExpectedError(whoisparser.ErrNotFoundDomain) {
 		t.Error("WHOIS 'domain is not found' should be expected")
+	}
+	if !isExpectedError(fmt.Errorf("whois lookup: %w", whoisparser.ErrNotFoundDomain)) {
+		t.Error("wrapped WHOIS not-found should be expected")
 	}
 }
 
 func TestIsExpectedError_NoWhoisServer(t *testing.T) {
-	if !isExpectedError(errors.New("whois: no whois server found for domain: example.app")) {
+	if !isExpectedError(whois.ErrWhoisServerNotFound) {
 		t.Error("'no whois server found' should be expected")
 	}
 }
 
+func TestIsExpectedError_WhoisRateLimited(t *testing.T) {
+	// Upstream throttling is the registry's limit, not our fault.
+	if !isExpectedError(whoisparser.ErrDomainLimitExceed) {
+		t.Error("WHOIS rate limiting should be expected")
+	}
+}
+
 func TestIsExpectedError_IOTimeout(t *testing.T) {
-	if !isExpectedError(errors.New("dial tcp 1.2.3.4:443: i/o timeout")) {
+	timeout := &net.OpError{Op: "dial", Net: "tcp", Err: &timeoutErr{}}
+	if !isExpectedError(timeout) {
 		t.Error("i/o timeout should be expected")
+	}
+	if !isExpectedError(fmt.Errorf("dial tcp 1.2.3.4:443: %w", timeout)) {
+		t.Error("wrapped i/o timeout should be expected")
 	}
 }
 
 func TestIsExpectedError_TLSConnect(t *testing.T) {
-	if !isExpectedError(errors.New("tls connect: dial tcp: lookup example.com: i/o timeout")) {
-		t.Error("tls connect errors should be expected")
+	// LookupSSL wraps its dial failure as "tls connect: %w", so the underlying
+	// timeout is what classification must see.
+	inner := &net.OpError{Op: "dial", Net: "tcp", Err: &timeoutErr{}}
+	if !isExpectedError(fmt.Errorf("tls connect: %w", inner)) {
+		t.Error("tls connect wrapping a timeout should be expected")
 	}
 }
+
+// timeoutErr is a minimal net.Error reporting a timeout.
+type timeoutErr struct{}
+
+func (*timeoutErr) Error() string   { return "i/o timeout" }
+func (*timeoutErr) Timeout() bool   { return true }
+func (*timeoutErr) Temporary() bool { return true }
 
 func TestIsExpectedError_InfraError_NotExpected(t *testing.T) {
 	if isExpectedError(errors.New("pq: connection refused")) {

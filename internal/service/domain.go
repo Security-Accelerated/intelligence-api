@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"net"
 	"strings"
 	"time"
 
@@ -30,46 +29,12 @@ func sanitizeErr(err error) string {
 	return msg
 }
 
-// isExpectedError returns true for errors caused by upstream services or
-// invalid input rather than infrastructure problems on our end. These errors
-// are logged but should not trigger Pushover alerts.
+// isExpectedError reports whether a lookup failure describes the target or an
+// upstream service rather than a fault on our side. The classification itself
+// lives in the domain package, next to the lookups whose errors it recognises
+// and the libraries that produce them.
 func isExpectedError(err error) bool {
-	// Context deadline/cancellation — slow upstream, not our failure.
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return true
-	}
-
-	// DNS errors (NXDOMAIN, SERVFAIL, timeout) — upstream DNS issues.
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
-		return true
-	}
-
-	// GeoIP databases not yet bootstrapped — a deployment state, not a fault.
-	// The admin refresh endpoint exists to resolve it.
-	if errors.Is(err, domain.ErrDBNotLoaded) {
-		return true
-	}
-
-	// Match common upstream error messages that aren't wrapped as typed errors.
-	msg := err.Error()
-	expectedPatterns := []string{
-		"domain is not found",       // WHOIS parser: domain doesn't exist
-		"no whois server found",     // no WHOIS server for this TLD
-		"i/o timeout",               // upstream network timeout
-		"no such host",              // DNS resolution failure
-		"server misbehaving",        // DNS SERVFAIL
-		"tls connect",               // TLS handshake failure on target
-		"certificate",               // cert errors on target domain
-		"context deadline exceeded", // nested context timeout strings
-	}
-	for _, p := range expectedPatterns {
-		if strings.Contains(msg, p) {
-			return true
-		}
-	}
-
-	return false
+	return domain.IsExpectedError(err)
 }
 
 // recordIfUnexpected records a lookup error for alerting only if it represents
