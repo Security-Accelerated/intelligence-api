@@ -2,11 +2,9 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/cache"
@@ -14,7 +12,6 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/logging"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
-	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -250,126 +247,6 @@ type lookupData struct {
 	dnsSecurity   *domain.DNSSecurityInfo
 }
 
-// lookupRunner is one cacheable lookup for one domain: how to decode a payload
-// into lookupData, and how to fetch that payload live.
-//
-// fetch is deliberately free of per-request state so it can be shared between
-// concurrent callers via singleflight; every caller then decodes the resulting
-// payload into its own lookupData. Decoding per caller (rather than sharing a
-// pointer) gives each request an independent deep copy for free.
-type lookupRunner struct {
-	name string
-	// decode populates lookupData from a payload — cached or freshly fetched.
-	// An error means the payload is unusable and the lookup counts as a miss.
-	decode func([]byte) error
-	// fetch performs the live lookup. It touches no per-request state.
-	fetch func(ctx context.Context) fetchResult
-}
-
-// fetchResult is what one live lookup produced: the payload to cache and hand
-// to every coalesced caller, plus any errors to report. A nil payload means
-// nothing should be cached (the lookup failed, or returned no data).
-type fetchResult struct {
-	payload []byte
-	errs    []domain.LookupError
-}
-
-// runState is the mutable per-request state shared by concurrently running
-// lookups. fetch never touches it; only decode and error collection do.
-type runState struct {
-	mu     sync.Mutex
-	resp   *domain.DomainResponse
-	data   *lookupData
-	logger *zap.Logger
-	domain string
-}
-
-// recoverFetch converts a panicking lookup into an ordinary error result.
-// Containment has to happen inside the fetch rather than at the goroutine
-// boundary: a panic escaping into singleflight is re-raised in every coalesced
-// caller, so one bad lookup would take down unrelated requests.
-func recoverFetch(s *DomainService, st *runState, name string, res *fetchResult) {
-	if r := recover(); r != nil {
-		st.logger.Error("lookup panicked",
-			zap.String("lookup", name),
-			zap.String("domain", st.domain),
-			zap.Any("panic", r),
-			zap.Stack("stack"),
-		)
-		s.alerter.RecordLookupError(name)
-		*res = fetchResult{errs: []domain.LookupError{{Lookup: name, Message: "internal error"}}}
-	}
-}
-
-// simpleRunner wires a lookup returning (*T, error) into a lookupRunner. dst
-// points at the lookupData field that receives the decoded payload.
-func simpleRunner[T any](s *DomainService, st *runState, name string, dst **T, fetch func(context.Context) (*T, error)) lookupRunner {
-	return lookupRunner{
-		name:   name,
-		decode: decodeInto(dst),
-		fetch: func(ctx context.Context) (res fetchResult) {
-			defer recoverFetch(s, st, name, &res)
-			result, err := fetch(ctx)
-			if err != nil {
-				st.logger.Warn("lookup failed", zap.String("lookup", name), zap.String("domain", st.domain), zap.Error(err))
-				recordIfUnexpected(s.alerter, name, err)
-				return fetchResult{errs: []domain.LookupError{{
-					Lookup:  name,
-					Message: sanitizeErr(err),
-				}}}
-			}
-			return fetchResult{payload: marshalForCache(st, name, result)}
-		},
-	}
-}
-
-// multiErrRunner wires a lookup returning (*T, []LookupError) — used by the
-// fan-out lookups (reputation, threat intel) that report per-provider errors
-// alongside a partial result.
-func multiErrRunner[T any](s *DomainService, st *runState, name string, dst **T, fetch func(context.Context) (*T, []domain.LookupError)) lookupRunner {
-	return lookupRunner{
-		name:   name,
-		decode: decodeInto(dst),
-		fetch: func(ctx context.Context) (res fetchResult) {
-			defer recoverFetch(s, st, name, &res)
-			result, errs := fetch(ctx)
-			for _, e := range errs {
-				s.alerter.RecordLookupError(e.Lookup)
-			}
-			return fetchResult{payload: marshalForCache(st, name, result), errs: errs}
-		},
-	}
-}
-
-// decodeInto returns a decoder that unmarshals a payload into dst. Payloads are
-// the bare lookup type — no request metadata, no cache flags — so this is a
-// plain unmarshal, identical for cached and freshly fetched data.
-func decodeInto[T any](dst **T) func([]byte) error {
-	return func(b []byte) error {
-		var v T
-		if err := json.Unmarshal(b, &v); err != nil {
-			return err
-		}
-		*dst = &v
-		return nil
-	}
-}
-
-// marshalForCache serializes a successful lookup result. Only the bare payload
-// type is marshaled, so response-only metadata (cache_hit) can never reach
-// Redis. A nil result produces no payload and so is never cached.
-func marshalForCache[T any](st *runState, name string, result *T) []byte {
-	if result == nil {
-		return nil
-	}
-	payload, err := json.Marshal(result)
-	if err != nil {
-		st.logger.Warn("cache marshal failed", zap.String("lookup", name), zap.String("domain", st.domain), zap.Error(err))
-		return nil
-	}
-	return payload
-}
-
 // buildRunners returns a runner for every lookup whose data this request needs.
 // Requested lookups map one-to-one onto runners, with two exceptions:
 //   - fingerprint has no runner of its own — it is pure computation over headers
@@ -379,29 +256,28 @@ func marshalForCache[T any](st *runState, name string, result *T) []byte {
 //     response, so it needs no fetch and gets no cache entry.
 //   - headers is fetched at most once even when both headers and fingerprint are
 //     requested, so shared data costs exactly one upstream call.
-func (s *DomainService) buildRunners(st *runState, opts domain.LookupOptions) []lookupRunner {
-	d := st.data
+func (s *DomainService) buildRunners(st *runState, d *lookupData, opts domain.LookupOptions) []lookupRunner {
 	var runners []lookupRunner
 
 	if opts.Has(domain.LookupWhoisName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupWhoisName, &d.whois,
-			func(ctx context.Context) (*domain.WhoisInfo, error) { return s.lookupWhois(ctx, st.domain) }))
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupWhoisName, &d.whois,
+			func(ctx context.Context) (*domain.WhoisInfo, error) { return s.lookupWhois(ctx, st.target) }))
 	}
 	if opts.Has(domain.LookupDNSName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupDNSName, &d.dns,
-			func(ctx context.Context) (*domain.DNSInfo, error) { return s.lookupDNS(ctx, st.domain) }))
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupDNSName, &d.dns,
+			func(ctx context.Context) (*domain.DNSInfo, error) { return s.lookupDNS(ctx, st.target) }))
 	}
 	if opts.Has(domain.LookupSSLName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupSSLName, &d.ssl,
-			func(ctx context.Context) (*domain.SSLInfo, error) { return s.lookupSSL(ctx, st.domain) }))
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupSSLName, &d.ssl,
+			func(ctx context.Context) (*domain.SSLInfo, error) { return s.lookupSSL(ctx, st.target) }))
 	}
 	// One headers fetch serves both headers and fingerprint.
 	if opts.Has(domain.LookupHeadersName) || opts.Has(domain.LookupFingerprintName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupHeadersName, &d.headers,
-			func(ctx context.Context) (*domain.HeadersInfo, error) { return s.lookupHeaders(ctx, st.domain) }))
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupHeadersName, &d.headers,
+			func(ctx context.Context) (*domain.HeadersInfo, error) { return s.lookupHeaders(ctx, st.target) }))
 	}
 	if opts.Has(domain.LookupScreenshotName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupScreenshotName, &d.screenshot,
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupScreenshotName, &d.screenshot,
 			func(ctx context.Context) (*domain.ScreenshotInfo, error) {
 				// Chromium is by far the most expensive lookup, so it takes a
 				// slot from a process-wide semaphore rather than fork-bombing
@@ -414,47 +290,47 @@ func (s *DomainService) buildRunners(st *runState, opts domain.LookupOptions) []
 						return nil, errors.New("screenshot queue timed out, please retry")
 					}
 				}
-				return s.lookupScreenshot(ctx, st.domain, s.screenshotTimeout)
+				return s.lookupScreenshot(ctx, st.target, s.screenshotTimeout)
 			}))
 	}
 	if opts.Has(domain.LookupReputationName) {
-		runners = append(runners, multiErrRunner(s, st, domain.LookupReputationName, &d.reputation,
+		runners = append(runners, multiErrRunner(s.alerter, st, domain.LookupReputationName, &d.reputation,
 			func(ctx context.Context) (*domain.ReputationInfo, []domain.LookupError) {
-				return s.lookupReputation(ctx, st.domain)
+				return s.lookupReputation(ctx, st.target)
 			}))
 	}
 	if opts.Has(domain.LookupEmailSecurityName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupEmailSecurityName, &d.emailSecurity,
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupEmailSecurityName, &d.emailSecurity,
 			func(ctx context.Context) (*domain.EmailSecurityInfo, error) {
-				return s.lookupEmailSecurity(ctx, st.domain)
+				return s.lookupEmailSecurity(ctx, st.target)
 			}))
 	}
 	if opts.Has(domain.LookupSubdomainsName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupSubdomainsName, &d.subdomains,
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupSubdomainsName, &d.subdomains,
 			func(ctx context.Context) (*domain.SubdomainInfo, error) {
-				return s.lookupSubdomains(ctx, st.domain, domain.SubdomainOptions{MaxResults: s.subdomainMaxResults})
+				return s.lookupSubdomains(ctx, st.target, domain.SubdomainOptions{MaxResults: s.subdomainMaxResults})
 			}))
 	}
 	if opts.Has(domain.LookupCTLogsName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupCTLogsName, &d.ctLogs,
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupCTLogsName, &d.ctLogs,
 			func(ctx context.Context) (*domain.CTLogsInfo, error) {
-				return s.lookupCTLogs(ctx, st.domain, s.ctLogsMaxEntries)
+				return s.lookupCTLogs(ctx, st.target, s.ctLogsMaxEntries)
 			}))
 	}
 	if opts.Has(domain.LookupBGPName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupBGPName, &d.bgp,
-			func(ctx context.Context) (*domain.BGPInfo, error) { return s.lookupBGP(ctx, st.domain) }))
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupBGPName, &d.bgp,
+			func(ctx context.Context) (*domain.BGPInfo, error) { return s.lookupBGP(ctx, st.target) }))
 	}
 	if opts.Has(domain.LookupThreatIntelName) {
-		runners = append(runners, multiErrRunner(s, st, domain.LookupThreatIntelName, &d.threatIntel,
+		runners = append(runners, multiErrRunner(s.alerter, st, domain.LookupThreatIntelName, &d.threatIntel,
 			func(ctx context.Context) (*domain.ThreatIntelInfo, []domain.LookupError) {
-				return s.lookupThreatIntel(ctx, st.domain)
+				return s.lookupThreatIntel(ctx, st.target)
 			}))
 	}
 	if opts.Has(domain.LookupDNSSecurityName) {
-		runners = append(runners, simpleRunner(s, st, domain.LookupDNSSecurityName, &d.dnsSecurity,
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupDNSSecurityName, &d.dnsSecurity,
 			func(ctx context.Context) (*domain.DNSSecurityInfo, error) {
-				return s.lookupDNSSecurity(ctx, st.domain)
+				return s.lookupDNSSecurity(ctx, st.target)
 			}))
 	}
 
@@ -470,109 +346,25 @@ func (s *DomainService) buildRunners(st *runState, opts domain.LookupOptions) []
 // logged but leave the response intact.
 func (s *DomainService) Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, domain.CacheStats) {
 	resp := &domain.DomainResponse{Domain: domainName}
-	logger := logging.Logger()
+	data := &lookupData{}
 
-	// The cache read follows the caller's deadline — it is cheap and per-caller.
-	// Live fetches deliberately do not (see below).
-	readCtx := ctx
-	if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) > s.lookupTimeout {
-		var cancel context.CancelFunc
-		readCtx, cancel = context.WithTimeout(ctx, s.lookupTimeout)
-		defer cancel()
+	st := &runState{
+		errs:        &resp.Errors,
+		logger:      logging.Logger(),
+		target:      domainName,
+		targetField: "domain",
+		keyFor:      func(name string) string { return cache.LookupKey(domainName, name) },
 	}
 
-	st := &runState{resp: resp, data: &lookupData{}, logger: logger, domain: domainName}
-	runners := s.buildRunners(st, opts)
+	hits := runLookups(ctx, runnerDeps{
+		cache:         s.cache,
+		sf:            &s.sf,
+		lookupTimeout: s.lookupTimeout,
+		ttlFor:        s.ttlFor,
+	}, st, s.buildRunners(st, data, opts))
 
-	hits := make(map[string]bool, len(runners))
-	misses := s.readCache(readCtx, st, runners, hits)
-
-	var wg sync.WaitGroup
-	for _, r := range misses {
-		wg.Go(func() {
-			key := cache.LookupKey(domainName, r.name)
-
-			// Coalesce concurrent fetches of the same lookup for the same
-			// domain — only one runs and every caller gets its payload. Keying
-			// per lookup rather than per response means two requests asking for
-			// overlapping-but-different lookup sets still share the overlap.
-			// The executed fetch is detached from the triggering caller's
-			// cancellation so one disconnecting client can't poison the result
-			// shared with the others.
-			v, _, _ := s.sf.Do(key, func() (any, error) {
-				// Shared work is detached from the triggering caller's context
-				// and bounded by the service's own timeout instead. One client
-				// disconnecting — or holding a tight deadline — must not cancel
-				// or truncate a fetch that other coalesced callers are waiting
-				// on. WithoutCancel drops the parent deadline too, so the
-				// timeout has to be reapplied here.
-				fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.lookupTimeout)
-				defer cancel()
-
-				res := r.fetch(fetchCtx)
-				// Only the goroutine that actually ran the fetch writes it back;
-				// coalesced callers would just rewrite the identical value.
-				if res.payload != nil {
-					if err := s.cache.Set(fetchCtx, key, res.payload, s.ttlFor(r.name)); err != nil {
-						// Fail-open: callers still get the freshly fetched result.
-						logger.Warn("cache set failed", zap.String("lookup", r.name), zap.String("domain", domainName), zap.Error(err))
-					}
-				}
-				return res, nil
-			})
-			res := v.(fetchResult)
-
-			st.mu.Lock()
-			defer st.mu.Unlock()
-			st.resp.Errors = append(st.resp.Errors, res.errs...)
-			if res.payload != nil {
-				if err := r.decode(res.payload); err != nil {
-					logger.Warn("decoding freshly fetched payload failed",
-						zap.String("lookup", r.name), zap.String("domain", domainName), zap.Error(err))
-				}
-			}
-		})
-	}
-	wg.Wait()
-
-	s.assemble(resp, st.data, opts, hits)
+	s.assemble(resp, data, opts, hits)
 	return resp, cacheStats(opts, hits)
-}
-
-// readCache issues a single MGET for all runners and decodes the hits into
-// lookupData, returning the runners that still need a live fetch. Any cache
-// failure (unreachable Redis, corrupt payload) degrades to a miss.
-func (s *DomainService) readCache(ctx context.Context, st *runState, runners []lookupRunner, hits map[string]bool) []lookupRunner {
-	if len(runners) == 0 {
-		return nil
-	}
-
-	keys := make([]string, len(runners))
-	for i, r := range runners {
-		keys[i] = cache.LookupKey(st.domain, r.name)
-	}
-
-	cached, err := s.cache.MGet(ctx, keys)
-	if err != nil {
-		st.logger.Warn("cache mget failed", zap.String("domain", st.domain), zap.Error(err))
-		cached = nil
-	}
-
-	misses := make([]lookupRunner, 0, len(runners))
-	for i, r := range runners {
-		if i < len(cached) && cached[i] != nil {
-			if err := r.decode(cached[i]); err != nil {
-				// Self-healing: the live fetch below overwrites the bad entry.
-				st.logger.Warn("cache entry unusable, treating as miss",
-					zap.String("lookup", r.name), zap.String("domain", st.domain), zap.Error(err))
-			} else {
-				hits[r.name] = true
-				continue
-			}
-		}
-		misses = append(misses, r)
-	}
-	return misses
 }
 
 // assemble builds the response from the collected payloads, tagging each field
