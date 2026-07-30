@@ -1110,7 +1110,7 @@ git push origin main:release      # trigger Fly deploy
 | `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |
 | `THREAT_INTEL_VIRUSTOTAL_API_KEY` | VirusTotal API key (enables VirusTotal threat intel provider) |
 | `THREAT_INTEL_ALIENVAULT_API_KEY` | AlienVault OTX API key (enables AlienVault threat intel provider) |
-| `MAXMIND_LICENSE_KEY` | MaxMind license key (required for the startup download and `POST /v1/admin/geoip/refresh`) |
+| `MAXMIND_LICENSE_KEY` | MaxMind license key (required for the startup download and `POST /v1/admin/geoip/refresh`). Docker Compose reads it from `.env`; without it `geo` and `asn` are unavailable locally |
 | `MAXMIND_DB_PATH` | Directory for MaxMind .mmdb files (default: `/data/maxmind`) |
 | `IP_LOOKUP_TIMEOUT` | Timeout for IP intelligence lookups (default: 30s) |
 | `IP_MAX_IPS_FREE` | Max IPs per request for free plan (default: 1) |
