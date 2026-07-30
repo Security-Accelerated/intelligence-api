@@ -23,3 +23,6 @@ bin/
 # MaxMind GeoIP databases
 data/maxmind/
 *.mmdb
+
+# Codex scratch marker
+.codex

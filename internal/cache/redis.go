@@ -13,6 +13,9 @@ type RedisCache struct {
 	client *redis.Client
 }
 
+// NewRedisCache connects a RedisCache to the given server. The client is
+// shared with the rate limiter via Client() rather than opening a second
+// connection pool.
 func NewRedisCache(addr, password string, db int) *RedisCache {
 	return &RedisCache{
 		client: redis.NewClient(&redis.Options{
@@ -23,6 +26,8 @@ func NewRedisCache(addr, password string, db int) *RedisCache {
 	}
 }
 
+// Get returns the cached value for key, or (nil, nil) when the key is absent.
+// A cache miss is deliberately not an error — callers treat both the same way.
 func (c *RedisCache) Get(ctx context.Context, key string) ([]byte, error) {
 	val, err := c.client.Get(ctx, cacheKey(key)).Bytes()
 	if errors.Is(err, redis.Nil) {
@@ -34,6 +39,34 @@ func (c *RedisCache) Get(ctx context.Context, key string) ([]byte, error) {
 	return val, nil
 }
 
+// MGet fetches multiple keys in a single round trip. The result slice mirrors
+// the input ordering; misses (and values of an unexpected type) come back nil.
+func (c *RedisCache) MGet(ctx context.Context, keys []string) ([][]byte, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	prefixed := make([]string, len(keys))
+	for i, k := range keys {
+		prefixed[i] = cacheKey(k)
+	}
+	vals, err := c.client.MGet(ctx, prefixed...).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]byte, len(keys))
+	for i, v := range vals {
+		switch t := v.(type) {
+		case string:
+			out[i] = []byte(t)
+		case []byte:
+			out[i] = t
+		}
+	}
+	return out, nil
+}
+
+// Set stores data under key with an absolute expiry. There is no refresh on
+// read: once ttl elapses the entry is gone and the next caller refetches.
 func (c *RedisCache) Set(ctx context.Context, key string, data []byte, ttl time.Duration) error {
 	return c.client.Set(ctx, cacheKey(key), data, ttl).Err()
 }

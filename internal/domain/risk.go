@@ -29,7 +29,8 @@ var whoisDateLayouts = []string{
 }
 
 // ComputeRiskScore derives a normalized aggregate risk score from the lookup
-// results already present on the response. It performs no network calls and is
+// results already present on the response. It reads through the per-lookup
+// response wrappers, so it scores whatever the caller happened to request. It performs no network calls and is
 // intended to run as post-processing after all lookups complete. now is
 // injectable for tests.
 func ComputeRiskScore(resp *DomainResponse, now time.Time) *RiskSummary {
@@ -51,16 +52,16 @@ func ComputeRiskScore(resp *DomainResponse, now time.Time) *RiskSummary {
 		})
 	}
 
-	if resp.SSL != nil {
-		components = append(components, scoreSSL(resp.SSL))
+	if resp.SSL != nil && resp.SSLInfo() != nil {
+		components = append(components, scoreSSL(resp.SSLInfo()))
 	}
 
 	if resp.Headers != nil {
 		components = append(components, scoreSecurityHeaders(resp.Headers.SecurityHeaders))
 	}
 
-	if resp.EmailSecurity != nil {
-		components = append(components, scoreEmailSecurity(resp.EmailSecurity))
+	if resp.EmailSecurity != nil && resp.EmailSecurityInfo() != nil {
+		components = append(components, scoreEmailSecurity(resp.EmailSecurityInfo()))
 	}
 
 	if resp.Whois != nil && resp.Whois.CreatedDate != "" {

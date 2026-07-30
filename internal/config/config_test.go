@@ -20,7 +20,9 @@ func TestConfig_Defaults(t *testing.T) {
 		want any
 	}{
 		{"application.port", 8080},
-		{"redis.cache_ttl", "60m"},
+		{"cache.default_ttl", "60m"},
+		{"cache.ttl.whois", "24h"},
+		{"cache.ttl.dns", "30m"},
 		{"auth.cache_ttl", "5m"},
 		{"screenshot.timeout", "15s"},
 		{"domain.max_domains.basic", 5},
@@ -124,12 +126,18 @@ func TestConfig_EnvVarOverride(t *testing.T) {
 func TestConfig_EnvVarOverride_Nested(t *testing.T) {
 	cfg := Config()
 
-	// Nested config key: REDIS_CACHE_TTL → redis.cache_ttl
-	t.Setenv("REDIS_CACHE_TTL", "120m")
+	// Nested config key: CACHE_DEFAULT_TTL → cache.default_ttl
+	t.Setenv("CACHE_DEFAULT_TTL", "120m")
 
-	got := cfg.GetString("redis.cache_ttl")
+	got := cfg.GetString("cache.default_ttl")
 	if got != "120m" {
-		t.Errorf("redis.cache_ttl = %q, want %q (overridden by REDIS_CACHE_TTL)", got, "120m")
+		t.Errorf("cache.default_ttl = %q, want %q (overridden by CACHE_DEFAULT_TTL)", got, "120m")
+	}
+
+	// Three-level key: CACHE_TTL_WHOIS → cache.ttl.whois
+	t.Setenv("CACHE_TTL_WHOIS", "48h")
+	if got := cfg.GetString("cache.ttl.whois"); got != "48h" {
+		t.Errorf("cache.ttl.whois = %q, want %q (overridden by CACHE_TTL_WHOIS)", got, "48h")
 	}
 }
 

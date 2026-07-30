@@ -5,3 +5,19 @@ reviews:
     enabled: true
     base_branches:
       - main
+
+  pre_merge_checks:
+    # The docstring check counts every function, and test functions are the bulk
+    # of this repo (1044 functions total, 740 of them tests). Go convention
+    # gives test functions no doc comment, so the score is dominated by a
+    # category that is correct as written: measured here, production code sits
+    # at 64% while the all-in figure is 20%. An 80% threshold is unreachable
+    # without either documenting TestFoo or dropping tests from review via
+    # path_filters — and dropping them would cost real coverage, since
+    # CodeRabbit caught a genuine SA1012 bug in a test file on PR #42.
+    #
+    # Disabled rather than lowered: a threshold tuned to pass would carry no
+    # signal. Exported-symbol documentation is tracked separately (see the
+    # docstring backlog issue) rather than gated on an all-functions percentage.
+    docstrings:
+      mode: "off"

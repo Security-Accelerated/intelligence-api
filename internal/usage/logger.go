@@ -96,45 +96,81 @@ func (ul *UsageLogger) run() {
 	}
 }
 
+// maxBindParams is PostgreSQL's hard limit on bind parameters per statement.
+// The steady-state flush is bounded by batchThreshold, but the shutdown drain
+// collapses whatever is left in the channel into one batch — so a large
+// usage.buffer_size could otherwise build a statement that the server rejects
+// outright, dropping every entry in it.
+const maxBindParams = 65535
+
 func (ul *UsageLogger) flush(entries []UsageEntry) {
 	if len(entries) == 0 || ul.db == nil {
 		return
 	}
 
+	// Split oversized batches rather than losing them. Column count grows with
+	// the lookup catalog, so the safe row count is derived, not hardcoded.
+	if perRow := len(ul.columns()); perRow > 0 {
+		if maxRows := maxBindParams / perRow; len(entries) > maxRows {
+			for start := 0; start < len(entries); start += maxRows {
+				end := min(start+maxRows, len(entries))
+				ul.flush(entries[start:end])
+			}
+			return
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	columns := ul.columns()
+	cols := len(columns)
+
 	// Build a multi-row INSERT for efficiency.
-	const cols = 20
 	valueStrings := make([]string, 0, len(entries))
 	args := make([]any, 0, len(entries)*cols)
+	placeholders := make([]string, cols)
 
 	now := time.Now().UTC()
 	for i, e := range entries {
 		base := i * cols
-		valueStrings = append(valueStrings, fmt.Sprintf(
-			"($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10,
-			base+11, base+12, base+13, base+14, base+15, base+16, base+17, base+18, base+19, base+20,
-		))
+		for j := range placeholders {
+			placeholders[j] = fmt.Sprintf("$%d", base+j+1)
+		}
+		valueStrings = append(valueStrings, "("+strings.Join(placeholders, ",")+")")
+
 		args = append(args,
 			nilIfZero(e.CustomerID), nilIfZero(e.APIKeyID), nilIfEmpty(e.Plan),
 			e.Method, e.Path, e.StatusCode, e.LatencyMs, e.DomainCount, e.IPCount,
-			e.CacheHit, e.Screenshot, e.Reputation, e.EmailSecurity,
-			e.Subdomains, e.CTLogs, e.BGP, e.Fingerprint, e.ThreatIntel, e.DNSSecurity,
-			now,
+			e.CacheHits, e.CacheMisses,
 		)
+		requested := make(map[string]bool, len(e.Lookups))
+		for _, name := range e.Lookups {
+			requested[name] = true
+		}
+		for _, name := range LookupColumns {
+			args = append(args, requested[name])
+		}
+		args = append(args, now)
 	}
 
-	query := fmt.Sprintf(`INSERT INTO request_log
-		(customer_id, api_key_id, plan, method, path, status_code, latency_ms,
-		 domain_count, ip_count, cache_hit, screenshot, reputation, email_security,
-		 subdomains, ct_logs, bgp, fingerprint, threat_intel, dns_security, created_at)
-		VALUES %s`, strings.Join(valueStrings, ","))
+	query := fmt.Sprintf(`INSERT INTO request_log (%s) VALUES %s`,
+		strings.Join(columns, ", "), strings.Join(valueStrings, ","))
 
 	if _, err := ul.db.ExecContext(ctx, query, args...); err != nil {
 		ul.logger.Error("failed to flush usage entries", zap.Error(err), zap.Int("count", len(entries)))
 	}
+}
+
+// columns lists the request_log columns written per entry: fixed metadata,
+// then one boolean per lookup, then created_at. LookupColumns must match the
+// request_log schema.
+func (ul *UsageLogger) columns() []string {
+	base := []string{
+		"customer_id", "api_key_id", "plan", "method", "path", "status_code",
+		"latency_ms", "domain_count", "ip_count", "cache_hits", "cache_misses",
+	}
+	return append(append(base, LookupColumns...), "created_at")
 }
 
 func nilIfZero(v int) any {

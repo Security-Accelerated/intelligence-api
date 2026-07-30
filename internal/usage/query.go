@@ -34,51 +34,50 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 
 	where, args := buildWhere(customerID, apiKeyID, since, until)
 
-	// Aggregated totals
+	// Aggregated totals. Feature usage counts requests that *asked* for each
+	// lookup, independent of whether it was served from cache.
+	featureSelects := make([]string, len(LookupColumns))
+	for i, name := range LookupColumns {
+		featureSelects[i] = fmt.Sprintf("COALESCE(SUM(CASE WHEN %s THEN 1 ELSE 0 END), 0)", name)
+	}
+
 	aggQuery := fmt.Sprintf(`SELECT
 		COUNT(*),
-		COALESCE(SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END), 0),
+		COALESCE(SUM(cache_hits), 0),
+		COALESCE(SUM(cache_misses), 0),
 		COALESCE(AVG(latency_ms), 0),
 		COALESCE(SUM(domain_count), 0),
 		COALESCE(SUM(ip_count), 0),
-		COALESCE(SUM(CASE WHEN screenshot THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN reputation THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN email_security THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN subdomains THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN ct_logs THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN bgp THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN fingerprint THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN threat_intel THEN 1 ELSE 0 END), 0),
-		COALESCE(SUM(CASE WHEN dns_security THEN 1 ELSE 0 END), 0)
-		FROM request_log %s`, where)
+		%s
+		FROM request_log %s`, strings.Join(featureSelects, ",\n\t\t"), where)
 
-	var screenshot, reputation, emailSecurity, subdomains, ctLogs, bgp, fingerprint, threatIntel, dnsSecurity int
-	err := qs.db.QueryRowContext(ctx, aggQuery, args...).Scan(
+	featureCounts := make([]int, len(LookupColumns))
+	dest := []any{
 		&summary.TotalRequests,
 		&summary.CacheHits,
+		&summary.CacheMisses,
 		&summary.AvgLatencyMs,
 		&summary.TotalDomains,
 		&summary.TotalIPs,
-		&screenshot, &reputation, &emailSecurity, &subdomains, &ctLogs, &bgp, &fingerprint, &threatIntel, &dnsSecurity,
-	)
-	if err != nil {
+	}
+	for i := range featureCounts {
+		dest = append(dest, &featureCounts[i])
+	}
+
+	if err := qs.db.QueryRowContext(ctx, aggQuery, args...).Scan(dest...); err != nil {
 		return nil, fmt.Errorf("query usage aggregates: %w", err)
 	}
 
-	if summary.TotalRequests > 0 {
-		summary.CacheHitRate = float64(summary.CacheHits) / float64(summary.TotalRequests) * 100
+	// Hit rate is per lookup, not per request: a request that serves three
+	// cached fields and one live one counts as 3 hits and 1 miss.
+	if total := summary.CacheHits + summary.CacheMisses; total > 0 {
+		summary.CacheHitRate = float64(summary.CacheHits) / float64(total) * 100
 	}
 	summary.AvgLatencyMs = float64(int(summary.AvgLatencyMs*100)) / 100 // 2 decimal places
 
-	summary.FeatureUsage["screenshot"] = screenshot
-	summary.FeatureUsage["reputation"] = reputation
-	summary.FeatureUsage["email_security"] = emailSecurity
-	summary.FeatureUsage["subdomains"] = subdomains
-	summary.FeatureUsage["ct_logs"] = ctLogs
-	summary.FeatureUsage["bgp"] = bgp
-	summary.FeatureUsage["fingerprint"] = fingerprint
-	summary.FeatureUsage["threat_intel"] = threatIntel
-	summary.FeatureUsage["dns_security"] = dnsSecurity
+	for i, name := range LookupColumns {
+		summary.FeatureUsage[name] = featureCounts[i]
+	}
 
 	// Status code breakdown
 	scQuery := fmt.Sprintf(`SELECT status_code, COUNT(*) FROM request_log %s GROUP BY status_code`, where)

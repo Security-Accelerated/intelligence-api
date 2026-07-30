@@ -9,23 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// ContextKeys lists every boolean gin context key that the request logger reads.
-// Handlers must set these keys so the logger can include them. Tests use this
-// slice as the single source of truth for drift detection.
-var ContextKeys = []string{
-	"cache_hit",
-	"screenshot_requested",
-	"reputation_requested",
-	"email_security_requested",
-	"subdomain_requested",
-	"ct_logs_requested",
-	"bgp_requested",
-	"fingerprint_requested",
-	"threat_intel_requested",
-	"ip_threat_intel_requested",
-	"dns_security_requested",
-}
-
 // IntContextKeys lists integer gin context keys logged per request.
 var IntContextKeys = []string{
 	"rate_limit",
@@ -34,11 +17,18 @@ var IntContextKeys = []string{
 	"domain_count",
 	"ip_count",
 	"error_count",
+	"cache_hits",
+	"cache_misses",
 }
 
 // StringContextKeys lists string gin context keys logged per request.
 var StringContextKeys = []string{
 	ClientRequestIDKey,
+}
+
+// StringSliceContextKeys lists string-slice gin context keys logged per request.
+var StringSliceContextKeys = []string{
+	"lookups_requested",
 }
 
 // RequestLogger returns middleware that logs each request using the global logger.
@@ -80,18 +70,18 @@ func RequestLoggerWithLogger(logger *zap.Logger) gin.HandlerFunc {
 			}
 		}
 
-		for _, key := range ContextKeys {
-			if val, exists := c.Get(key); exists {
-				if v, ok := val.(bool); ok {
-					fields = append(fields, zap.Bool(key, v))
-				}
-			}
-		}
-
 		for _, key := range IntContextKeys {
 			if val, exists := c.Get(key); exists {
 				if v, ok := val.(int); ok {
 					fields = append(fields, zap.Int(key, v))
+				}
+			}
+		}
+
+		for _, key := range StringSliceContextKeys {
+			if val, exists := c.Get(key); exists {
+				if v, ok := val.([]string); ok {
+					fields = append(fields, zap.Strings(key, v))
 				}
 			}
 		}

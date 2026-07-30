@@ -63,14 +63,11 @@ Profile any public IP address with a single call. Get geolocation (country, city
 POST /v1/domain/lookup
 {
   "domains": ["example.com"],
-  "reputation": true,
-  "email_security": true,
-  "screenshot": true,
-  "subdomains": true,
-  "ct_logs": true,
-  "bgp": true,
-  "fingerprint": true,
-  "threat_intel": true
+  "lookups": [
+    "whois", "dns", "ssl", "headers",
+    "reputation", "email_security", "screenshot", "subdomains",
+    "ct_logs", "bgp", "fingerprint", "threat_intel"
+  ]
 }
 ```
 
@@ -90,8 +87,8 @@ That's it. One request, one comprehensive response.
 
 - **RESTful JSON API** — works with any language, any platform
 - **Batch requests** — submit multiple domains in a single call
-- **Modular options** — only request the data you need
-- **Cached results** — repeat lookups return instantly
+- **Modular lookups** — name exactly the data you need, pay for nothing else
+- **Per-lookup caching** — each lookup caches on its own schedule, so repeat requests return instantly regardless of the combination
 - **Rate limit headers** — build backoff logic without guessing
 - **Request correlation** — pass your own request ID for end-to-end tracing
 

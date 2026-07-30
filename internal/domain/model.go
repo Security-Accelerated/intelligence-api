@@ -1,50 +1,179 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
-type DomainRequest struct {
-	Domains       []string `json:"domains" binding:"required,min=1"`
-	Screenshot    bool     `json:"screenshot,omitempty"`
-	Reputation    bool     `json:"reputation,omitempty"`
-	EmailSecurity bool     `json:"email_security,omitempty"`
-	Subdomains    bool     `json:"subdomains,omitempty"`
-	CTLogs        bool     `json:"ct_logs,omitempty"`
-	BGP           bool     `json:"bgp,omitempty"`
-	Fingerprint   bool     `json:"fingerprint,omitempty"`
-	ThreatIntel   bool     `json:"threat_intel,omitempty"`
-	DNSSecurity   bool     `json:"dns_security,omitempty"`
+// Canonical lookup names accepted in DomainRequest.Lookups. These names are the
+// contract shared by the request body, the per-lookup cache keys, the per-lookup
+// TTL config, and usage tracking.
+const (
+	LookupWhoisName         = "whois"
+	LookupDNSName           = "dns"
+	LookupSSLName           = "ssl"
+	LookupHeadersName       = "headers"
+	LookupScreenshotName    = "screenshot"
+	LookupReputationName    = "reputation"
+	LookupEmailSecurityName = "email_security"
+	LookupSubdomainsName    = "subdomains"
+	LookupCTLogsName        = "ct_logs"
+	LookupBGPName           = "bgp"
+	LookupFingerprintName   = "fingerprint"
+	LookupThreatIntelName   = "threat_intel"
+	LookupDNSSecurityName   = "dns_security"
+	LookupRiskName          = "risk"
+)
+
+// AllLookupNames lists every valid lookup name. Used to enumerate per-lookup TTL
+// config keys and to build documentation/error messages.
+var AllLookupNames = []string{
+	LookupWhoisName,
+	LookupDNSName,
+	LookupSSLName,
+	LookupHeadersName,
+	LookupScreenshotName,
+	LookupReputationName,
+	LookupEmailSecurityName,
+	LookupSubdomainsName,
+	LookupCTLogsName,
+	LookupBGPName,
+	LookupFingerprintName,
+	LookupThreatIntelName,
+	LookupDNSSecurityName,
+	LookupRiskName,
 }
 
+type DomainRequest struct {
+	Domains []string `json:"domains" binding:"required,min=1"`
+	Lookups []string `json:"lookups"`
+}
+
+// LookupOptions carries the normalized, deduplicated, validated set of lookups
+// to run. It is built in exactly one place (the handler); everything downstream
+// sees only explicit lookup names.
 type LookupOptions struct {
-	Screenshot    bool
-	Reputation    bool
-	EmailSecurity bool
-	Subdomains    bool
-	CTLogs        bool
-	BGP           bool
-	Fingerprint   bool
-	ThreatIntel   bool
-	DNSSecurity   bool
+	Lookups []string
+}
+
+// Has reports whether the named lookup was requested.
+func (o LookupOptions) Has(name string) bool {
+	return slices.Contains(o.Lookups, name)
+}
+
+// CacheStats reports how many of the requested lookups were served from cache
+// versus fetched live. Used for operational metrics, not for the API response.
+type CacheStats struct {
+	Hits   int
+	Misses int
 }
 
 type DomainResponse struct {
-	Domain     string          `json:"domain"`
-	CacheHit   bool            `json:"cache_hit"`
-	Whois      *WhoisInfo      `json:"whois,omitempty"`
-	DNS        *DNSInfo        `json:"dns,omitempty"`
-	SSL        *SSLInfo        `json:"ssl,omitempty"`
-	Headers    *HeadersInfo    `json:"headers,omitempty"`
-	Screenshot    *ScreenshotInfo    `json:"screenshot,omitempty"`
-	Reputation    *ReputationResult  `json:"reputation,omitempty"`
-	EmailSecurity *EmailSecurityInfo `json:"email_security,omitempty"`
-	Subdomains    *SubdomainInfo     `json:"subdomains,omitempty"`
-	CTLogs        *CTLogsInfo        `json:"ct_logs,omitempty"`
-	BGP           *BGPInfo           `json:"bgp,omitempty"`
-	Fingerprint   *FingerprintInfo   `json:"fingerprint,omitempty"`
-	ThreatIntel   *ThreatIntelInfo   `json:"threat_intel,omitempty"`
-	DNSSecurity   *DNSSecurityInfo   `json:"dns_security,omitempty"`
-	Risk          *RiskSummary       `json:"risk,omitempty"`
-	Errors        []LookupError      `json:"errors,omitempty"`
+	Domain string   `json:"domain"`
+	Inputs []string `json:"inputs,omitempty"`
+
+	Whois         *WhoisResult         `json:"whois,omitempty"`
+	DNS           *DNSResult           `json:"dns,omitempty"`
+	SSL           *SSLResult           `json:"ssl,omitempty"`
+	Headers       *HeadersResult       `json:"headers,omitempty"`
+	Screenshot    *ScreenshotResult    `json:"screenshot,omitempty"`
+	Reputation    *ReputationResult    `json:"reputation,omitempty"`
+	EmailSecurity *EmailSecurityResult `json:"email_security,omitempty"`
+	Subdomains    *SubdomainsResult    `json:"subdomains,omitempty"`
+	CTLogs        *CTLogsResult        `json:"ct_logs,omitempty"`
+	BGP           *BGPResult           `json:"bgp,omitempty"`
+	Fingerprint   *FingerprintResult   `json:"fingerprint,omitempty"`
+	ThreatIntel   *ThreatIntelResult   `json:"threat_intel,omitempty"`
+	DNSSecurity   *DNSSecurityResult   `json:"dns_security,omitempty"`
+	Risk          *RiskResult          `json:"risk,omitempty"`
+
+	Errors []LookupError `json:"errors,omitempty"`
+}
+
+// DomainResponseEnvelope wraps the per-domain results. The envelope exists so
+// response-level fields can be added later without breaking clients.
+type DomainResponseEnvelope struct {
+	Results []*DomainResponse `json:"results"`
+}
+
+// --- Per-lookup response wrappers ---
+//
+// Each wrapper embeds the pure lookup payload and adds a cache_hit flag. Only
+// the embedded payload type is ever marshaled into Redis — cache_hit is set at
+// response-assembly time and must never be persisted.
+
+type WhoisResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*WhoisInfo
+}
+
+type DNSResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*DNSInfo
+}
+
+type SSLResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*SSLInfo
+}
+
+type HeadersResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*HeadersInfo
+}
+
+type ScreenshotResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*ScreenshotInfo
+}
+
+type ReputationResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*ReputationInfo
+}
+
+type EmailSecurityResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*EmailSecurityInfo
+}
+
+type SubdomainsResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*SubdomainInfo
+}
+
+type CTLogsResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*CTLogsInfo
+}
+
+type BGPResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*BGPInfo
+}
+
+type FingerprintResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*FingerprintInfo
+}
+
+type ThreatIntelResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*ThreatIntelInfo
+}
+
+type DNSSecurityResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*DNSSecurityInfo
+}
+
+// RiskResult wraps the aggregate risk score. Like fingerprint, risk is pure
+// post-processing over other lookups rather than a fetch of its own, so it has
+// no cache entry; CacheHit is true only when every lookup it scored over came
+// from cache.
+type RiskResult struct {
+	CacheHit bool `json:"cache_hit"`
+	*RiskSummary
 }
 
 // --- DNS Security: DNSSEC + CAA (optional field on domain lookup) ---
@@ -94,7 +223,7 @@ type ProviderResult struct {
 	ReturnCode string `json:"return_code,omitempty"`
 }
 
-type ReputationResult struct {
+type ReputationInfo struct {
 	Score     int               `json:"score"`
 	Risk      string            `json:"risk"`
 	Providers []*ProviderResult `json:"providers"`
@@ -291,4 +420,22 @@ type ThreatIntelInfo struct {
 	Score      int                          `json:"score"`
 	Categories []string                     `json:"categories,omitempty"`
 	Providers  []*ThreatIntelProviderResult `json:"providers"`
+}
+
+// SSLInfo returns the SSL payload behind the response wrapper, or nil. Risk
+// scoring reads through the wrappers, so it needs the bare payload types.
+func (r *DomainResponse) SSLInfo() *SSLInfo {
+	if r.SSL == nil {
+		return nil
+	}
+	return r.SSL.SSLInfo
+}
+
+// EmailSecurityInfo returns the email security payload behind the response
+// wrapper, or nil.
+func (r *DomainResponse) EmailSecurityInfo() *EmailSecurityInfo {
+	if r.EmailSecurity == nil {
+		return nil
+	}
+	return r.EmailSecurity.EmailSecurityInfo
 }

@@ -147,16 +147,14 @@ func TestRequestLogger_AuthFieldsAbsent(t *testing.T) {
 	}
 }
 
-func TestRequestLogger_ContextKeysPresent(t *testing.T) {
+func TestRequestLogger_StringSliceContextKeysPresent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger, logs := newObserverLogger()
 
 	r := gin.New()
 	r.Use(RequestLoggerWithLogger(logger))
 	r.GET("/test", func(c *gin.Context) {
-		for _, key := range ContextKeys {
-			c.Set(key, true)
-		}
+		c.Set("lookups_requested", []string{"dns", "ssl"})
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -169,19 +167,36 @@ func TestRequestLogger_ContextKeysPresent(t *testing.T) {
 	}
 
 	entry := logs.All()[0]
-	fieldMap := make(map[string]zap.Field, len(entry.Context))
-	for _, f := range entry.Context {
-		fieldMap[f.Key] = f
-	}
-
-	for _, key := range ContextKeys {
-		f, ok := fieldMap[key]
-		if !ok {
-			t.Errorf("context key %q not found in log entry", key)
-			continue
+	for _, key := range StringSliceContextKeys {
+		found := false
+		for _, f := range entry.Context {
+			if f.Key == key {
+				found = true
+			}
 		}
-		if f.Integer != 1 { // zap encodes true as 1
-			t.Errorf("context key %q = %v, want true", key, f.Integer)
+		if !found {
+			t.Errorf("context key %q not found in log entry", key)
+		}
+	}
+}
+
+func TestRequestLogger_StringSliceContextKeysAbsent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger, logs := newObserverLogger()
+
+	r := gin.New()
+	r.Use(RequestLoggerWithLogger(logger))
+	r.GET("/test", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/test", nil))
+
+	entry := logs.All()[0]
+	for _, f := range entry.Context {
+		for _, key := range StringSliceContextKeys {
+			if f.Key == key {
+				t.Errorf("context key %q logged when never set", key)
+			}
 		}
 	}
 }
@@ -380,7 +395,7 @@ func TestRequestLogger_ContextKeysAbsent(t *testing.T) {
 		fieldMap[f.Key] = f
 	}
 
-	for _, key := range ContextKeys {
+	for _, key := range append(append([]string{}, IntContextKeys...), StringSliceContextKeys...) {
 		if _, ok := fieldMap[key]; ok {
 			t.Errorf("context key %q should not appear in log when not set", key)
 		}

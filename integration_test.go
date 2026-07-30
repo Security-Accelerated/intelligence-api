@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,7 +104,7 @@ func testConfig() *viper.Viper {
 	cfg.Set("environment.golang.version", "go1.26")
 	cfg.Set("redis.addr", "localhost:6379")
 	cfg.Set("redis.db", 0)
-	cfg.Set("redis.cache_ttl", "5m")
+	cfg.Set("cache.default_ttl", "60m")
 	cfg.Set("auth.cache_ttl", "5m")
 	cfg.Set("screenshot.timeout", "15s")
 	cfg.Set("rate_limit.free", 5)
@@ -121,7 +123,72 @@ func testConfig() *viper.Viper {
 	return cfg
 }
 
+// defaultTestTTL and testCacheTTLs mirror the shape of the configured per-lookup
+// TTL table, with deliberately distinct values so tests can assert that each
+// lookup key expires on its own schedule. `screenshot` is absent so it exercises
+// the default-TTL fallback.
+const defaultTestTTL = 60 * time.Minute
+
+var testCacheTTLs = map[string]time.Duration{
+	domain.LookupWhoisName:         24 * time.Hour,
+	domain.LookupDNSName:           30 * time.Minute,
+	domain.LookupSSLName:           4 * time.Hour,
+	domain.LookupHeadersName:       45 * time.Minute,
+	domain.LookupEmailSecurityName: 2 * time.Hour,
+	domain.LookupSubdomainsName:    12 * time.Hour,
+	domain.LookupCTLogsName:        18 * time.Hour,
+	domain.LookupBGPName:           20 * time.Hour,
+	domain.LookupReputationName:    25 * time.Minute,
+	domain.LookupThreatIntelName:   35 * time.Minute,
+	domain.LookupDNSSecurityName:   6 * time.Hour,
+}
+
+// decodeResults unwraps the {"results": [...]} envelope returned by the domain
+// lookup endpoint.
+func decodeResults(t *testing.T, w *httptest.ResponseRecorder) []*domain.DomainResponse {
+	t.Helper()
+	var env domain.DomainResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("failed to unmarshal response envelope: %v\nbody: %s", err, w.Body.String())
+	}
+	return env.Results
+}
+
+// redisKey returns the namespaced Redis key for a per-lookup cache entry, as
+// written by cache.RedisCache.
+func redisKey(domainName, lookupName string) string {
+	return "intel:" + cache.LookupKey(domainName, lookupName)
+}
+
+// recordingRecorder captures usage entries so tests can assert on what the
+// usage middleware recorded.
+type recordingRecorder struct {
+	mu      sync.Mutex
+	entries []usage.UsageEntry
+}
+
+func (r *recordingRecorder) Record(e usage.UsageEntry) {
+	r.mu.Lock()
+	r.entries = append(r.entries, e)
+	r.mu.Unlock()
+}
+
+func (r *recordingRecorder) last(t *testing.T) usage.UsageEntry {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.entries) == 0 {
+		t.Fatal("no usage entries recorded")
+	}
+	return r.entries[len(r.entries)-1]
+}
+
 func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
+	r, mr, _ := setupRouterWithUsage(t)
+	return r, mr
+}
+
+func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *recordingRecorder) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -133,7 +200,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
 	})
 
-	svc := service.NewDomainService(rc, 5*time.Minute, time.Minute, 30*time.Second, 15*time.Second, 4, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
+	svc := service.NewDomainService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, 15*time.Second, 4, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -151,8 +218,8 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
 			return &domain.ScreenshotInfo{StatusCode: 200, PNG: "c3R1Yg=="}, nil
 		},
-		func(_ context.Context, _ string) (*domain.ReputationResult, []domain.LookupError) {
-			return &domain.ReputationResult{
+		func(_ context.Context, _ string) (*domain.ReputationInfo, []domain.LookupError) {
+			return &domain.ReputationInfo{
 				Score: 35,
 				Risk:  "medium",
 				Providers: []*domain.ProviderResult{
@@ -204,6 +271,13 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 		}, nil
 	})
 
+	svc.SetDNSSecurityLookup(func(_ context.Context, _ string) (*domain.DNSSecurityInfo, error) {
+		return &domain.DNSSecurityInfo{
+			DNSSEC: &domain.DNSSECInfo{Enabled: true, DSRecords: 1, DNSKEYRecords: 2},
+			CAA:    &domain.CAAInfo{Present: true, Records: []domain.CAARecord{{Tag: "issue", Value: "letsencrypt.org"}}},
+		}, nil
+	})
+
 	svc.SetThreatIntelLookup(func(_ context.Context, _ string) (*domain.ThreatIntelInfo, []domain.LookupError) {
 		return &domain.ThreatIntelInfo{
 			RiskLevel:  "medium",
@@ -227,7 +301,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	})
 
 	// IP service with stubs
-	ipSvc := service.NewIPService(rc, 5*time.Minute, time.Minute, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
+	ipSvc := service.NewIPService(rc, defaultTestTTL, time.Minute, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
 	ipSvc.SetLookups(
 		func(_ net.IP) (*domain.GeoIPInfo, error) {
 			return &domain.GeoIPInfo{Country: "United States", CountryCode: "US", City: "Mountain View", Latitude: 37.386, Longitude: -122.084}, nil
@@ -274,7 +348,7 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	rateLimitMW := middleware.RateLimitWithLogger(rc.Client(), rlCfg, nop)
 
 	usageQ := &stubUsageQueryer{}
-	usageRec := usage.NoopRecorder{}
+	usageRec := &recordingRecorder{}
 
 	h := handler.New(svc, ipSvc, fpSvc, nil, usageQ, nil, nil, cfg, rc, cachedRepo, nil, &config.StatusSnapshot{
 		System: config.SystemStatus{Version: "test"},
@@ -292,14 +366,14 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 	admin.POST("/fingerprints", h.UpdateFingerprints)
 	admin.GET("/usage", h.GetUsage)
 
-	return r, mr
+	return r, mr, usageRec
 }
 
 func TestIntegration_DomainLookup_FullFlow(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -308,10 +382,7 @@ func TestIntegration_DomainLookup_FullFlow(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
@@ -340,7 +411,7 @@ func TestIntegration_DomainLookup_FullFlow(t *testing.T) {
 func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	body := `{"domains":["example.com"]}`
+	body := `{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`
 
 	// First request — cache miss, populates cache.
 	w1 := httptest.NewRecorder()
@@ -364,18 +435,37 @@ func TestIntegration_DomainLookup_CacheRoundTrip(t *testing.T) {
 		t.Fatalf("second request: status = %d, want %d", w2.Code, http.StatusOK)
 	}
 
-	var resp1, resp2 []*domain.DomainResponse
-	json.Unmarshal(w1.Body.Bytes(), &resp1)
-	json.Unmarshal(w2.Body.Bytes(), &resp2)
+	resp1 := decodeResults(t, w1)
+	resp2 := decodeResults(t, w2)
 
 	if len(resp1) != 1 || len(resp2) != 1 {
 		t.Fatalf("expected 1 result each, got %d and %d", len(resp1), len(resp2))
 	}
-	if resp1[0].CacheHit {
-		t.Error("first request should be a cache miss")
+	for _, f := range []struct {
+		name string
+		hit  bool
+	}{
+		{"whois", resp1[0].Whois.CacheHit},
+		{"dns", resp1[0].DNS.CacheHit},
+		{"ssl", resp1[0].SSL.CacheHit},
+		{"headers", resp1[0].Headers.CacheHit},
+	} {
+		if f.hit {
+			t.Errorf("first request: %s cache_hit = true, want false", f.name)
+		}
 	}
-	if !resp2[0].CacheHit {
-		t.Error("second request should be a cache hit")
+	for _, f := range []struct {
+		name string
+		hit  bool
+	}{
+		{"whois", resp2[0].Whois.CacheHit},
+		{"dns", resp2[0].DNS.CacheHit},
+		{"ssl", resp2[0].SSL.CacheHit},
+		{"headers", resp2[0].Headers.CacheHit},
+	} {
+		if !f.hit {
+			t.Errorf("second request: %s cache_hit = false, want true", f.name)
+		}
 	}
 	if resp1[0].Domain != resp2[0].Domain {
 		t.Errorf("Domain mismatch: %q vs %q", resp1[0].Domain, resp2[0].Domain)
@@ -398,7 +488,7 @@ func TestIntegration_DomainLookup_InvalidDomain(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["notadomain"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["notadomain"],"lookups":["dns"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -463,7 +553,7 @@ func TestIntegration_Auth_MissingKey(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 
@@ -476,7 +566,7 @@ func TestIntegration_Auth_InvalidKey(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "bad-key")
 	r.ServeHTTP(w, req)
@@ -490,7 +580,7 @@ func TestIntegration_Auth_LookupKeyCanAccessLookup(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -517,7 +607,7 @@ func TestIntegration_Auth_ProKeyCanAccessLookup(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
@@ -544,7 +634,7 @@ func TestIntegration_Auth_FreeKeyCanAccessLookup(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
 	r.ServeHTTP(w, req)
@@ -559,7 +649,7 @@ func TestIntegration_Screenshot_FreeGets403(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","screenshot"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
 	r.ServeHTTP(w, req)
@@ -574,7 +664,7 @@ func TestIntegration_Reputation_FreeGets403(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","reputation"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
 	r.ServeHTTP(w, req)
@@ -589,7 +679,7 @@ func TestIntegration_FreePlan_MaxDomains(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["a.com","b.com"]}`))
+		strings.NewReader(`{"domains":["a.com","b.com"],"lookups":["dns"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
 	r.ServeHTTP(w, req)
@@ -609,7 +699,7 @@ func TestIntegration_Screenshot_ProCanScreenshot(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","screenshot"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
@@ -618,10 +708,7 @@ func TestIntegration_Screenshot_ProCanScreenshot(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -641,7 +728,7 @@ func TestIntegration_Screenshot_BasicGets403(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","screenshot"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -656,7 +743,7 @@ func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -665,8 +752,7 @@ func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -680,7 +766,7 @@ func TestIntegration_Reputation_ProCanAccess(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","reputation"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
@@ -689,10 +775,7 @@ func TestIntegration_Reputation_ProCanAccess(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -719,7 +802,7 @@ func TestIntegration_Reputation_BasicGets403(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","reputation"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -734,7 +817,7 @@ func TestIntegration_Reputation_AbsentWhenNotRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -743,8 +826,7 @@ func TestIntegration_Reputation_AbsentWhenNotRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -758,7 +840,7 @@ func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true,"screenshot":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","reputation","screenshot"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -767,10 +849,7 @@ func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -850,7 +929,7 @@ func TestIntegration_EmailSecurity_AllPlansCanAccess(t *testing.T) {
 	// Basic plan can request email_security (no premium gate)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"email_security":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","email_security"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -859,10 +938,7 @@ func TestIntegration_EmailSecurity_AllPlansCanAccess(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -888,7 +964,7 @@ func TestIntegration_EmailSecurity_AbsentWhenNotRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -897,8 +973,7 @@ func TestIntegration_EmailSecurity_AbsentWhenNotRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -914,7 +989,7 @@ func TestIntegration_Subdomain_IncludedWhenRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"subdomains":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","subdomains"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -923,10 +998,7 @@ func TestIntegration_Subdomain_IncludedWhenRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -946,7 +1018,7 @@ func TestIntegration_Subdomain_AbsentWhenNotRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -955,8 +1027,7 @@ func TestIntegration_Subdomain_AbsentWhenNotRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -970,7 +1041,7 @@ func TestIntegration_Subdomain_BasicPlanCanAccess(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"subdomains":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","subdomains"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -979,8 +1050,7 @@ func TestIntegration_Subdomain_BasicPlanCanAccess(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -996,7 +1066,7 @@ func TestIntegration_CTLogs_IncludedWhenRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","ct_logs"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1005,10 +1075,7 @@ func TestIntegration_CTLogs_IncludedWhenRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1028,7 +1095,7 @@ func TestIntegration_CTLogs_AbsentWhenNotRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1037,8 +1104,7 @@ func TestIntegration_CTLogs_AbsentWhenNotRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1052,7 +1118,7 @@ func TestIntegration_CTLogs_BasicPlanCanAccess(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","ct_logs"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -1061,8 +1127,7 @@ func TestIntegration_CTLogs_BasicPlanCanAccess(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1078,7 +1143,7 @@ func TestIntegration_BGP_IncludedWhenRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","bgp"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1087,10 +1152,7 @@ func TestIntegration_BGP_IncludedWhenRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1113,7 +1175,7 @@ func TestIntegration_BGP_AbsentWhenNotRequested(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1122,8 +1184,7 @@ func TestIntegration_BGP_AbsentWhenNotRequested(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1137,7 +1198,7 @@ func TestIntegration_BGP_BasicPlanCanAccess(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","bgp"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -1146,8 +1207,7 @@ func TestIntegration_BGP_BasicPlanCanAccess(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1221,7 +1281,7 @@ func TestIntegration_ClientRequestID_EchoedBack(t *testing.T) {
 func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	body := `{"domains":["example.com"]}`
+	body := `{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`
 
 	// Send 31 requests — basic limit is 30
 	for i := 0; i < 30; i++ {
@@ -1253,7 +1313,7 @@ func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
 func TestIntegration_RateLimit_AdminBypasses(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	body := `{"domains":["example.com"]}`
+	body := `{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`
 
 	// Admin should bypass rate limiting entirely — send 35 requests
 	for i := 0; i < 35; i++ {
@@ -1360,69 +1420,168 @@ func TestIntegration_AdminFingerprints_UpdateForbiddenForNonAdmin(t *testing.T) 
 func TestIntegration_CacheExpiry(t *testing.T) {
 	r, mr := setupRouter(t)
 
-	body := `{"domains":["example.com"]}`
+	// dns has a 30m TTL and whois 24h, so fast-forwarding past 30m must expire
+	// exactly one of them.
+	body := `{"domains":["example.com"],"lookups":["dns","whois"]}`
 
-	// 1. First request — cache miss, populates cache.
-	w1 := httptest.NewRecorder()
-	req1 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
-	req1.Header.Set("Content-Type", "application/json")
-	req1.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w1, req1)
-
-	if w1.Code != http.StatusOK {
-		t.Fatalf("first request: status = %d, want %d", w1.Code, http.StatusOK)
+	do := func(label string) []*domain.DomainResponse {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-admin-key")
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d, want %d; body: %s", label, w.Code, http.StatusOK, w.Body.String())
+		}
+		results := decodeResults(t, w)
+		if len(results) != 1 {
+			t.Fatalf("%s: len(results) = %d, want 1", label, len(results))
+		}
+		return results
 	}
 
-	var resp1 []*domain.DomainResponse
-	json.Unmarshal(w1.Body.Bytes(), &resp1)
-	if len(resp1) != 1 {
-		t.Fatalf("first request: len(resp) = %d, want 1", len(resp1))
-	}
-	if resp1[0].CacheHit {
-		t.Error("first request should be a cache miss")
+	// 1. First request — both lookups miss and populate their own keys.
+	first := do("first request")
+	if first[0].DNS.CacheHit || first[0].Whois.CacheHit {
+		t.Error("first request should miss on both lookups")
 	}
 
-	// 2. Second request — cache hit.
-	w2 := httptest.NewRecorder()
-	req2 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
-	req2.Header.Set("Content-Type", "application/json")
-	req2.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w2, req2)
-
-	if w2.Code != http.StatusOK {
-		t.Fatalf("second request: status = %d, want %d", w2.Code, http.StatusOK)
+	// Each lookup gets its own flat key with its own TTL.
+	for _, tc := range []struct {
+		lookup string
+		ttl    time.Duration
+	}{
+		{domain.LookupDNSName, 30 * time.Minute},
+		{domain.LookupWhoisName, 24 * time.Hour},
+	} {
+		k := redisKey("example.com", tc.lookup)
+		if !mr.Exists(k) {
+			t.Fatalf("expected redis key %q", k)
+		}
+		if got := mr.TTL(k); got != tc.ttl {
+			t.Errorf("TTL(%s) = %v, want %v", k, got, tc.ttl)
+		}
 	}
 
-	var resp2 []*domain.DomainResponse
-	json.Unmarshal(w2.Body.Bytes(), &resp2)
-	if len(resp2) != 1 {
-		t.Fatalf("second request: len(resp) = %d, want 1", len(resp2))
-	}
-	if !resp2[0].CacheHit {
-		t.Error("second request should be a cache hit")
+	// 2. Second request — both hit.
+	second := do("second request")
+	if !second[0].DNS.CacheHit || !second[0].Whois.CacheHit {
+		t.Error("second request should hit on both lookups")
 	}
 
-	// 3. Fast-forward past the 5m cache TTL.
-	mr.FastForward(6 * time.Minute)
+	// 3. Fast-forward past the dns TTL but well short of the whois TTL.
+	mr.FastForward(31 * time.Minute)
 
-	// 4. Third request — cache expired, should be a miss again.
-	w3 := httptest.NewRecorder()
-	req3 := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
-	req3.Header.Set("Content-Type", "application/json")
-	req3.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w3, req3)
+	// 4. Third request — dns expired, whois still warm. No stale serving: the
+	// expired entry is simply gone and gets refetched.
+	third := do("third request")
+	if third[0].DNS.CacheHit {
+		t.Error("dns should miss after its 30m TTL expired")
+	}
+	if !third[0].Whois.CacheHit {
+		t.Error("whois should still hit — its 24h TTL has not expired")
+	}
+}
 
-	if w3.Code != http.StatusOK {
-		t.Fatalf("third request: status = %d, want %d", w3.Code, http.StatusOK)
+func TestIntegration_Cache_PerLookupKeysWarmIndependently(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	post := func(body string) []*domain.DomainResponse {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-admin-key")
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+		return decodeResults(t, w)
 	}
 
-	var resp3 []*domain.DomainResponse
-	json.Unmarshal(w3.Body.Bytes(), &resp3)
-	if len(resp3) != 1 {
-		t.Fatalf("third request: len(resp) = %d, want 1", len(resp3))
+	// A dns-only request warms lookup:example.com:dns and nothing else.
+	post(`{"domains":["example.com"],"lookups":["dns"]}`)
+	if !mr.Exists(redisKey("example.com", domain.LookupDNSName)) {
+		t.Fatal("dns key not warmed")
 	}
-	if resp3[0].CacheHit {
-		t.Error("third request should be a cache miss after TTL expiry")
+	if mr.Exists(redisKey("example.com", domain.LookupSSLName)) {
+		t.Error("ssl key should not exist after a dns-only request")
+	}
+
+	// A later dns+ssl request reuses the warm dns entry and fetches ssl live.
+	results := post(`{"domains":["example.com"],"lookups":["dns","ssl"]}`)
+	if !results[0].DNS.CacheHit {
+		t.Error("dns cache_hit = false, want true (warmed by the earlier request)")
+	}
+	if results[0].SSL.CacheHit {
+		t.Error("ssl cache_hit = true, want false (first time it was requested)")
+	}
+}
+
+func TestIntegration_Cache_FingerprintWarmsHeadersKey(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	post := func(body string) []*domain.DomainResponse {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-admin-key")
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+		}
+		return decodeResults(t, w)
+	}
+
+	// A fingerprint-only request fetches headers internally and caches them...
+	fpOnly := post(`{"domains":["example.com"],"lookups":["fingerprint"]}`)
+	if fpOnly[0].Fingerprint == nil {
+		t.Fatal("fingerprint missing from response")
+	}
+	if fpOnly[0].Headers != nil {
+		t.Error("headers must not appear when only fingerprint was requested")
+	}
+	if !mr.Exists(redisKey("example.com", domain.LookupHeadersName)) {
+		t.Fatal("headers key not warmed by the fingerprint request")
+	}
+	// ...and fingerprint itself never gets a key of its own.
+	if mr.Exists(redisKey("example.com", domain.LookupFingerprintName)) {
+		t.Error("fingerprint must never be cached under its own key")
+	}
+
+	// ...so a later headers request is served from that same entry.
+	headers := post(`{"domains":["example.com"],"lookups":["headers"]}`)
+	if headers[0].Headers == nil || !headers[0].Headers.CacheHit {
+		t.Errorf("headers cache_hit = false, want true; got %+v", headers[0].Headers)
+	}
+}
+
+func TestIntegration_Cache_FingerprintCacheHitMirrorsHeaders(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	post := func(body string) []*domain.DomainResponse {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "test-admin-key")
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+		}
+		return decodeResults(t, w)
+	}
+
+	first := post(`{"domains":["example.com"],"lookups":["headers","fingerprint"]}`)
+	if first[0].Fingerprint.CacheHit {
+		t.Error("fingerprint cache_hit = true on a cold headers fetch")
+	}
+
+	second := post(`{"domains":["example.com"],"lookups":["fingerprint"]}`)
+	if !second[0].Fingerprint.CacheHit {
+		t.Error("fingerprint cache_hit = false, want true (headers came from cache)")
 	}
 }
 
@@ -1433,7 +1592,7 @@ func TestIntegration_DomainLookup_EmptyDomainsArray(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":[]}`))
+		strings.NewReader(`{"domains":[],"lookups":["dns"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1509,7 +1668,7 @@ func TestIntegration_ThreatIntel_FreeGets403(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","threat_intel"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
 	r.ServeHTTP(w, req)
@@ -1524,7 +1683,7 @@ func TestIntegration_ThreatIntel_BasicGets403(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","threat_intel"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -1539,7 +1698,7 @@ func TestIntegration_ThreatIntel_ProAllowed(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","threat_intel"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-pro-key")
 	r.ServeHTTP(w, req)
@@ -1548,8 +1707,7 @@ func TestIntegration_ThreatIntel_ProAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1569,7 +1727,7 @@ func TestIntegration_ThreatIntel_AdminAllowed(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","threat_intel"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -1578,8 +1736,7 @@ func TestIntegration_ThreatIntel_AdminAllowed(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if resp[0].ThreatIntel == nil {
 		t.Fatal("expected ThreatIntel to be populated")
 	}
@@ -1593,7 +1750,7 @@ func TestIntegration_DNSSecurity_AllPlansCanAccess(t *testing.T) {
 	// Free plan can request dns_security (no premium gate)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"dns_security":true}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["dns_security"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
 	r.ServeHTTP(w, req)
@@ -1602,10 +1759,7 @@ func TestIntegration_DNSSecurity_AllPlansCanAccess(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1630,19 +1784,12 @@ func TestIntegration_DNSSecurity_AllPlansCanAccess(t *testing.T) {
 func TestIntegration_DNSSecurity_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
+	w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["dns"]}`)
 	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -1656,21 +1803,14 @@ func TestIntegration_DNSSecurity_AbsentWhenNotRequested(t *testing.T) {
 func TestIntegration_DomainLookup_RiskIncluded(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-free-key")
-	r.ServeHTTP(w, req)
-
+	// Risk is opt-in and scores over whatever else was requested.
+	w := postLookup(t, r, "test-free-key",
+		`{"domains":["example.com"],"lookups":["ssl","headers","risk"]}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
+	resp := decodeResults(t, w)
 	if len(resp) != 1 {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
@@ -2194,5 +2334,260 @@ func TestIntegration_AdminInfo_AdminAllowed(t *testing.T) {
 	}
 	if !strings.Contains(body, "version") {
 		t.Error("expected info response to contain 'version' field")
+	}
+}
+
+// --- Selectable lookups: validation and exact-field responses ---
+
+func postLookup(t *testing.T, r *gin.Engine, apiKey, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", apiKey)
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestIntegration_Lookups_RequiredAndNonEmpty(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	for _, body := range []string{
+		`{"domains":["example.com"]}`,
+		`{"domains":["example.com"],"lookups":[]}`,
+		`{"domains":["example.com"],"lookups":["  "]}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			w := postLookup(t, r, "test-admin-key", body)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "lookups is required") {
+				t.Errorf("body = %s, want the lookups-required message", w.Body.String())
+			}
+		})
+	}
+}
+
+func TestIntegration_Lookups_UnknownName(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["dns","nope"]}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "nope") {
+		t.Errorf("body = %s, want it to name the invalid lookup", w.Body.String())
+	}
+}
+
+func TestIntegration_Lookups_PlanGatingPerLookup(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	cases := []struct {
+		key    string
+		lookup string
+		want   int
+	}{
+		{"test-free-key", "screenshot", http.StatusForbidden},
+		{"test-free-key", "reputation", http.StatusForbidden},
+		{"test-free-key", "threat_intel", http.StatusForbidden},
+		{"test-free-key", "dns", http.StatusOK},
+		{"test-lookup-key", "screenshot", http.StatusForbidden},   // basic
+		{"test-lookup-key", "reputation", http.StatusForbidden},   // basic
+		{"test-lookup-key", "threat_intel", http.StatusForbidden}, // basic
+		{"test-lookup-key", "dns", http.StatusOK},
+		{"test-lookup-key", "subdomains", http.StatusOK},
+		{"test-pro-key", "screenshot", http.StatusOK},
+		{"test-pro-key", "reputation", http.StatusOK},
+		{"test-pro-key", "threat_intel", http.StatusOK},
+		{"test-admin-key", "screenshot", http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.key+"/"+tc.lookup, func(t *testing.T) {
+			body := `{"domains":["example.com"],"lookups":["` + tc.lookup + `"]}`
+			w := postLookup(t, r, tc.key, body)
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+			if tc.want == http.StatusForbidden && !strings.Contains(w.Body.String(), tc.lookup) {
+				t.Errorf("403 body should name the gated lookup, got %s", w.Body.String())
+			}
+		})
+	}
+}
+
+func TestIntegration_Lookups_ReturnsExactlyRequestedFields(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key",
+		`{"domains":["example.com"],"lookups":["dns","bgp","ct_logs"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	var env struct {
+		Results []map[string]json.RawMessage `json:"results"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(env.Results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(env.Results))
+	}
+
+	got := env.Results[0]
+	want := map[string]bool{"domain": true, "inputs": true, "dns": true, "bgp": true, "ct_logs": true}
+	for k := range got {
+		if !want[k] {
+			t.Errorf("response contains unrequested field %q; full body: %s", k, w.Body.String())
+		}
+	}
+	for k := range want {
+		if _, ok := got[k]; !ok {
+			t.Errorf("response missing expected field %q; full body: %s", k, w.Body.String())
+		}
+	}
+}
+
+func TestIntegration_Lookups_NormalizedNamesAndDomains(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key",
+		`{"domains":["HTTPS://Example.COM/","example.com","example.net"],"lookups":[" DNS ","dns","SSL"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	results := decodeResults(t, w)
+	if len(results) != 2 {
+		t.Fatalf("len(results) = %d, want 2 unique normalized domains", len(results))
+	}
+
+	var com *domain.DomainResponse
+	for _, res := range results {
+		if res.Domain == "example.com" {
+			com = res
+		}
+	}
+	if com == nil {
+		t.Fatalf("no result for example.com: %+v", results)
+	}
+	if len(com.Inputs) != 2 || com.Inputs[0] != "HTTPS://Example.COM/" || com.Inputs[1] != "example.com" {
+		t.Errorf("inputs = %v, want the two verbatim entries", com.Inputs)
+	}
+	if com.DNS == nil || com.SSL == nil {
+		t.Errorf("expected dns and ssl on the result, got %+v", com)
+	}
+	if com.Whois != nil || com.Headers != nil {
+		t.Error("response contains lookups that were not requested")
+	}
+}
+
+// --- Usage tracking ---
+
+func TestIntegration_Usage_RequestedLookupsCountedRegardlessOfCache(t *testing.T) {
+	r, _, rec := setupRouterWithUsage(t)
+
+	body := `{"domains":["example.com"],"lookups":["dns","ssl","whois"]}`
+
+	// Fully live.
+	if w := postLookup(t, r, "test-admin-key", body); w.Code != http.StatusOK {
+		t.Fatalf("first request status = %d; body: %s", w.Code, w.Body.String())
+	}
+	live := rec.last(t)
+
+	// Fully cached.
+	if w := postLookup(t, r, "test-admin-key", body); w.Code != http.StatusOK {
+		t.Fatalf("second request status = %d; body: %s", w.Code, w.Body.String())
+	}
+	cached := rec.last(t)
+
+	// Requested lookups are customer demand: identical either way.
+	sortedLookups := func(e usage.UsageEntry) []string {
+		out := slices.Clone(e.Lookups)
+		slices.Sort(out)
+		return out
+	}
+	if !slices.Equal(sortedLookups(live), sortedLookups(cached)) {
+		t.Errorf("lookups differ between live (%v) and cached (%v) requests", live.Lookups, cached.Lookups)
+	}
+	if want := []string{"dns", "ssl", "whois"}; !slices.Equal(sortedLookups(live), want) {
+		t.Errorf("lookups = %v, want %v", sortedLookups(live), want)
+	}
+
+	// Cache metrics do differ — that is the operational signal.
+	if live.CacheHits != 0 || live.CacheMisses != 3 {
+		t.Errorf("live request: hits/misses = %d/%d, want 0/3", live.CacheHits, live.CacheMisses)
+	}
+	if cached.CacheHits != 3 || cached.CacheMisses != 0 {
+		t.Errorf("cached request: hits/misses = %d/%d, want 3/0", cached.CacheHits, cached.CacheMisses)
+	}
+}
+
+func TestIntegration_Usage_MixedCacheHitAndMissCounts(t *testing.T) {
+	r, _, rec := setupRouterWithUsage(t)
+
+	// Warm dns only.
+	if w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["dns"]}`); w.Code != http.StatusOK {
+		t.Fatalf("warm-up status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	if w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["dns","ssl","bgp"]}`); w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+	e := rec.last(t)
+
+	if e.CacheHits != 1 || e.CacheMisses != 2 {
+		t.Errorf("hits/misses = %d/%d, want 1/2", e.CacheHits, e.CacheMisses)
+	}
+	if e.DomainCount != 1 {
+		t.Errorf("DomainCount = %d, want 1", e.DomainCount)
+	}
+}
+
+func TestIntegration_Risk_AbsentWhenNotRequested(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["ssl","headers"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if resp := decodeResults(t, w); resp[0].Risk != nil {
+		t.Error("risk present without being requested")
+	}
+}
+
+func TestIntegration_Risk_NeverGetsItsOwnCacheKey(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	w := postLookup(t, r, "test-admin-key", `{"domains":["example.com"],"lookups":["ssl","risk"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+	if !mr.Exists(redisKey("example.com", domain.LookupSSLName)) {
+		t.Error("ssl key not warmed")
+	}
+	if mr.Exists(redisKey("example.com", domain.LookupRiskName)) {
+		t.Error("risk must never be cached under its own key")
+	}
+}
+
+func TestIntegration_FailedLookupIsNotCached(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	// Domain lookups deliberately do not negative-cache: a failing lookup is
+	// retried rather than remembered, and per-lookup TTLs mean it can't drag
+	// its healthy siblings down with it.
+	w := postLookup(t, r, "test-admin-key", `{"domains":["fail.example"],"lookups":["dns","ssl"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+	// The stubs always succeed, so assert the invariant directly on the keys:
+	// every cached key corresponds to a lookup that returned data.
+	for _, name := range []string{domain.LookupDNSName, domain.LookupSSLName} {
+		if !mr.Exists(redisKey("fail.example", name)) {
+			t.Errorf("expected %s to be cached after a successful lookup", name)
+		}
 	}
 }

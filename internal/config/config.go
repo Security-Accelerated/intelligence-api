@@ -49,21 +49,36 @@ func init() {
 
 	// defaults (overridden by config file, then env vars)
 	config.SetDefault("application.port", 8080)
-	config.SetDefault("redis.cache_ttl", "60m")
+	// Cache TTLs: one entry per lookup, with default_ttl covering anything
+	// unlisted. Each key is read individually so env overrides (CACHE_TTL_WHOIS)
+	// work per Viper convention.
+	config.SetDefault("cache.default_ttl", "60m")
+	config.SetDefault("cache.ttl.whois", "24h")
+	config.SetDefault("cache.ttl.ct_logs", "24h")
+	config.SetDefault("cache.ttl.subdomains", "24h")
+	config.SetDefault("cache.ttl.bgp", "24h")
+	config.SetDefault("cache.ttl.ssl", "4h")
+	config.SetDefault("cache.ttl.email_security", "4h")
+	config.SetDefault("cache.ttl.dns", "30m")
+	config.SetDefault("cache.ttl.headers", "30m")
+	config.SetDefault("cache.ttl.reputation", "30m")
+	config.SetDefault("cache.ttl.threat_intel", "30m")
+	config.SetDefault("cache.ttl.screenshot", "60m")
 	config.SetDefault("redis.negative_cache_ttl", "5m")
 	config.SetDefault("auth.cache_ttl", "5m")
 	config.SetDefault("auth.rotation_grace", "24h")
+	config.SetDefault("screenshot.max_concurrent", 4)
+	config.SetDefault("subdomain.http_timeout", "15s")
+	config.SetDefault("ct_logs.http_timeout", "15s")
+	config.SetDefault("billing.cleanup_interval", "10m")
 	config.SetDefault("auth.last_used_buffer_size", 256)
 	config.SetDefault("auth.last_used_flush_interval", "10s")
 	config.SetDefault("screenshot.timeout", "15s")
-	config.SetDefault("screenshot.max_concurrent", 4)
 	config.SetDefault("domain.max_domains.free", 1)
 	config.SetDefault("domain.max_domains.basic", 5)
 	config.SetDefault("domain.max_domains.pro", 20)
 	config.SetDefault("subdomain.max_results", 500)
-	config.SetDefault("subdomain.http_timeout", "15s")
 	config.SetDefault("ct_logs.max_entries", 100)
-	config.SetDefault("ct_logs.http_timeout", "15s")
 	config.SetDefault("subdomain.max_domains.free", 1)
 	config.SetDefault("subdomain.max_domains.basic", 3)
 	config.SetDefault("subdomain.max_domains.pro", 5)
@@ -90,7 +105,6 @@ func init() {
 	config.SetDefault("stripe.payment_link.pro", "")
 	config.SetDefault("stripe.portal_link", "")
 	config.SetDefault("billing.stale_key_days", 365)
-	config.SetDefault("billing.cleanup_interval", "10m")
 	config.SetDefault("usage.buffer_size", 256)
 	config.SetDefault("usage.flush_interval", "5s")
 	config.SetDefault("threat_intel.virustotal_api_key", "")
@@ -101,7 +115,7 @@ func init() {
 	config.SetDefault("server.shutdown_timeout", "15s")
 	config.SetDefault("server.body_limit", 1048576) // 1 MB
 	config.SetDefault("domain.lookup_timeout", "30s")
-	config.SetDefault("screenshot.max_png_bytes", 5242880) // 5 MB
+	config.SetDefault("screenshot.max_png_bytes", 5242880)      // 5 MB
 	config.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
 	config.SetDefault("alerts.max_concurrent_sends", 5)
 	config.SetDefault("alerts.max_window_size", 1000)
@@ -117,7 +131,7 @@ func init() {
 	config.SetDefault("dns.timeout", "30s")
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
-	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	config.SetEnvKeyReplacer(envKeyReplacer())
 	config.AutomaticEnv()
 
 	// read in config
@@ -130,8 +144,17 @@ func init() {
 	}
 }
 
+// Config returns the process-wide Viper instance, populated at init with
+// defaults, any config file found on the search path, and environment
+// overrides.
 func Config() *viper.Viper {
 	return config
+}
+
+// envKeyReplacer maps config keys onto environment variable names
+// (postgres.host → POSTGRES_HOST, cache.ttl.whois → CACHE_TTL_WHOIS).
+func envKeyReplacer() *strings.Replacer {
+	return strings.NewReplacer(".", "_")
 }
 
 func charsToString(ca []int8) string {

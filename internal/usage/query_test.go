@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"testing"
 	"time"
@@ -73,11 +74,25 @@ func TestBuildWhere_BothFilters(t *testing.T) {
 // --- QueryUsage tests ---
 
 func aggColumns() []string {
-	return []string{
-		"total_requests", "cache_hits", "avg_latency", "total_domains", "total_ips",
-		"screenshot", "reputation", "email_security", "subdomains",
-		"ct_logs", "bgp", "fingerprint", "threat_intel", "dns_security",
+	cols := []string{"total_requests", "cache_hits", "cache_misses", "avg_latency", "total_domains", "total_ips"}
+	return append(cols, LookupColumns...)
+}
+
+// aggRow builds an aggregate row: the six fixed metrics followed by one count
+// per lookup column, defaulting to 0 for anything absent from features.
+func aggRow(totalRequests, cacheHits, cacheMisses int, avgLatency float64, totalDomains, totalIPs int, features map[string]int) []driver.Value {
+	row := []driver.Value{totalRequests, cacheHits, cacheMisses, avgLatency, totalDomains, totalIPs}
+	for _, name := range LookupColumns {
+		row = append(row, features[name])
 	}
+	return row
+}
+
+var happyPathFeatures = map[string]int{
+	"whois": 40, "dns": 60, "ssl": 30, "headers": 22,
+	"screenshot": 10, "reputation": 20, "email_security": 15,
+	"subdomains": 12, "ct_logs": 8, "bgp": 5,
+	"fingerprint": 25, "threat_intel": 3,
 }
 
 func TestQueryUsage_HappyPath(t *testing.T) {
@@ -94,7 +109,7 @@ func TestQueryUsage_HappyPath(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(100, 30, 45.678, 80, 15, 10, 20, 15, 12, 8, 5, 25, 3, 2))
+			AddRow(aggRow(100, 30, 70, 45.678, 80, 15, happyPathFeatures)...))
 
 	// Status code query
 	mock.ExpectQuery("SELECT status_code").
@@ -140,7 +155,7 @@ func TestQueryUsage_HappyPath(t *testing.T) {
 	features := map[string]int{
 		"screenshot": 10, "reputation": 20, "email_security": 15,
 		"subdomains": 12, "ct_logs": 8, "bgp": 5,
-		"fingerprint": 25, "threat_intel": 3, "dns_security": 2,
+		"fingerprint": 25, "threat_intel": 3,
 	}
 	for k, want := range features {
 		if got := summary.FeatureUsage[k]; got != want {
@@ -194,7 +209,7 @@ func TestQueryUsage_NoData(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(aggRow(0, 0, 0, 0.0, 0, 0, nil)...))
 
 	// Status codes: no rows
 	mock.ExpectQuery("SELECT status_code").
@@ -283,7 +298,7 @@ func TestQueryUsage_StatusCodeQueryError(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(10, 3, 12.5, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(aggRow(10, 3, 7, 12.5, 8, 0, nil)...))
 
 	// Status code query fails
 	mock.ExpectQuery("SELECT status_code").
@@ -315,7 +330,7 @@ func TestQueryUsage_PathQueryError(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(10, 3, 12.5, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(aggRow(10, 3, 7, 12.5, 8, 0, nil)...))
 
 	// Status code query succeeds
 	mock.ExpectQuery("SELECT status_code").
@@ -353,7 +368,7 @@ func TestQueryUsage_WithCustomerFilter(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until, 42).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(5, 2, 20.0, 4, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(aggRow(5, 2, 8, 20.0, 4, 0, map[string]int{"screenshot": 1})...))
 
 	mock.ExpectQuery("SELECT status_code").
 		WithArgs(since, until, 42).
@@ -397,7 +412,7 @@ func TestQueryUsage_CacheHitRateCalculation(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(10, 3, 50.0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+			AddRow(aggRow(10, 3, 7, 50.0, 10, 0, nil)...))
 
 	mock.ExpectQuery("SELECT status_code").
 		WithArgs(since, until).

@@ -18,8 +18,29 @@ redis:
   addr: redis:6379
   password: ""
   db: 0
-  cache_ttl: 60m
-  negative_cache_ttl: 5m   # TTL for responses containing lookup errors
+  negative_cache_ttl: 5m   # TTL for IP responses containing lookup errors
+                           # (domain lookups cache per lookup and never cache failures)
+
+# Domain lookup results are cached per lookup under `lookup:<domain>:<name>`,
+# so each lookup expires on its own schedule. Anything not listed under `ttl`
+# falls back to `default_ttl`. Override individually with env vars, e.g.
+# CACHE_TTL_WHOIS=48h or CACHE_DEFAULT_TTL=30m.
+# `fingerprint` has no entry: it is computed from headers data rather than
+# fetched, so caching `headers` already caches it.
+cache:
+  default_ttl: 60m
+  ttl:
+    whois: 24h
+    ct_logs: 24h
+    subdomains: 24h
+    bgp: 24h
+    ssl: 4h
+    email_security: 4h
+    dns: 30m
+    headers: 30m
+    reputation: 30m
+    threat_intel: 30m
+    screenshot: 60m
 
 auth:
   cache_ttl: 5m

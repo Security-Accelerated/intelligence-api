@@ -15,9 +15,9 @@ func TestComputeRiskScore_NoData(t *testing.T) {
 
 func TestComputeRiskScore_CleanBaseLookups(t *testing.T) {
 	resp := &DomainResponse{
-		Whois: &WhoisInfo{CreatedDate: "1997-09-15T04:00:00Z"},
-		SSL:   &SSLInfo{DaysUntilExpiry: 200},
-		Headers: &HeadersInfo{
+		Whois: &WhoisResult{WhoisInfo: &WhoisInfo{CreatedDate: "1997-09-15T04:00:00Z"}},
+		SSL:   &SSLResult{SSLInfo: &SSLInfo{DaysUntilExpiry: 200}},
+		Headers: &HeadersResult{HeadersInfo: &HeadersInfo{
 			StatusCode: 200,
 			SecurityHeaders: &SecurityHeaders{
 				StrictTransportSecurity: "max-age=63072000",
@@ -26,7 +26,7 @@ func TestComputeRiskScore_CleanBaseLookups(t *testing.T) {
 				XContentTypeOptions:     "nosniff",
 				ReferrerPolicy:          "no-referrer",
 			},
-		},
+		}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {
@@ -42,8 +42,8 @@ func TestComputeRiskScore_CleanBaseLookups(t *testing.T) {
 
 func TestComputeRiskScore_ThreatIntelDominates(t *testing.T) {
 	resp := &DomainResponse{
-		ThreatIntel: &ThreatIntelInfo{Score: 100, RiskLevel: "critical"},
-		Reputation:  &ReputationResult{Score: 100, Risk: "critical"},
+		ThreatIntel: &ThreatIntelResult{ThreatIntelInfo: &ThreatIntelInfo{Score: 100, RiskLevel: "critical"}},
+		Reputation:  &ReputationResult{ReputationInfo: &ReputationInfo{Score: 100, Risk: "critical"}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {
@@ -59,7 +59,7 @@ func TestComputeRiskScore_ThreatIntelDominates(t *testing.T) {
 
 func TestComputeRiskScore_ExpiredSSL(t *testing.T) {
 	resp := &DomainResponse{
-		SSL: &SSLInfo{Expired: true, DaysUntilExpiry: -10},
+		SSL: &SSLResult{SSLInfo: &SSLInfo{Expired: true, DaysUntilExpiry: -10}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {
@@ -76,7 +76,7 @@ func TestComputeRiskScore_ExpiredSSL(t *testing.T) {
 
 func TestComputeRiskScore_MissingSecurityHeaders(t *testing.T) {
 	resp := &DomainResponse{
-		Headers: &HeadersInfo{StatusCode: 200, SecurityHeaders: nil},
+		Headers: &HeadersResult{HeadersInfo: &HeadersInfo{StatusCode: 200, SecurityHeaders: nil}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {
@@ -89,10 +89,10 @@ func TestComputeRiskScore_MissingSecurityHeaders(t *testing.T) {
 
 func TestComputeRiskScore_EmailSecurityIssues(t *testing.T) {
 	resp := &DomainResponse{
-		EmailSecurity: &EmailSecurityInfo{
+		EmailSecurity: &EmailSecurityResult{EmailSecurityInfo: &EmailSecurityInfo{
 			SPF:   &SPFRecord{Raw: "v=spf1 +all", All: "+all"},
 			DMARC: nil,
-		},
+		}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {
@@ -105,7 +105,7 @@ func TestComputeRiskScore_EmailSecurityIssues(t *testing.T) {
 
 func TestComputeRiskScore_NewDomain(t *testing.T) {
 	resp := &DomainResponse{
-		Whois: &WhoisInfo{CreatedDate: riskNow.AddDate(0, 0, -10).Format(time.RFC3339)},
+		Whois: &WhoisResult{WhoisInfo: &WhoisInfo{CreatedDate: riskNow.AddDate(0, 0, -10).Format(time.RFC3339)}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {
@@ -118,8 +118,8 @@ func TestComputeRiskScore_NewDomain(t *testing.T) {
 
 func TestComputeRiskScore_UnparsableWhoisDateSkipsComponent(t *testing.T) {
 	resp := &DomainResponse{
-		Whois: &WhoisInfo{CreatedDate: "before unixtime"},
-		SSL:   &SSLInfo{DaysUntilExpiry: 200},
+		Whois: &WhoisResult{WhoisInfo: &WhoisInfo{CreatedDate: "before unixtime"}},
+		SSL:   &SSLResult{SSLInfo: &SSLInfo{DaysUntilExpiry: 200}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {
@@ -135,8 +135,8 @@ func TestComputeRiskScore_UnparsableWhoisDateSkipsComponent(t *testing.T) {
 func TestComputeRiskScore_WeightsRenormalized(t *testing.T) {
 	// threat_intel (0.35) at 100 and reputation (0.25) at 0 → 100*0.35/0.6 ≈ 58
 	resp := &DomainResponse{
-		ThreatIntel: &ThreatIntelInfo{Score: 100},
-		Reputation:  &ReputationResult{Score: 0},
+		ThreatIntel: &ThreatIntelResult{ThreatIntelInfo: &ThreatIntelInfo{Score: 100}},
+		Reputation:  &ReputationResult{ReputationInfo: &ReputationInfo{Score: 0}},
 	}
 	risk := ComputeRiskScore(resp, riskNow)
 	if risk == nil {

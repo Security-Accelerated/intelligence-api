@@ -9,8 +9,8 @@ import (
 
 // UsageLog returns middleware that records request metadata to a usage.Recorder
 // after the request completes. It reads context keys set by auth middleware and
-// handlers (api_key_id, api_key_plan, customer_id, domain_count, cache_hit, and
-// the feature-request booleans).
+// handlers (api_key_id, api_key_plan, customer_id, domain_count, ip_count,
+// lookups_requested, and the per-lookup cache hit/miss counts).
 func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -48,59 +48,21 @@ func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 				entry.IPCount = n
 			}
 		}
-		if v, ok := c.Get("cache_hit"); ok {
-			if b, ok := v.(bool); ok {
-				entry.CacheHit = b
+		if v, ok := c.Get("cache_hits"); ok {
+			if n, ok := v.(int); ok {
+				entry.CacheHits = n
 			}
 		}
-		if v, ok := c.Get("screenshot_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.Screenshot = b
+		if v, ok := c.Get("cache_misses"); ok {
+			if n, ok := v.(int); ok {
+				entry.CacheMisses = n
 			}
 		}
-		if v, ok := c.Get("reputation_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.Reputation = b
-			}
-		}
-		if v, ok := c.Get("email_security_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.EmailSecurity = b
-			}
-		}
-		if v, ok := c.Get("subdomain_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.Subdomains = b
-			}
-		}
-		if v, ok := c.Get("ct_logs_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.CTLogs = b
-			}
-		}
-		if v, ok := c.Get("bgp_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.BGP = b
-			}
-		}
-		if v, ok := c.Get("fingerprint_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.Fingerprint = b
-			}
-		}
-		if v, ok := c.Get("threat_intel_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.ThreatIntel = b
-			}
-		}
-		if v, ok := c.Get("dns_security_requested"); ok {
-			if b, ok := v.(bool); ok {
-				entry.DNSSecurity = b
-			}
-		}
-		if v, ok := c.Get("ip_threat_intel_requested"); ok {
-			if b, ok := v.(bool); ok && b {
-				entry.ThreatIntel = true
+		// Requested lookups, regardless of how they were served. Both the domain
+		// and IP handlers publish this key.
+		if v, ok := c.Get("lookups_requested"); ok {
+			if names, ok := v.([]string); ok {
+				entry.Lookups = names
 			}
 		}
 
