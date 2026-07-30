@@ -338,7 +338,7 @@ X-API-Key: {{adminKey}}
 }
 
 ### Domain lookup with aggregate risk score (admin key)
-# risk scores whichever other lookups you request and costs no extra network call.
+# The risk score is computed from whichever other lookups you request, and costs no extra network call.
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{adminKey}}
