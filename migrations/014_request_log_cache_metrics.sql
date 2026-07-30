@@ -3,7 +3,9 @@
 -- and misses are counted individually.
 ALTER TABLE request_log ADD COLUMN IF NOT EXISTS cache_hits   INT NOT NULL DEFAULT 0;
 ALTER TABLE request_log ADD COLUMN IF NOT EXISTS cache_misses INT NOT NULL DEFAULT 0;
-ALTER TABLE request_log DROP COLUMN IF EXISTS cache_hit;
+-- Dropping the old cache_hit column lives in migration 016, deliberately. This
+-- file is additive only, so it can be applied to a running deployment before
+-- the code that uses the new columns ships.
 
 -- The four base lookups are now individually selectable, so they are tracked
 -- alongside the optional ones for feature-usage analytics.
