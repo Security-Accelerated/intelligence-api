@@ -76,7 +76,7 @@ func newIPTestRouter(svc IPLookupService) *gin.Engine {
 func newIPTestRouterWithPlan(svc IPLookupService, plan string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(Deps{IPService: svc})
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_plan", plan)
 		c.Next()
@@ -87,7 +87,7 @@ func newIPTestRouterWithPlan(svc IPLookupService, plan string) *gin.Engine {
 func newIPTestRouterWithCfg(svc IPLookupService, plan string, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, svc, nil, nil, nil, nil, nil, cfg, nil, nil, nil, nil)
+	h := New(Deps{IPService: svc, Config: cfg})
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_plan", plan)
 		c.Next()
@@ -332,7 +332,7 @@ func TestIPLookup_OversizedBody_Returns413(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(middleware.BodyLimit(128))
-	h := New(nil, &mockIPService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(Deps{IPService: &mockIPService{}})
 	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
 		c.Set("api_key_plan", "pro")
 		c.Next()
@@ -523,7 +523,9 @@ func TestIPLookup_LookupNamesNormalized(t *testing.T) {
 func TestIPLookup_SetsContextKeys(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, &mockIPService{stats: domain.CacheStats{Hits: 2, Misses: 1}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(Deps{
+		IPService: &mockIPService{stats: domain.CacheStats{Hits: 2, Misses: 1}},
+	})
 
 	var lookups []string
 	var hits, misses, ipCount int

@@ -100,6 +100,9 @@ The lookup endpoint returns `{"results": [...]}` rather than a bare array, so ev
 ### SSRF prevention at the dialer level
 The `safenet` package provides a `DialControl` function that rejects connections to private, loopback, link-local, multicast, unspecified, and reserved IPs (CGNAT, 0/8, 192.0.0.0/24, TEST-NET-1/2/3, 198.18.0.0/15 benchmarking, 240.0.0.0/4, 2001:db8::/32). The core check is `IsPrivateAddr(netip.Addr)`, which unmaps IPv4-mapped IPv6 first; `IsPrivateIP(net.IP)` is a compatibility adapter. It fires after DNS resolution (no TOCTOU race). All HTTP clients in the `domain` package use `safenet.SafeDialer()` via shared transports in `domain/transport.go`.
 
+### Handler dependencies
+`handler.New` takes a single `Deps` struct rather than positional parameters. Most fields are nilable and several share a type, so a misordered argument list would have compiled silently; naming them also documents which surfaces a given Handler serves — `New(Deps{RedisCache: rc})` instead of `New(nil, nil, nil, nil, nil, nil, nil, nil, rc, nil, nil, nil)`. Every field is optional; a nil service makes its endpoints return 503 rather than panicking, which keeps partially-configured deployments serving what they can. Adding a dependency is now additive: existing call sites are untouched.
+
 ### Hashed API keys
 Keys are stored as `hex(sha256(key))` — never plaintext. The auth middleware hashes the incoming key and looks it up. The `CachedRepository` wraps PostgreSQL with an in-memory TTL cache (keyed by hash) using RWMutex. Admin endpoint allows cache invalidation after plan changes.
 
@@ -225,6 +228,6 @@ Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, las
 4. Define a service interface in `internal/handler/handler.go`
 5. Register the route in `RegisterProtectedRoutes()` with `RequireAdmin()` if admin-only
 6. Wire the service in `internal/app/app.go`
-7. Update handler `New()` signature and all test call sites
+7. Add a field to `handler.Deps` and set it in `app.go` — existing test call sites need no change, since they name only the dependencies they use
 8. Add context keys to `middleware/request_logger.go` if needed
 9. Update README, api.http, smoke test, integration tests, changelog.yaml

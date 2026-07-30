@@ -34,7 +34,7 @@ func (m *mockFingerprintService) UpdateRules(_ context.Context, rules []domain.T
 func newFingerprintRouter(fpSvc FingerprintAdminService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, fpSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := New(Deps{FingerprintService: fpSvc})
 
 	admin := r.Group("/v1/admin")
 	admin.Use(func(c *gin.Context) {

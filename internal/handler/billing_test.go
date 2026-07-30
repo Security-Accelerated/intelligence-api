@@ -13,12 +13,12 @@ import (
 )
 
 type mockBillingService struct {
-	webhookErr      error
-	provisionedKey  string
-	provisionedErr  error
-	lastPayload     []byte
-	lastSigHeader   string
-	lastSessionID   string
+	webhookErr     error
+	provisionedKey string
+	provisionedErr error
+	lastPayload    []byte
+	lastSigHeader  string
+	lastSessionID  string
 }
 
 func (m *mockBillingService) HandleWebhook(_ context.Context, payload []byte, sigHeader string) error {
@@ -35,7 +35,7 @@ func (m *mockBillingService) GetProvisionedKey(_ context.Context, sessionID stri
 func newBillingTestRouter(billingSvc *mockBillingService, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, billingSvc, nil, nil, nil, cfg, nil, nil, nil, nil)
+	h := New(Deps{BillingService: billingSvc, Config: cfg})
 	h.RegisterRoutes(r)
 	return r
 }

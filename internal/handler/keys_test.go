@@ -27,7 +27,7 @@ func (m *mockKeyRotator) Rotate(_ context.Context, customerID int) (string, time
 func newKeysRouter(svc KeyRotationService, customerID any) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := New(nil, nil, nil, nil, nil, svc, nil, nil, nil, nil, nil, nil)
+	h := New(Deps{KeyRotationService: svc})
 	r.POST("/v1/keys/rotate", func(c *gin.Context) {
 		if customerID != nil {
 			c.Set("customer_id", customerID)

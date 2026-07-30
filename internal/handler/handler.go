@@ -84,28 +84,49 @@ type Handler struct {
 	changelog          []ChangelogVersion
 }
 
-// New builds the Handler with every service it routes to. Nil services are
-// tolerated — the corresponding endpoints return 503 rather than panicking,
-// which keeps partially-configured deployments serving what they can.
-func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, keyRotationService KeyRotationService, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
+// Deps carries everything a Handler routes to. A struct rather than positional
+// parameters because most fields are nilable and several share a type, so a
+// misordered argument list would compile silently; naming them at the call site
+// also documents which surfaces a given Handler actually serves.
+//
+// Every field is optional. A nil service makes its endpoints return 503 rather
+// than panicking, which keeps partially-configured deployments serving what
+// they can.
+type Deps struct {
+	DomainService      DomainLookupService
+	IPService          IPLookupService
+	FingerprintService FingerprintAdminService
+	BillingService     billing.Service
+	UsageService       usage.Queryer
+	KeyRotationService KeyRotationService
+	GeoRefresher       GeoIPRefresher
+	Config             *viper.Viper
+	RedisCache         *cache.RedisCache
+	AuthCacheStats     AuthCacheStats
+	DB                 *sql.DB
+	Status             *config.StatusSnapshot
+}
+
+// New builds the Handler from its dependencies.
+func New(d Deps) *Handler {
 	changelog, err := parseChangelog()
 	if err != nil {
 		logging.Logger().Error("failed to parse changelog", zap.Error(err))
 	}
 
 	return &Handler{
-		domainService:      domainService,
-		ipService:          ipService,
-		fingerprintService: fingerprintService,
-		billingService:     billingService,
-		usageService:       usageService,
-		keyRotationService: keyRotationService,
-		geoRefresher:       geoRefresher,
-		cfg:                cfg,
-		redisCache:         redisCache,
-		authCacheStats:     authCacheStats,
-		db:                 db,
-		status:             status,
+		domainService:      d.DomainService,
+		ipService:          d.IPService,
+		fingerprintService: d.FingerprintService,
+		billingService:     d.BillingService,
+		usageService:       d.UsageService,
+		keyRotationService: d.KeyRotationService,
+		geoRefresher:       d.GeoRefresher,
+		cfg:                d.Config,
+		redisCache:         d.RedisCache,
+		authCacheStats:     d.AuthCacheStats,
+		db:                 d.DB,
+		status:             d.Status,
 		changelog:          changelog,
 	}
 }

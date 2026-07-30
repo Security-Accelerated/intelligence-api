@@ -293,7 +293,20 @@ func Run(logger *zap.Logger, version string) error {
 	ipService := service.NewIPService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
 
 	// HTTP
-	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, keyRotationSvc, geoReader, cfg, redisCache, cachedRepo, db, status)
+	h := handler.New(handler.Deps{
+		DomainService:      domainService,
+		IPService:          ipService,
+		FingerprintService: fpService,
+		BillingService:     billingSvc,
+		UsageService:       usageQuerySvc,
+		KeyRotationService: keyRotationSvc,
+		GeoRefresher:       geoReader,
+		Config:             cfg,
+		RedisCache:         redisCache,
+		AuthCacheStats:     cachedRepo,
+		DB:                 db,
+		Status:             status,
+	})
 	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
 	serverCfg := httpapi.ServerConfig{
 		Port:            status.System.Port,
