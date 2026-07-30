@@ -13,7 +13,7 @@ import (
 // Results are deduplicated by ASN (multiple IPs in the same ASN are merged,
 // keeping the first IP seen).
 func LookupBGP(ctx context.Context, domainName string) (*BGPInfo, error) {
-	ips, err := net.DefaultResolver.LookupHost(ctx, domainName)
+	ips, err := Resolver().LookupHost(ctx, domainName)
 	if err != nil {
 		return nil, fmt.Errorf("bgp: resolve domain: %w", err)
 	}
@@ -73,7 +73,7 @@ func lookupCymruOrigin(ctx context.Context, ip string) (*ASNRecord, error) {
 	}
 
 	name := reversed + ".origin.asn.cymru.com"
-	txts, err := net.DefaultResolver.LookupTXT(ctx, name)
+	txts, err := Resolver().LookupTXT(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("bgp: cymru origin lookup: %w", err)
 	}
@@ -112,7 +112,7 @@ func parseCymruOrigin(ip, txt string) (*ASNRecord, error) {
 // Example: "15169 | US | arin | 2000-03-30 | GOOGLE, US"
 func lookupCymruASName(ctx context.Context, asn int) (string, error) {
 	name := fmt.Sprintf("AS%d.asn.cymru.com", asn)
-	txts, err := net.DefaultResolver.LookupTXT(ctx, name)
+	txts, err := Resolver().LookupTXT(ctx, name)
 	if err != nil {
 		return "", fmt.Errorf("bgp: cymru AS name lookup: %w", err)
 	}

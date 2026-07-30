@@ -90,27 +90,37 @@ func TestNewExternalResolver_RespectsContextCancellation(t *testing.T) {
 }
 
 func TestInitResolver_SetsDefaultServers(t *testing.T) {
-	prevDial, prevPreferGo := net.DefaultResolver.Dial, net.DefaultResolver.PreferGo
+	prevResolver := externalResolver.Load()
 	prevActive := activeDNSServers
 	t.Cleanup(func() {
-		net.DefaultResolver.Dial = prevDial
-		net.DefaultResolver.PreferGo = prevPreferGo
+		externalResolver.Store(prevResolver)
 		activeDNSServers = prevActive
 	})
 
 	// Empty input falls back to the built-in list and installs a working
-	// resolver on net.DefaultResolver. Asserted on the wiring rather than by
-	// resolving a real name, so it holds with no network.
+	// resolver for lookups. Asserted on the wiring rather than by resolving a
+	// real name, so it holds with no network.
 	InitResolver(nil, 0)
 
 	if got := ActiveDNSServers(); len(got) != len(DefaultDNSServers) {
 		t.Errorf("ActiveDNSServers() = %v, want the defaults", got)
 	}
-	if net.DefaultResolver.Dial == nil {
+	if Resolver() == net.DefaultResolver {
+		t.Error("InitResolver did not install a lookup resolver")
+	}
+	if Resolver().Dial == nil {
 		t.Error("InitResolver did not install a Dial hook")
 	}
-	if !net.DefaultResolver.PreferGo {
+	if !Resolver().PreferGo {
 		t.Error("InitResolver must set PreferGo so the Dial hook is used")
+	}
+
+	// InitResolver must not touch the global: infrastructure connections
+	// (postgres, redis) keep resolving through the system resolver. This is
+	// the regression that broke pooled reconnects — see issue #62.
+	if net.DefaultResolver.Dial != nil {
+		t.Error("InitResolver installed a Dial hook on net.DefaultResolver; " +
+			"internal hostnames would stop resolving once pooled connections recycle")
 	}
 
 	// And with explicit servers, a real lookup goes to them.
@@ -119,7 +129,7 @@ func TestInitResolver_SetsDefaultServers(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	addrs, err := net.DefaultResolver.LookupHost(ctx, "example.com")
+	addrs, err := Resolver().LookupHost(ctx, "example.com")
 	if err != nil {
 		t.Fatalf("InitResolver failed to configure a working resolver: %v", err)
 	}

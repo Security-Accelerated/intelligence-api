@@ -144,21 +144,17 @@ func startBlackholeDNS(t *testing.T) (string, *atomic.Int32) {
 	return pc.LocalAddr().String(), &hits
 }
 
-// useLocalResolver points net.DefaultResolver at servers for the duration of
+// useLocalResolver points the lookup resolver at servers for the duration of
 // the test, mirroring what InitResolver does in production, and restores it
-// afterwards. Lookups that go through net.DefaultResolver (LookupDNS, BGP,
+// afterwards. Lookups that go through domain.Resolver() (LookupDNS, BGP,
 // reputation, reverse DNS) then resolve against a server the test controls.
+//
+// Note this leaves net.DefaultResolver alone: overriding the global is exactly
+// the bug this indirection exists to prevent.
 func useLocalResolver(t *testing.T, servers ...string) {
 	t.Helper()
 
-	// Swap the fields, not the struct: net.Resolver holds a singleflight.Group
-	// with a mutex, so copying it whole trips go vet's copylocks check.
-	prevDial, prevPreferGo := net.DefaultResolver.Dial, net.DefaultResolver.PreferGo
-	r := NewExternalResolver(servers, 2*time.Second)
-	net.DefaultResolver.PreferGo = r.PreferGo
-	net.DefaultResolver.Dial = r.Dial
-	t.Cleanup(func() {
-		net.DefaultResolver.Dial = prevDial
-		net.DefaultResolver.PreferGo = prevPreferGo
-	})
+	prev := externalResolver.Load()
+	externalResolver.Store(NewExternalResolver(servers, 2*time.Second))
+	t.Cleanup(func() { externalResolver.Store(prev) })
 }

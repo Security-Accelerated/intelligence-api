@@ -85,7 +85,7 @@ func LookupReputation(ctx context.Context, domain string) (*ReputationInfo, []Lo
 func lookupSpamhausDBL(ctx context.Context, domain string) (*ProviderResult, error) {
 	query := domain + spamhausDBLSuffix
 
-	addrs, err := net.DefaultResolver.LookupHost(ctx, query)
+	addrs, err := Resolver().LookupHost(ctx, query)
 	if err != nil {
 		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 			return &ProviderResult{Listed: false, Provider: "spamhaus_dbl"}, nil
@@ -109,7 +109,7 @@ func lookupSpamhausDBL(ctx context.Context, domain string) (*ProviderResult, err
 func lookupSURBL(ctx context.Context, domain string) (*ProviderResult, error) {
 	query := domain + surblSuffix
 
-	addrs, err := net.DefaultResolver.LookupHost(ctx, query)
+	addrs, err := Resolver().LookupHost(ctx, query)
 	if err != nil {
 		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 			return &ProviderResult{Listed: false, Provider: "surbl"}, nil
@@ -138,7 +138,7 @@ func lookupSURBL(ctx context.Context, domain string) (*ProviderResult, error) {
 func lookupURIBL(ctx context.Context, domain string) (*ProviderResult, error) {
 	query := domain + uriblSuffix
 
-	addrs, err := net.DefaultResolver.LookupHost(ctx, query)
+	addrs, err := Resolver().LookupHost(ctx, query)
 	if err != nil {
 		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 			return &ProviderResult{Listed: false, Provider: "uribl"}, nil
@@ -167,7 +167,7 @@ func lookupURIBL(ctx context.Context, domain string) (*ProviderResult, error) {
 
 func lookupSpamhausZEN(ctx context.Context, domain string) (*ProviderResult, error) {
 	// ZEN is IP-based: resolve domain A records, then check each IP.
-	ips, err := net.DefaultResolver.LookupHost(ctx, domain)
+	ips, err := Resolver().LookupHost(ctx, domain)
 	if err != nil {
 		if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 			return &ProviderResult{Listed: false, Provider: "spamhaus_zen"}, nil
@@ -182,7 +182,7 @@ func lookupSpamhausZEN(ctx context.Context, domain string) (*ProviderResult, err
 		}
 
 		query := reversed + spamhausZENSuffix
-		addrs, err := net.DefaultResolver.LookupHost(ctx, query)
+		addrs, err := Resolver().LookupHost(ctx, query)
 		if err != nil {
 			if dnsErr, ok := err.(*net.DNSError); ok && dnsErr.IsNotFound {
 				continue

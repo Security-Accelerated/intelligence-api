@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -269,21 +270,52 @@ func ActiveDNSServers() []string {
 	return activeDNSServers
 }
 
-// InitResolver overrides net.DefaultResolver with an external resolver.
-// Call this AFTER database and Redis connections are established so that
-// platform-internal hostnames (postgres, redis) resolve via system DNS.
+// externalResolver is the resolver every intelligence lookup uses. It holds nil
+// until InitResolver runs, which means the system resolver.
+//
+// Deliberately NOT net.DefaultResolver. Overriding the global sends every
+// resolution in the process to public DNS, including the ones this service
+// makes to reach its own infrastructure. Postgres and Redis addressed by a name
+// only the platform's resolver knows — a Docker Compose service, a Kubernetes
+// service, a Fly .internal address — then fail to resolve. It survived review
+// once because app.go called InitResolver after both had connected, but
+// database/sql recycles pooled connections on conn_max_lifetime, and every
+// replacement opened after the override failed with "no such host".
+//
+// An atomic pointer rather than a plain var because tests swap it while the
+// package is otherwise in use.
+var externalResolver atomic.Pointer[net.Resolver]
+
+// Resolver returns the resolver intelligence lookups should use: the external
+// servers configured by InitResolver, or the system resolver before that.
+//
+// Use this instead of net.DefaultResolver anywhere the target is a name from
+// user input. Infrastructure connections must keep using the system resolver.
+func Resolver() *net.Resolver {
+	if r := externalResolver.Load(); r != nil {
+		return r
+	}
+	return net.DefaultResolver
+}
+
+// InitResolver points intelligence lookups at the given external DNS servers.
+//
+// Unlike the previous implementation this touches no global state beyond the
+// domain package, so it is safe to call at any point during startup: nothing
+// else in the process changes how it resolves names.
 func InitResolver(servers []string, dialTimeout time.Duration) {
 	if len(servers) == 0 {
 		servers = DefaultDNSServers
 	}
 	activeDNSServers = servers
+	externalResolver.Store(NewExternalResolver(servers, dialTimeout))
+}
 
-	// Assign the fields rather than copying the struct. net.Resolver carries an
-	// internal singleflight.Group containing a mutex, so whole-struct
-	// assignment copies a lock — harmless at startup, when nothing is in
-	// flight, but it is what `go vet` warns about and there is no reason to do
-	// it when setting two fields has the same effect.
-	r := NewExternalResolver(servers, dialTimeout)
-	net.DefaultResolver.PreferGo = r.PreferGo
-	net.DefaultResolver.Dial = r.Dial
+// SetResolverForTest swaps the lookup resolver and restores it via t.Cleanup.
+// Exported for tests in other packages; the domain package's own tests use the
+// local-server helper in testdns_test.go.
+func SetResolverForTest(t interface{ Cleanup(func()) }, r *net.Resolver) {
+	prev := externalResolver.Load()
+	externalResolver.Store(r)
+	t.Cleanup(func() { externalResolver.Store(prev) })
 }

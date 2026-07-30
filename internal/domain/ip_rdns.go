@@ -12,7 +12,7 @@ import (
 // the associated hostnames. Returns an empty result (not an error) when no PTR
 // record exists, since many IPs legitimately lack reverse DNS.
 func LookupReverseDNS(ctx context.Context, ip string) (*ReverseDNSInfo, error) {
-	names, err := net.DefaultResolver.LookupAddr(ctx, ip)
+	names, err := Resolver().LookupAddr(ctx, ip)
 	if err != nil {
 		var dnsErr *net.DNSError
 		if errors.As(err, &dnsErr) && dnsErr.IsNotFound {

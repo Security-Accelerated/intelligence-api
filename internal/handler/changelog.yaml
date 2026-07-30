@@ -8,6 +8,20 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.59.0
+  date: 2026-07-30
+  changes:
+    - text: "Fixed a bug where the service could lose its database connection after a few minutes of uptime in deployments that address Postgres or Redis by an internal hostname"
+      audience: public
+    - text: "InitResolver no longer overrides net.DefaultResolver. It sets a resolver scoped to the domain package, returned by domain.Resolver(), which the 11 lookup call sites now use explicitly"
+      audience: internal
+    - text: "Overriding the global sent every resolution in the process to public DNS, including the service's own infrastructure connections. app.go called InitResolver after Postgres and Redis connected, but that only protected the initial connections: database/sql recycles on conn_max_lifetime (5m) and conn_max_idle_time (2m), and every replacement failed with 'no such host'. Production was unaffected because Neon and Upstash are public hostnames; local dev broke minutes after every start, and Kubernetes service DNS or Fly .internal addresses would have broken immediately"
+      audience: internal
+    - text: "The startup-ordering constraint in app.go is gone with it — InitResolver can now run at any point, since nothing outside the domain package changes how it resolves names"
+      audience: internal
+    - text: "TestInitResolver_SetsDefaultServers now asserts net.DefaultResolver.Dial stays nil, so reinstating the global override fails the build"
+      audience: internal
+
 - version: v0.58.0
   date: 2026-07-30
   changes:

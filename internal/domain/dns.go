@@ -6,7 +6,7 @@ import (
 )
 
 func LookupDNS(ctx context.Context, domain string) (*DNSInfo, error) {
-	resolver := net.DefaultResolver
+	resolver := Resolver()
 	info := &DNSInfo{}
 	var lastErr error
 
