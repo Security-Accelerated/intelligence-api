@@ -40,8 +40,8 @@ func (h *Handler) RotateKey(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"api_key":            rawKey,
-		"old_keys_expire_at": oldExpiry,
-		"message":            "store this key now — it cannot be retrieved again; previous keys stop working at old_keys_expire_at",
+		"api_key":             rawKey,
+		"old_keys_expire_at":  oldExpiry,
+		"message":             "store this key now — it cannot be retrieved again; previous keys stop working at old_keys_expire_at",
 	})
 }
