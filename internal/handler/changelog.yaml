@@ -19,6 +19,10 @@
       audience: internal
     - text: "TestOpenAPIMatchesLookupContract compares the spec's lookups enum and required fields against domain.AllLookupNames and AllIPLookupNames, so adding a lookup without updating the spec now fails CI"
       audience: internal
+    - text: "The sales overview was missing DNSSEC/CAA and the aggregate risk score entirely — two shipped features it never mentioned — and its example request omitted both names. Added sections for each and corrected the example"
+      audience: internal
+    - text: "api.http gained a risk example; it was the only lookup with no request in the file"
+      audience: internal
     - text: "TestDocs_RequestBodyListsOnlyContractFields asserts the docs request-body tables list only the target array and lookups — a per-feature boolean row reappearing fails the build. Grepping could not catch the stale row, since the lookup names legitimately appear all over those pages"
       audience: internal
 
