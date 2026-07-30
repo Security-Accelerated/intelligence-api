@@ -417,6 +417,25 @@ else
 fi
 
 echo "=== IP Lookup — Auth ==="
+
+# Several checks below assert on geo/asn content, which needs the MaxMind
+# databases. When they are absent every one of those checks fails as an opaque
+# "jq filter failed", which says nothing about the cause. Ask /v1/health once and
+# say so plainly instead.
+#
+# Still a failure, not a warning: geo being unavailable is a real problem
+# wherever this runs, and downgrading it would hide exactly the regression the
+# checks exist to catch. The message just makes the cause obvious.
+geoip_state=$(curl -s -m 10 "$HOST/v1/health" | jq -r '.components.geoip // "unknown"' 2>/dev/null)
+if [ "$geoip_state" != "ok" ]; then
+    printf "  \033[31m✗\033[0m GeoIP databases are not loaded (/v1/health reports geoip=%s)\n" "$geoip_state"
+    printf "      The geo/asn content checks below will fail as a result.\n"
+    printf "      Locally: set MAXMIND_LICENSE_KEY in .env and restart — the app downloads on boot.\n"
+    printf "      Deployed: check startup logs, or POST %s/v1/admin/geoip/refresh to force it.\n" "$HOST"
+    fail=$((fail + 1))
+    errors+=("GeoIP databases not loaded (geoip=$geoip_state) — geo/asn checks cannot pass")
+fi
+
 IP='{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
 post 200 "admin key" /v1/ip/lookup "$ADMIN" "$IP"
 post 200 "basic key" /v1/ip/lookup "$BASIC" "$IP"

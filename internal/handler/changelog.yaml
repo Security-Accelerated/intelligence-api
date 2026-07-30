@@ -25,6 +25,10 @@
       audience: internal
     - text: "Fly requires one volume per machine — two volumes for two machines, provisioned in separate zones"
       audience: internal
+    - text: "Docker Compose now passes MAXMIND_LICENSE_KEY through from .env, so local dev downloads and persists the GeoIP databases to ./data/maxmind the same way production does. Previously geo and asn were permanently unavailable locally"
+      audience: internal
+    - text: "The smoke test asks /v1/health about GeoIP before the geo/asn content checks and reports the cause, rather than emitting opaque 'jq filter failed' lines. Still a failure, not a warning — geo being unavailable is a real problem wherever it runs"
+      audience: internal
     - text: "Volumes mount root-owned with no uid/gid option, so docker-entrypoint.sh chowns the mount as root and execs the app as appuser via su-exec. The Dockerfile no longer sets USER; the application still runs unprivileged. An unwritable mount warns loudly and keeps serving rather than crash-looping the machine over one degraded lookup"
       audience: internal
 
