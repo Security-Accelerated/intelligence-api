@@ -8,6 +8,20 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.57.0
+  date: 2026-07-30
+  changes:
+    - text: "GeoIP databases now load themselves at startup. `geo` and `asn` were unavailable after most restarts because the databases had to be bootstrapped by hand; the server now downloads them in the background on boot when they are missing or out of date"
+      audience: public
+    - text: "The download runs in a background goroutine rather than blocking startup — it is around 80MB, and blocking would delay the listener past the platform health check on every cold start. geo and asn report that they are unavailable for the first few seconds instead"
+      audience: internal
+    - text: "New maxmind.max_age (default 168h) re-downloads databases older than that at startup; MaxMind publishes GeoLite2 updates twice a week. 0 disables the check. A stale database is loaded first and refreshed behind it"
+      audience: internal
+    - text: "A database that exists but cannot be opened — a truncated download from a killed machine — is now treated as absent and re-downloaded rather than leaving an empty reader in place"
+      audience: internal
+    - text: "planGeoIP isolates the load/download decision from the download itself, so the startup behaviour is covered by tests that need no network"
+      audience: internal
+
 - version: v0.56.0
   date: 2026-07-30
   changes:
