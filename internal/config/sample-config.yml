@@ -131,6 +131,9 @@ maxmind:
   db_path: "/data/maxmind"
   city_db: "GeoLite2-City.mmdb"
   asn_db: "GeoLite2-ASN.mmdb"
+  # Databases older than this are re-downloaded in the background at startup.
+  # MaxMind publishes GeoLite2 updates twice a week. 0 disables the check.
+  max_age: "168h"
 
 threat_intel:
   virustotal_api_key: ""

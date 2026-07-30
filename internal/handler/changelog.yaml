@@ -11,13 +11,22 @@
 - version: v0.57.0
   date: 2026-07-30
   changes:
-    - text: "GeoIP databases now persist across restarts on a Fly volume, so geo and asn are available immediately on a cold start rather than after a re-download"
+    - text: "GeoIP databases now load themselves at startup and persist across restarts. `geo` and `asn` were unavailable after most restarts because the databases had to be bootstrapped by hand; they are now stored on a volume and downloaded automatically on boot when missing or out of date"
       audience: public
-    - text: "Added a maxmind_data volume mounted at /data/maxmind. Machine filesystems are recreated from the image on every start, so the databases previously vanished on each restart and had to be bootstrapped by hand"
+    - text: "The download runs in a background goroutine rather than blocking startup — it is around 80MB, and blocking would delay the listener past the platform health check on every cold start. geo and asn report that they are unavailable for the first few seconds instead"
+      audience: internal
+    - text: "New maxmind.max_age (default 168h) re-downloads databases older than that at startup; MaxMind publishes GeoLite2 updates twice a week. 0 disables the check. A stale database is loaded first and refreshed behind it"
+      audience: internal
+    - text: "A database that exists but cannot be opened — a truncated download from a killed machine — is now treated as absent and re-downloaded rather than leaving an empty reader in place"
+      audience: internal
+    - text: "planGeoIP isolates the load/download decision from the download itself, so the startup behaviour is covered by tests that need no network"
+      audience: internal
+    - text: "Added a maxmind_data volume mounted at /data/maxmind. Machine filesystems are recreated from the image on every start, so without it the databases are re-downloaded on every cold start"
       audience: internal
     - text: "Fly requires one volume per machine — two volumes for two machines, provisioned in separate zones"
       audience: internal
-    - text: "Volumes mount root-owned with no uid/gid option, so docker-entrypoint.sh chowns the mount as root and execs the app as appuser via su-exec. The Dockerfile no longer sets USER; the application still runs unprivileged. Without this the download fails with permission denied, silently"
+    - text: "Volumes mount root-owned with no uid/gid option, so docker-entrypoint.sh chowns the mount as root and execs the app as appuser via su-exec. The Dockerfile no longer sets USER; the application still runs unprivileged. An unwritable mount warns loudly and keeps serving rather than crash-looping the machine over one degraded lookup"
+      audience: internal
       audience: internal
 
 - version: v0.56.0
