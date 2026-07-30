@@ -27,7 +27,7 @@ func Run(logger *zap.Logger, version string) error {
 	logger = logger.With(zap.String("version", version))
 	cfg := config.Config()
 
-	status := config.NewStatusSnapshot(version)
+	status := config.NewStatusSnapshot(version, domain.AllLookupNames)
 
 	rlCfg := middleware.RateLimitConfig{
 		Free:  cfg.GetInt("rate_limit.free"),
@@ -131,7 +131,8 @@ func Run(logger *zap.Logger, version string) error {
 	}
 
 	// Services
-	cacheTTL := cfg.GetDuration("redis.cache_ttl")
+	defaultCacheTTL := config.DefaultCacheTTL(cfg)
+	cacheTTLs := config.CacheTTLs(cfg, domain.AllLookupNames)
 
 	fpService := service.NewFingerprintService(db)
 	fpSource := "database"
@@ -177,7 +178,7 @@ func Run(logger *zap.Logger, version string) error {
 		domain.MaxResponseBody = v
 	}
 
-	domainService := service.NewDomainService(redisCache, cacheTTL, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
+	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
 	var billingSvc billing.Service
@@ -265,7 +266,8 @@ func Run(logger *zap.Logger, version string) error {
 	}
 
 	// IP intelligence service
-	ipService := service.NewIPService(redisCache, cacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
+	// IP responses are cached as a whole document, so they use the default TTL.
+	ipService := service.NewIPService(redisCache, defaultCacheTTL, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
 
 	// HTTP
 	h := handler.New(domainService, ipService, fpService, billingSvc, usageQuerySvc, geoReader, cfg, redisCache, cachedRepo, db, status)

@@ -34,6 +34,32 @@ func (c *RedisCache) Get(ctx context.Context, key string) ([]byte, error) {
 	return val, nil
 }
 
+// MGet fetches multiple keys in a single round trip. The result slice mirrors
+// the input ordering; misses (and values of an unexpected type) come back nil.
+func (c *RedisCache) MGet(ctx context.Context, keys []string) ([][]byte, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	prefixed := make([]string, len(keys))
+	for i, k := range keys {
+		prefixed[i] = cacheKey(k)
+	}
+	vals, err := c.client.MGet(ctx, prefixed...).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make([][]byte, len(keys))
+	for i, v := range vals {
+		switch t := v.(type) {
+		case string:
+			out[i] = []byte(t)
+		case []byte:
+			out[i] = t
+		}
+	}
+	return out, nil
+}
+
 func (c *RedisCache) Set(ctx context.Context, key string, data []byte, ttl time.Duration) error {
 	return c.client.Set(ctx, cacheKey(key), data, ttl).Err()
 }

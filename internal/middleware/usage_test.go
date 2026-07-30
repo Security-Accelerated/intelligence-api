@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 
@@ -31,15 +32,10 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 		c.Set("api_key_id", 100)
 		c.Set("api_key_plan", "pro")
 		c.Set("domain_count", 3)
-		c.Set("cache_hit", true)
-		c.Set("screenshot_requested", true)
-		c.Set("reputation_requested", false)
-		c.Set("email_security_requested", true)
-		c.Set("subdomain_requested", false)
-		c.Set("ct_logs_requested", false)
-		c.Set("bgp_requested", false)
-		c.Set("fingerprint_requested", true)
-		c.Set("threat_intel_requested", true)
+		c.Set("ip_count", 2)
+		c.Set("cache_hits", 5)
+		c.Set("cache_misses", 4)
+		c.Set("lookups_requested", []string{"screenshot", "email_security", "fingerprint", "threat_intel"})
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -64,23 +60,23 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 	if e.DomainCount != 3 {
 		t.Errorf("DomainCount = %d, want 3", e.DomainCount)
 	}
-	if !e.CacheHit {
-		t.Error("CacheHit = false, want true")
+	if e.IPCount != 2 {
+		t.Errorf("IPCount = %d, want 2", e.IPCount)
 	}
-	if !e.Screenshot {
-		t.Error("Screenshot = false, want true")
+	if e.CacheHits != 5 {
+		t.Errorf("CacheHits = %d, want 5", e.CacheHits)
 	}
-	if e.Reputation {
-		t.Error("Reputation = true, want false")
+	if e.CacheMisses != 4 {
+		t.Errorf("CacheMisses = %d, want 4", e.CacheMisses)
 	}
-	if !e.EmailSecurity {
-		t.Error("EmailSecurity = false, want true")
+	want := []string{"screenshot", "email_security", "fingerprint", "threat_intel"}
+	if len(e.Lookups) != len(want) {
+		t.Fatalf("Lookups = %v, want %v", e.Lookups, want)
 	}
-	if !e.Fingerprint {
-		t.Error("Fingerprint = false, want true")
-	}
-	if !e.ThreatIntel {
-		t.Error("ThreatIntel = false, want true")
+	for _, name := range want {
+		if !slices.Contains(e.Lookups, name) {
+			t.Errorf("Lookups = %v, missing %q", e.Lookups, name)
+		}
 	}
 	if e.StatusCode != 200 {
 		t.Errorf("StatusCode = %d, want 200", e.StatusCode)

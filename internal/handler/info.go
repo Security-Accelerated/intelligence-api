@@ -49,10 +49,11 @@ type poolStats struct {
 }
 
 type cacheStats struct {
-	Addr          string   `json:"addr"`
-	DB            int      `json:"db"`
-	CacheTTL      string   `json:"cache_ttl"`
-	AuthCacheTTL  string   `json:"auth_cache_ttl"`
+	Addr          string            `json:"addr"`
+	DB            int               `json:"db"`
+	DefaultTTL    string            `json:"default_ttl"`
+	LookupTTLs    map[string]string `json:"lookup_ttls,omitempty"`
+	AuthCacheTTL  string            `json:"auth_cache_ttl"`
 	PingMs        *float64 `json:"ping_ms,omitempty"`
 	KeyCount      *int64   `json:"key_count,omitempty"`
 	MemoryUsed    string   `json:"memory_used,omitempty"`
@@ -123,7 +124,8 @@ func (h *Handler) Info(c *gin.Context) {
 	cs := cacheStats{
 		Addr:         s.Cache.Addr,
 		DB:           s.Cache.DB,
-		CacheTTL:     s.Cache.CacheTTL,
+		DefaultTTL:   s.Cache.DefaultTTL,
+		LookupTTLs:   s.Cache.LookupTTLs,
 		AuthCacheTTL: s.Cache.AuthCacheTTL,
 	}
 

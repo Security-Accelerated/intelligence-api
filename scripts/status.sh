@@ -97,7 +97,8 @@ if [ -n "$ADMIN_KEY" ]; then
         redis_keys=$(echo "$info" | jq -r '.cache.key_count // "unknown"')
         redis_mem=$(echo "$info" | jq -r '.cache.memory_used // "unknown"')
         redis_ping=$(echo "$info" | jq -r '.cache.ping_ms // "?"')
-        cache_ttl=$(echo "$info" | jq -r '.cache.cache_ttl // "unknown"')
+        cache_ttl=$(echo "$info" | jq -r '.cache.default_ttl // "unknown"')
+        cache_lookup_ttls=$(echo "$info" | jq -r '.cache.lookup_ttls // {} | to_entries | map("\(.key)=\(.value)") | join(", ")')
         auth_ttl=$(echo "$info" | jq -r '.cache.auth_cache_ttl // "unknown"')
         auth_size=$(echo "$info" | jq -r '.cache.auth_cache_size // "unknown"')
 
@@ -130,7 +131,8 @@ if [ -n "$ADMIN_KEY" ]; then
         printf "  %-16s %s (db: %s, ssl: %s)\n" "Postgres:" "$pg_host" "$pg_db" "$pg_ssl"
         printf "  %-16s open=%s, in_use=%s, idle=%s\n" "  Pool:" "$pg_pool_open" "$pg_pool_inuse" "$pg_pool_idle"
         printf "  %-16s %s (%s keys, %s memory, %sms ping)\n" "Redis:" "$redis_addr" "$redis_keys" "$redis_mem" "$redis_ping"
-        printf "  %-16s %s (TTL: %s)\n" "Cache:" "$cache_ttl" "$cache_ttl"
+        printf "  %-16s default TTL %s\n" "Cache:" "$cache_ttl"
+        printf "  %-16s %s\n" "  Lookup TTLs:" "$cache_lookup_ttls"
         printf "  %-16s %s entries (TTL: %s)\n" "Auth cache:" "$auth_size" "$auth_ttl"
 
         echo ""

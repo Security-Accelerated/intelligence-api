@@ -51,7 +51,7 @@ type FingerprintAdminService interface {
 }
 
 type DomainLookupService interface {
-	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool)
+	Lookup(ctx context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, domain.CacheStats)
 }
 
 type IPLookupService interface {

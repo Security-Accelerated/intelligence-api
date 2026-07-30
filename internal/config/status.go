@@ -65,10 +65,11 @@ type DatabaseConfig struct {
 }
 
 type CacheConfig struct {
-	Addr         string `json:"addr"`
-	DB           int    `json:"db"`
-	CacheTTL     string `json:"cache_ttl"`
-	AuthCacheTTL string `json:"auth_cache_ttl"`
+	Addr         string            `json:"addr"`
+	DB           int               `json:"db"`
+	DefaultTTL   string            `json:"default_ttl"`
+	LookupTTLs   map[string]string `json:"lookup_ttls"`
+	AuthCacheTTL string            `json:"auth_cache_ttl"`
 }
 
 type LookupConfig struct {
@@ -140,9 +141,15 @@ type GeoIPStatus struct {
 
 // NewStatusSnapshot builds a StatusSnapshot from the current config values.
 // Service-level fields (Services.*) are left at zero values — the caller
-// populates them as each service is initialized.
-func NewStatusSnapshot(version string) *StatusSnapshot {
+// populates them as each service is initialized. lookupNames enumerates the
+// lookups whose cache TTLs should be reported.
+func NewStatusSnapshot(version string, lookupNames []string) *StatusSnapshot {
 	cfg := Config()
+
+	lookupTTLs := make(map[string]string)
+	for name, ttl := range CacheTTLs(cfg, lookupNames) {
+		lookupTTLs[name] = ttl.String()
+	}
 	return &StatusSnapshot{
 		System: SystemStatus{
 			Name:            cfg.GetString("application.name"),
@@ -176,7 +183,8 @@ func NewStatusSnapshot(version string) *StatusSnapshot {
 		Cache: CacheConfig{
 			Addr:         cfg.GetString("redis.addr"),
 			DB:           cfg.GetInt("redis.db"),
-			CacheTTL:     cfg.GetDuration("redis.cache_ttl").String(),
+			DefaultTTL:   DefaultCacheTTL(cfg).String(),
+			LookupTTLs:   lookupTTLs,
 			AuthCacheTTL: cfg.GetDuration("auth.cache_ttl").String(),
 		},
 		Lookups: LookupConfig{

@@ -58,9 +58,11 @@ func (h *Handler) IPLookup(c *gin.Context) {
 
 	opts := domain.IPLookupOptions{ThreatIntel: req.ThreatIntel}
 	c.Set("ip_count", len(req.IPs))
-	c.Set("ip_threat_intel_requested", req.ThreatIntel)
+	if req.ThreatIntel {
+		c.Set("lookups_requested", []string{domain.LookupThreatIntelName})
+	}
 
-	if req.ThreatIntel && planStr != "pro" && planStr != "admin" {
+	if req.ThreatIntel && planStr != planPro && planStr != planAdmin {
 		c.JSON(http.StatusForbidden, gin.H{"error": "threat_intel requires a pro plan"})
 		return
 	}
@@ -113,11 +115,14 @@ func (h *Handler) IPLookup(c *gin.Context) {
 	wg.Wait()
 	close(ch)
 
-	anyCached := false
+	// IP responses are cached whole, so each IP counts as a single hit or miss.
+	cacheHits, cacheMisses := 0, 0
 	for ir := range ch {
 		results[ir.index] = ir.resp
 		if ir.resp.CacheHit {
-			anyCached = true
+			cacheHits++
+		} else {
+			cacheMisses++
 		}
 	}
 	errorCount := 0
@@ -126,7 +131,8 @@ func (h *Handler) IPLookup(c *gin.Context) {
 			errorCount += len(r.Errors)
 		}
 	}
-	c.Set("cache_hit", anyCached)
+	c.Set("cache_hits", cacheHits)
+	c.Set("cache_misses", cacheMisses)
 	c.Set("error_count", errorCount)
 
 	c.JSON(http.StatusOK, results)

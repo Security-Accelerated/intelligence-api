@@ -49,7 +49,21 @@ func init() {
 
 	// defaults (overridden by config file, then env vars)
 	config.SetDefault("application.port", 8080)
-	config.SetDefault("redis.cache_ttl", "60m")
+	// Cache TTLs: one entry per lookup, with default_ttl covering anything
+	// unlisted. Each key is read individually so env overrides (CACHE_TTL_WHOIS)
+	// work per Viper convention.
+	config.SetDefault("cache.default_ttl", "60m")
+	config.SetDefault("cache.ttl.whois", "24h")
+	config.SetDefault("cache.ttl.ct_logs", "24h")
+	config.SetDefault("cache.ttl.subdomains", "24h")
+	config.SetDefault("cache.ttl.bgp", "24h")
+	config.SetDefault("cache.ttl.ssl", "4h")
+	config.SetDefault("cache.ttl.email_security", "4h")
+	config.SetDefault("cache.ttl.dns", "30m")
+	config.SetDefault("cache.ttl.headers", "30m")
+	config.SetDefault("cache.ttl.reputation", "30m")
+	config.SetDefault("cache.ttl.threat_intel", "30m")
+	config.SetDefault("cache.ttl.screenshot", "60m")
 	config.SetDefault("auth.cache_ttl", "5m")
 	config.SetDefault("auth.last_used_buffer_size", 256)
 	config.SetDefault("auth.last_used_flush_interval", "10s")
@@ -111,7 +125,7 @@ func init() {
 	config.SetDefault("dns.timeout", "30s")
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
-	config.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	config.SetEnvKeyReplacer(envKeyReplacer())
 	config.AutomaticEnv()
 
 	// read in config
@@ -126,6 +140,12 @@ func init() {
 
 func Config() *viper.Viper {
 	return config
+}
+
+// envKeyReplacer maps config keys onto environment variable names
+// (postgres.host → POSTGRES_HOST, cache.ttl.whois → CACHE_TTL_WHOIS).
+func envKeyReplacer() *strings.Replacer {
+	return strings.NewReplacer(".", "_")
 }
 
 func charsToString(ca []int8) string {

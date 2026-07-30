@@ -3,37 +3,57 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
-	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/spf13/viper"
 )
 
 type mockService struct {
-	mu       sync.Mutex
-	resp     *domain.DomainResponse
-	cached   bool
-	lastOpts domain.LookupOptions
+	mu        sync.Mutex
+	resp      *domain.DomainResponse
+	stats     domain.CacheStats
+	lastOpts  domain.LookupOptions
+	seen      []string
+	callCount int
 }
 
-func (m *mockService) Lookup(_ context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, bool) {
+func (m *mockService) Lookup(_ context.Context, domainName string, opts domain.LookupOptions) (*domain.DomainResponse, domain.CacheStats) {
 	m.mu.Lock()
 	m.lastOpts = opts
+	m.seen = append(m.seen, domainName)
+	m.callCount++
 	m.mu.Unlock()
 	if m.resp != nil {
-		return m.resp, m.cached
+		return m.resp, m.stats
 	}
-	return &domain.DomainResponse{Domain: domainName}, m.cached
+	return &domain.DomainResponse{Domain: domainName}, m.stats
 }
 
-// assertErrorBody checks that the response body contains a JSON "error" key.
-func assertErrorBody(t *testing.T, w *httptest.ResponseRecorder) {
+func (m *mockService) domains() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := slices.Clone(m.seen)
+	slices.Sort(out)
+	return out
+}
+
+func (m *mockService) opts() domain.LookupOptions {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lastOpts
+}
+
+// assertErrorBody checks that the response body contains a JSON "error" key and
+// returns its value.
+func assertErrorBody(t *testing.T, w *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body map[string]string
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
@@ -42,27 +62,11 @@ func assertErrorBody(t *testing.T, w *httptest.ResponseRecorder) {
 	if body["error"] == "" {
 		t.Error("expected non-empty error field in response body")
 	}
-}
-
-// filterKeys returns the subset of middleware.ContextKeys whose base name
-// (before "_requested") appears in the keep list. cache_hit is always kept.
-func filterKeys(keep ...string) []string {
-	set := make(map[string]struct{}, len(keep))
-	for _, k := range keep {
-		set[k] = struct{}{}
-	}
-	var out []string
-	for _, key := range middleware.ContextKeys {
-		base := strings.TrimSuffix(key, "_requested")
-		if _, ok := set[base]; ok {
-			out = append(out, key)
-		}
-	}
-	return out
+	return body["error"]
 }
 
 func newTestRouter(svc DomainLookupService) *gin.Engine {
-	return newTestRouterWithPlan(svc, "pro")
+	return newTestRouterWithPlan(svc, planPro)
 }
 
 func newTestRouterWithPlan(svc DomainLookupService, plan string) *gin.Engine {
@@ -77,585 +81,448 @@ func newTestRouterWithPlan(svc DomainLookupService, plan string) *gin.Engine {
 	return r
 }
 
-func TestDomainLookup_ValidDomain(t *testing.T) {
-	r := newTestRouter(&mockService{})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
+// post issues a domain lookup request and returns the recorder.
+func post(r *gin.Engine, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
+	return w
+}
+
+// decodeResults unwraps the {"results": [...]} envelope.
+func decodeResults(t *testing.T, w *httptest.ResponseRecorder) []*domain.DomainResponse {
+	t.Helper()
+	var env domain.DomainResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("failed to unmarshal response envelope: %v\nbody: %s", err, w.Body.String())
+	}
+	return env.Results
+}
+
+// findResult locates the element for a normalized domain. Array position is not
+// part of the API contract, so tests match on the domain field.
+func findResult(t *testing.T, results []*domain.DomainResponse, name string) *domain.DomainResponse {
+	t.Helper()
+	for _, r := range results {
+		if r.Domain == name {
+			return r
+		}
+	}
+	t.Fatalf("no result for domain %q; got %+v", name, results)
+	return nil
+}
+
+// --- Envelope and result identification ---
+
+func TestDomainLookup_ReturnsResultsEnvelope(t *testing.T) {
+	w := post(newTestRouter(&mockService{}), `{"domains":["example.com"],"lookups":["dns"]}`)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	// The top level must be an object, not a bare array.
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(w.Body.Bytes(), &top); err != nil {
+		t.Fatalf("response is not a JSON object: %v; body: %s", err, w.Body.String())
+	}
+	if _, ok := top["results"]; !ok {
+		t.Fatalf("response missing the results key: %s", w.Body.String())
+	}
+	if len(top) != 1 {
+		t.Errorf("envelope should carry only results for now, got keys %v", top)
 	}
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
+	results := decodeResults(t, w)
+	if len(results) != 1 || results[0].Domain != "example.com" {
+		t.Errorf("results = %+v", results)
 	}
 }
 
-func TestDomainLookup_NoService(t *testing.T) {
-	r := newTestRouter(nil)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+func TestDomainLookup_NoTopLevelCacheHit(t *testing.T) {
+	w := post(newTestRouter(&mockService{stats: domain.CacheStats{Hits: 1}}),
+		`{"domains":["example.com"],"lookups":["dns"]}`)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	var env struct {
+		Results []map[string]json.RawMessage `json:"results"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, ok := env.Results[0]["cache_hit"]; ok {
+		t.Errorf("result carries a top-level cache_hit: %s", w.Body.String())
+	}
+}
+
+func TestDomainLookup_PerFieldCacheHitSerialized(t *testing.T) {
+	svc := &mockService{resp: &domain.DomainResponse{
+		Domain: "example.com",
+		DNS:    &domain.DNSResult{CacheHit: true, DNSInfo: &domain.DNSInfo{A: []string{"1.2.3.4"}}},
+	}}
+	w := post(newTestRouter(svc), `{"domains":["example.com"],"lookups":["dns"]}`)
+
+	var env struct {
+		Results []struct {
+			DNS map[string]any `json:"dns"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	dns := env.Results[0].DNS
+	if dns["cache_hit"] != true {
+		t.Errorf("dns.cache_hit = %v, want true; body: %s", dns["cache_hit"], w.Body.String())
+	}
+	if _, ok := dns["a"]; !ok {
+		t.Errorf("dns payload fields not flattened alongside cache_hit: %v", dns)
+	}
+}
+
+func TestDomainLookup_InputsRecordOriginalEntriesVerbatim(t *testing.T) {
+	svc := &mockService{}
+	w := post(newTestRouter(svc),
+		`{"domains":["HTTPS://Example.COM/","example.net","example.com"],"lookups":["dns"]}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+	results := decodeResults(t, w)
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2 unique normalized domains: %+v", len(results), results)
+	}
+
+	com := findResult(t, results, "example.com")
+	wantInputs := []string{"HTTPS://Example.COM/", "example.com"}
+	if !slices.Equal(com.Inputs, wantInputs) {
+		t.Errorf("inputs = %v, want %v (verbatim, untrimmed)", com.Inputs, wantInputs)
+	}
+	net := findResult(t, results, "example.net")
+	if !slices.Equal(net.Inputs, []string{"example.net"}) {
+		t.Errorf("inputs = %v, want [example.net]", net.Inputs)
+	}
+
+	// The service sees each unique normalized domain exactly once.
+	if got := svc.domains(); !slices.Equal(got, []string{"example.com", "example.net"}) {
+		t.Errorf("service saw %v, want the two normalized domains once each", got)
+	}
+}
+
+func TestDomainLookup_DomainNormalizationProducesIdenticalResults(t *testing.T) {
+	for _, entry := range []string{"Example.COM", " example.com ", "https://Example.com/"} {
+		t.Run(entry, func(t *testing.T) {
+			svc := &mockService{}
+			body := fmt.Sprintf(`{"domains":[%q],"lookups":["dns"]}`, entry)
+			w := post(newTestRouter(svc), body)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+			}
+			results := decodeResults(t, w)
+			if results[0].Domain != "example.com" {
+				t.Errorf("domain = %q, want example.com", results[0].Domain)
+			}
+			if got := svc.domains(); !slices.Equal(got, []string{"example.com"}) {
+				t.Errorf("service saw %v, want [example.com]", got)
+			}
+			if !slices.Equal(results[0].Inputs, []string{entry}) {
+				t.Errorf("inputs = %v, want the verbatim entry %q", results[0].Inputs, entry)
+			}
+		})
 	}
 }
 
 func TestDomainLookup_MultipleDomains(t *testing.T) {
-	r := newTestRouter(&mockService{})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","example.org"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	svc := &mockService{}
+	w := post(newTestRouter(svc), `{"domains":["example.com","example.org"],"lookups":["dns"]}`)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
 	}
-
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
-	}
-	if len(resp) != 2 {
-		t.Fatalf("len(resp) = %d, want 2", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-	if resp[1].Domain != "example.org" {
-		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "example.org")
+	if len(decodeResults(t, w)) != 2 {
+		t.Errorf("want 2 results")
 	}
 }
 
 func TestDomainLookup_MixedValidInvalid(t *testing.T) {
-	r := newTestRouter(&mockService{})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","notadomain","example.org"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+	w := post(newTestRouter(&mockService{}), `{"domains":["example.com","not-a-domain"],"lookups":["dns"]}`)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
 	}
-
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
+	results := decodeResults(t, w)
+	invalid := findResult(t, results, "not-a-domain")
+	if len(invalid.Errors) != 1 || invalid.Errors[0].Lookup != "validation" {
+		t.Errorf("expected a validation error, got %+v", invalid.Errors)
 	}
-	if len(resp) != 3 {
-		t.Fatalf("len(resp) = %d, want 3", len(resp))
-	}
-
-	if resp[0].Domain != "example.com" {
-		t.Errorf("resp[0].Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-	if len(resp[0].Errors) != 0 {
-		t.Errorf("resp[0].Errors = %v, want none", resp[0].Errors)
-	}
-
-	if resp[1].Domain != "notadomain" {
-		t.Errorf("resp[1].Domain = %q, want %q", resp[1].Domain, "notadomain")
-	}
-	if len(resp[1].Errors) != 1 || resp[1].Errors[0].Lookup != "validation" {
-		t.Errorf("resp[1].Errors = %v, want validation error", resp[1].Errors)
-	}
-
-	if resp[2].Domain != "example.org" {
-		t.Errorf("resp[2].Domain = %q, want %q", resp[2].Domain, "example.org")
+	if !slices.Equal(invalid.Inputs, []string{"not-a-domain"}) {
+		t.Errorf("invalid entries should still carry inputs, got %v", invalid.Inputs)
 	}
 }
 
-func TestDomainLookup_CachedResponse(t *testing.T) {
-	svc := &mockService{
-		resp:   &domain.DomainResponse{Domain: "cached.com"},
-		cached: true,
-	}
-	r := newTestRouter(svc)
+// --- lookups validation ---
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["cached.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+func TestDomainLookup_MissingLookups(t *testing.T) {
+	for _, body := range []string{
+		`{"domains":["example.com"]}`,
+		`{"domains":["example.com"],"lookups":[]}`,
+		`{"domains":["example.com"],"lookups":[" "]}`,
+		`{"domains":["example.com"],"lookups":[""]}`,
+		`{"domains":["example.com"],"lookups":["","  ",""]}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			w := post(newTestRouter(&mockService{}), body)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+			}
+			msg := assertErrorBody(t, w)
+			if !strings.Contains(msg, "lookups is required") {
+				t.Errorf("error = %q, want it to mention that lookups is required", msg)
+			}
+		})
+	}
+}
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
+func TestDomainLookup_UnknownLookupNamesTheOffender(t *testing.T) {
+	w := post(newTestRouter(&mockService{}), `{"domains":["example.com"],"lookups":["dns","banana"]}`)
 
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
+	msg := assertErrorBody(t, w)
+	if !strings.Contains(msg, "banana") {
+		t.Errorf("error = %q, want it to name the invalid entry", msg)
 	}
-	if !resp[0].CacheHit {
-		t.Errorf("CacheHit = false, want true")
+}
+
+func TestDomainLookup_MalformedJSON(t *testing.T) {
+	w := post(newTestRouter(&mockService{}), `{"domains":`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
+	assertErrorBody(t, w)
 }
 
 func TestDomainLookup_MissingBody(t *testing.T) {
-	r := newTestRouter(&mockService{})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", nil)
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
+	w := post(newTestRouter(&mockService{}), `{}`)
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
 	assertErrorBody(t, w)
 }
 
-func TestDomainLookup_EmptyArray(t *testing.T) {
-	r := newTestRouter(&mockService{})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":[]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
+func TestDomainLookup_EmptyDomainsArray(t *testing.T) {
+	w := post(newTestRouter(&mockService{}), `{"domains":[],"lookups":["dns"]}`)
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
 	assertErrorBody(t, w)
+}
+
+func TestDomainLookup_NoService(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) { c.Set("api_key_plan", planPro); c.Next() })
+
+	w := post(r, `{"domains":["example.com"],"lookups":["dns"]}`)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", w.Code)
+	}
+}
+
+// --- lookup-name normalization ---
+
+func TestNormalizeLookups(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"trims and lowercases", []string{" SSL "}, []string{"ssl"}},
+		{"dedupes case and whitespace variants", []string{"ssl", "SSL", " ssl"}, []string{"ssl"}},
+		{"drops blanks", []string{"", "  ", "dns"}, []string{"dns"}},
+		{"all blank collapses to empty", []string{" ", ""}, []string{}},
+		{"preserves distinct names", []string{"dns", "ssl"}, []string{"dns", "ssl"}},
+		{"nil input", nil, []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeLookups(tt.in)
+			// Order is not part of the contract — compare as sets.
+			if len(got) != len(tt.want) {
+				t.Fatalf("normalizeLookups(%v) = %v, want %v", tt.in, got, tt.want)
+			}
+			for _, w := range tt.want {
+				if !slices.Contains(got, w) {
+					t.Errorf("normalizeLookups(%v) = %v, missing %q", tt.in, got, w)
+				}
+			}
+		})
+	}
+}
+
+func TestDomainLookup_LookupNamesNormalizedBeforeValidation(t *testing.T) {
+	svc := &mockService{}
+	w := post(newTestRouter(svc), `{"domains":["example.com"],"lookups":[" SSL ","ssl","SSL","DNS"]}`)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	got := svc.opts().Lookups
+	if len(got) != 2 {
+		t.Fatalf("service received %v, want 2 deduped lookups", got)
+	}
+	for _, want := range []string{"ssl", "dns"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("service received %v, missing %q", got, want)
+		}
+	}
+}
+
+func TestDomainLookup_OptsPassedToService(t *testing.T) {
+	svc := &mockService{}
+	all := strings.Join(quoteAll(domain.AllLookupNames), ",")
+	w := post(newTestRouterWithPlan(svc, planAdmin),
+		fmt.Sprintf(`{"domains":["example.com"],"lookups":[%s]}`, all))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+	got := svc.opts()
+	for _, name := range domain.AllLookupNames {
+		if !got.Has(name) {
+			t.Errorf("service opts missing %q; got %v", name, got.Lookups)
+		}
+	}
+}
+
+func quoteAll(names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = fmt.Sprintf("%q", n)
+	}
+	return out
+}
+
+// --- Plan gating ---
+
+func TestDomainLookup_PlanGating(t *testing.T) {
+	gated := []string{
+		domain.LookupScreenshotName,
+		domain.LookupReputationName,
+		domain.LookupThreatIntelName,
+	}
+	ungated := []string{
+		domain.LookupWhoisName, domain.LookupDNSName, domain.LookupSSLName,
+		domain.LookupHeadersName, domain.LookupEmailSecurityName, domain.LookupSubdomainsName,
+		domain.LookupCTLogsName, domain.LookupBGPName, domain.LookupFingerprintName,
+	}
+
+	for _, plan := range []string{planFree, planBasic, planPro, planAdmin} {
+		allowed := plan == planPro || plan == planAdmin
+		for _, name := range gated {
+			t.Run(plan+"/"+name, func(t *testing.T) {
+				body := fmt.Sprintf(`{"domains":["example.com"],"lookups":[%q]}`, name)
+				w := post(newTestRouterWithPlan(&mockService{}, plan), body)
+				want := http.StatusForbidden
+				if allowed {
+					want = http.StatusOK
+				}
+				if w.Code != want {
+					t.Fatalf("status = %d, want %d; body: %s", w.Code, want, w.Body.String())
+				}
+				if !allowed {
+					msg := assertErrorBody(t, w)
+					if !strings.Contains(msg, name) {
+						t.Errorf("error = %q, want it to name the gated lookup", msg)
+					}
+				}
+			})
+		}
+		for _, name := range ungated {
+			t.Run(plan+"/"+name, func(t *testing.T) {
+				body := fmt.Sprintf(`{"domains":["example.com"],"lookups":[%q]}`, name)
+				w := post(newTestRouterWithPlan(&mockService{}, plan), body)
+				if w.Code != http.StatusOK {
+					t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+				}
+			})
+		}
+	}
+}
+
+func TestDomainLookup_UnknownPlanTreatedAsLeastPrivileged(t *testing.T) {
+	w := post(newTestRouterWithPlan(&mockService{}, "mystery"),
+		`{"domains":["example.com"],"lookups":["screenshot"]}`)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+}
+
+func TestLookupMinPlan_CoversEveryLookupName(t *testing.T) {
+	for _, name := range domain.AllLookupNames {
+		if _, ok := lookupMinPlan[name]; !ok {
+			t.Errorf("lookupMinPlan is missing %q", name)
+		}
+	}
+	if len(lookupMinPlan) != len(domain.AllLookupNames) {
+		t.Errorf("lookupMinPlan has %d entries, want %d", len(lookupMinPlan), len(domain.AllLookupNames))
+	}
+}
+
+// --- Domain normalization ---
+
+func TestNormalizeDomain(t *testing.T) {
+	tests := []struct {
+		in    string
+		want  string
+		valid bool
+	}{
+		{"example.com", "example.com", true},
+		{"Example.COM", "example.com", true},
+		{"  example.com  ", "example.com", true},
+		{"https://Example.com/", "example.com", true},
+		{"http://example.com/path", "example.com", true},
+		{"https://user:pass@example.com:8443/x", "example.com", true},
+		{"example.com.", "example.com", true},
+		{"https://https://example.com", "example.com", true},
+		{"", "", false},
+		{"nodots", "nodots", false},
+		{"example..com", "example..com", false},
+		{"1.2.3.4", "1.2.3.4", false},
+		{strings.Repeat("a", 250) + ".com", strings.Repeat("a", 250) + ".com", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, ok := normalizeDomain(tt.in)
+			if got != tt.want || ok != tt.valid {
+				t.Errorf("normalizeDomain(%q) = (%q, %v), want (%q, %v)", tt.in, got, ok, tt.want, tt.valid)
+			}
+		})
+	}
 }
 
 func TestDomainLookup_SingleInvalidDomain(t *testing.T) {
-	r := newTestRouter(&mockService{})
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["localhost"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
+	w := post(newTestRouter(&mockService{}), `{"domains":["not-a-domain"],"lookups":["dns"]}`)
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
 	assertErrorBody(t, w)
 }
 
 func TestDomainLookup_RawIPRejectedWithMessage(t *testing.T) {
-	r := newTestRouter(&mockService{})
-
-	t.Run("single IP returns 400 with specific message", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["169.254.169.254"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
-		}
-		var body map[string]string
-		json.Unmarshal(w.Body.Bytes(), &body)
-		want := "raw IP addresses are not accepted; provide a domain name"
-		if body["error"] != want {
-			t.Errorf("error = %q, want %q", body["error"], want)
-		}
-	})
-
-	t.Run("IP in multi-domain returns validation error with specific message", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["example.com","10.0.0.1"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-		}
-		var resp []*domain.DomainResponse
-		json.Unmarshal(w.Body.Bytes(), &resp)
-		if len(resp) != 2 {
-			t.Fatalf("len(resp) = %d, want 2", len(resp))
-		}
-		if len(resp[1].Errors) != 1 {
-			t.Fatalf("len(resp[1].Errors) = %d, want 1", len(resp[1].Errors))
-		}
-		want := "raw IP addresses are not accepted; provide a domain name"
-		if resp[1].Errors[0].Message != want {
-			t.Errorf("error message = %q, want %q", resp[1].Errors[0].Message, want)
-		}
-	})
-}
-
-func TestDomainLookup_StripsProtocolAndSlash(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  string
-		expect string
-	}{
-		{"https prefix", `{"domains":["https://example.com/"]}`, "example.com"},
-		{"http prefix", `{"domains":["http://example.com/"]}`, "example.com"},
-		{"trailing slash", `{"domains":["example.com/"]}`, "example.com"},
+	w := post(newTestRouter(&mockService{}), `{"domains":["8.8.8.8"],"lookups":["dns"]}`)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &mockService{}
-			r := newTestRouter(svc)
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(tt.input))
-			req.Header.Set("Content-Type", "application/json")
-			r.ServeHTTP(w, req)
-
-			if w.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-			}
-
-			var resp []*domain.DomainResponse
-			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-				t.Fatalf("unmarshal: %v", err)
-			}
-			if len(resp) != 1 {
-				t.Fatalf("len(resp) = %d, want 1", len(resp))
-			}
-			if resp[0].Domain != tt.expect {
-				t.Errorf("Domain = %q, want %q", resp[0].Domain, tt.expect)
-			}
-		})
+	if msg := assertErrorBody(t, w); !strings.Contains(msg, "raw IP addresses") {
+		t.Errorf("error = %q, want the raw-IP message", msg)
 	}
 }
 
-func TestDomainLookup_WhitespaceTrimming(t *testing.T) {
-	svc := &mockService{}
-	r := newTestRouter(svc)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(`{"domains":["  example.com  "]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
+// --- Domain caps ---
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp []*domain.DomainResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Domain != "example.com" {
-		t.Errorf("Domain = %q, want %q", resp[0].Domain, "example.com")
-	}
-}
-
-// --- normalizeDomain unit tests ---
-
-func TestNormalizeDomain(t *testing.T) {
-	tests := []struct {
-		name   string
-		input  string
-		want   string
-		wantOK bool
-	}{
-		{"plain domain", "example.com", "example.com", true},
-		{"https prefix", "https://example.com", "example.com", true},
-		{"http prefix", "http://example.com", "example.com", true},
-		{"trailing slash", "example.com/", "example.com", true},
-		{"mixed case", "Example.COM", "example.com", true},
-		{"whitespace", "  example.com  ", "example.com", true},
-		{"path extracted", "https://example.com/foo/bar", "example.com", true},
-		{"port extracted", "example.com:8080", "example.com", true},
-		{"query string extracted", "example.com?q=1", "example.com", true},
-		{"fragment extracted", "example.com#section", "example.com", true},
-		{"userinfo extracted", "user@example.com", "example.com", true},
-		{"full url extracted", "https://user:pass@example.com:443/path?q=1#frag", "example.com", true},
-		{"ftp scheme stripped", "ftp://example.com", "example.com", true},
-		{"ssh scheme stripped", "ssh://example.com", "example.com", true},
-		{"double scheme stripped", "https://https://example.com", "example.com", true},
-		{"path at-sign not userinfo", "https://example.com/path@evil.com", "example.com", true},
-		{"full compound", "https://user:pass@example.com:443/path@evil.com?q=1#frag", "example.com", true},
-		{"empty", "", "", false},
-		{"no dot", "localhost", "localhost", false},
-		{"protocol only", "https://", "", false},
-		{"ipv4 address", "192.168.1.1", "192.168.1.1", false},
-		{"cloud metadata ip", "169.254.169.254", "169.254.169.254", false},
-		{"public ip", "8.8.8.8", "8.8.8.8", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := normalizeDomain(tt.input)
-			if ok != tt.wantOK {
-				t.Errorf("normalizeDomain(%q) ok = %v, want %v", tt.input, ok, tt.wantOK)
-			}
-			if got != tt.want {
-				t.Errorf("normalizeDomain(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
-// --- Plan gating ---
-
-func TestDomainLookup_Reputation_ProAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "pro")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_Reputation_AdminAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "admin")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_Reputation_FreeForbidden(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "free")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
-	if body["error"] != "reputation requires a pro plan" {
-		t.Errorf("error = %q, want %q", body["error"], "reputation requires a pro plan")
-	}
-}
-
-func TestDomainLookup_Reputation_BasicForbidden(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"reputation":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
-	if body["error"] != "reputation requires a pro plan" {
-		t.Errorf("error = %q, want %q", body["error"], "reputation requires a pro plan")
-	}
-}
-
-func TestDomainLookup_Screenshot_AdminAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "admin")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_Screenshot_ProAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "pro")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_Screenshot_FreeForbidden(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "free")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
-	if body["error"] != "screenshot requires a pro plan" {
-		t.Errorf("error = %q, want %q", body["error"], "screenshot requires a pro plan")
-	}
-}
-
-func TestDomainLookup_Screenshot_BasicForbidden(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"screenshot":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
-	if body["error"] != "screenshot requires a pro plan" {
-		t.Errorf("error = %q, want %q", body["error"], "screenshot requires a pro plan")
-	}
-}
-
-func TestDomainLookup_OptsPassedToService(t *testing.T) {
-	tests := []struct {
-		name              string
-		body              string
-		wantScreenshot    bool
-		wantReputation    bool
-		wantEmailSecurity bool
-		wantSubdomains    bool
-		wantCTLogs        bool
-		wantBGP           bool
-		wantFingerprint   bool
-		wantThreatIntel   bool
-	}{
-		{"no opts", `{"domains":["example.com"]}`, false, false, false, false, false, false, false, false},
-		{"screenshot only", `{"domains":["example.com"],"screenshot":true}`, true, false, false, false, false, false, false, false},
-		{"reputation only", `{"domains":["example.com"],"reputation":true}`, false, true, false, false, false, false, false, false},
-		{"email_security only", `{"domains":["example.com"],"email_security":true}`, false, false, true, false, false, false, false, false},
-		{"subdomains only", `{"domains":["example.com"],"subdomains":true}`, false, false, false, true, false, false, false, false},
-		{"ct_logs only", `{"domains":["example.com"],"ct_logs":true}`, false, false, false, false, true, false, false, false},
-		{"bgp only", `{"domains":["example.com"],"bgp":true}`, false, false, false, false, false, true, false, false},
-		{"fingerprint only", `{"domains":["example.com"],"fingerprint":true}`, false, false, false, false, false, false, true, false},
-		{"threat_intel only", `{"domains":["example.com"],"threat_intel":true}`, false, false, false, false, false, false, false, true},
-		{"all", `{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true,"threat_intel":true}`, true, true, true, true, true, true, true, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &mockService{}
-			r := newTestRouter(svc)
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-			r.ServeHTTP(w, req)
-
-			if w.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-			}
-			if svc.lastOpts.Screenshot != tt.wantScreenshot {
-				t.Errorf("opts.Screenshot = %v, want %v", svc.lastOpts.Screenshot, tt.wantScreenshot)
-			}
-			if svc.lastOpts.Reputation != tt.wantReputation {
-				t.Errorf("opts.Reputation = %v, want %v", svc.lastOpts.Reputation, tt.wantReputation)
-			}
-			if svc.lastOpts.EmailSecurity != tt.wantEmailSecurity {
-				t.Errorf("opts.EmailSecurity = %v, want %v", svc.lastOpts.EmailSecurity, tt.wantEmailSecurity)
-			}
-			if svc.lastOpts.Subdomains != tt.wantSubdomains {
-				t.Errorf("opts.Subdomains = %v, want %v", svc.lastOpts.Subdomains, tt.wantSubdomains)
-			}
-			if svc.lastOpts.CTLogs != tt.wantCTLogs {
-				t.Errorf("opts.CTLogs = %v, want %v", svc.lastOpts.CTLogs, tt.wantCTLogs)
-			}
-			if svc.lastOpts.BGP != tt.wantBGP {
-				t.Errorf("opts.BGP = %v, want %v", svc.lastOpts.BGP, tt.wantBGP)
-			}
-			if svc.lastOpts.Fingerprint != tt.wantFingerprint {
-				t.Errorf("opts.Fingerprint = %v, want %v", svc.lastOpts.Fingerprint, tt.wantFingerprint)
-			}
-			if svc.lastOpts.ThreatIntel != tt.wantThreatIntel {
-				t.Errorf("opts.ThreatIntel = %v, want %v", svc.lastOpts.ThreatIntel, tt.wantThreatIntel)
-			}
-		})
-	}
-}
-
-// domainLoggerKeys derived from middleware.ContextKeys.
-var domainLoggerKeys = filterKeys("screenshot", "reputation", "email_security", "subdomain", "cache_hit", "ct_logs", "bgp", "fingerprint", "threat_intel")
-
-func TestDomainLookup_SetsLoggerContextKeys(t *testing.T) {
-	tests := []struct {
-		name string
-		body string
-		want map[string]bool
-	}{
-		{
-			"no optional features",
-			`{"domains":["example.com"]}`,
-			map[string]bool{"screenshot_requested": false, "reputation_requested": false, "email_security_requested": false, "subdomain_requested": false, "ct_logs_requested": false, "bgp_requested": false, "fingerprint_requested": false, "threat_intel_requested": false, "cache_hit": false},
-		},
-		{
-			"all optional features",
-			`{"domains":["example.com"],"screenshot":true,"reputation":true,"email_security":true,"subdomains":true,"ct_logs":true,"bgp":true,"fingerprint":true,"threat_intel":true}`,
-			map[string]bool{"screenshot_requested": true, "reputation_requested": true, "email_security_requested": true, "subdomain_requested": true, "ct_logs_requested": true, "bgp_requested": true, "fingerprint_requested": true, "threat_intel_requested": true, "cache_hit": false},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := &mockService{}
-			gin.SetMode(gin.TestMode)
-			r := gin.New()
-			h := New(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-
-			captured := make(map[string]any)
-			auth := func(c *gin.Context) {
-				c.Set("api_key_plan", "admin")
-				c.Next()
-				for _, key := range domainLoggerKeys {
-					if v, exists := c.Get(key); exists {
-						captured[key] = v
-					}
-				}
-			}
-
-			h.RegisterRoutes(r)
-			h.RegisterProtectedRoutes(r, auth)
-
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(tt.body))
-			req.Header.Set("Content-Type", "application/json")
-			r.ServeHTTP(w, req)
-
-			if w.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-			}
-
-			for _, key := range domainLoggerKeys {
-				val, exists := captured[key]
-				if !exists {
-					t.Errorf("context key %q not set by handler (logger will silently skip it)", key)
-					continue
-				}
-				if want, ok := tt.want[key]; ok {
-					if val.(bool) != want {
-						t.Errorf("context key %q = %v, want %v", key, val, want)
-					}
-				}
-			}
-		})
-	}
-}
-
-// --- Max domains per request ---
-
+// testCfg builds a viper instance seeded with the given overrides.
 func testCfg(overrides map[string]any) *viper.Viper {
 	v := viper.New()
 	for k, val := range overrides {
@@ -664,7 +531,7 @@ func testCfg(overrides map[string]any) *viper.Viper {
 	return v
 }
 
-func newTestRouterWithCfg(svc DomainLookupService, plan string, cfg *viper.Viper) *gin.Engine {
+func newTestRouterWithConfig(svc DomainLookupService, plan string, cfg *viper.Viper) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := New(svc, nil, nil, nil, nil, nil, cfg, nil, nil, nil, nil)
@@ -675,343 +542,173 @@ func newTestRouterWithCfg(svc DomainLookupService, plan string, cfg *viper.Viper
 	return r
 }
 
-func TestDomainLookup_MaxDomains_ExceedsLimit(t *testing.T) {
-	cfg := testCfg(map[string]any{
-		"domain.max_domains.basic": 2,
-		"domain.max_domains.pro":   3,
-	})
+func TestDomainLookup_MaxDomains_CountsSubmittedEntriesNotUniqueDomains(t *testing.T) {
+	cfg := viper.New()
+	cfg.Set("domain.max_domains.free", 1)
 
-	t.Run("basic plan over limit", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
+	// Two entries that normalize to one domain still count as two submissions.
+	w := post(newTestRouterWithConfig(&mockService{}, planFree, cfg),
+		`{"domains":["example.com","EXAMPLE.com"],"lookups":["dns"]}`)
 
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-		}
-		var body map[string]string
-		json.Unmarshal(w.Body.Bytes(), &body)
-		if body["error"] != "too many domains: maximum 2 allowed for basic plan" {
-			t.Errorf("error = %q", body["error"])
-		}
-	})
-
-	t.Run("pro plan over limit", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "pro", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-		}
-		var body map[string]string
-		json.Unmarshal(w.Body.Bytes(), &body)
-		if body["error"] != "too many domains: maximum 3 allowed for pro plan" {
-			t.Errorf("error = %q", body["error"])
-		}
-	})
-
-	t.Run("pro plan at limit succeeds", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "pro", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-		}
-	})
-
-	t.Run("admin plan has no limit", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "admin", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-		}
-	})
-
-	t.Run("nil config means no limit", func(t *testing.T) {
-		r := newTestRouterWithPlan(&mockService{}, "basic")
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com","e.com","f.com","g.com","h.com","i.com","j.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-		}
-	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+	if msg := assertErrorBody(t, w); !strings.Contains(msg, "too many domains") {
+		t.Errorf("error = %q", msg)
+	}
 }
 
-func TestDomainLookup_MaxDomains_FreePlanLimit(t *testing.T) {
-	cfg := testCfg(map[string]any{
-		"domain.max_domains.free":  1,
-		"domain.max_domains.basic": 5,
-	})
+func TestDomainLookup_MaxDomains_WithinLimit(t *testing.T) {
+	cfg := viper.New()
+	cfg.Set("domain.max_domains.basic", 2)
 
-	t.Run("free plan over limit", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "free", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
-		}
-		var body map[string]string
-		json.Unmarshal(w.Body.Bytes(), &body)
-		if body["error"] != "too many domains: maximum 1 allowed for free plan" {
-			t.Errorf("error = %q", body["error"])
-		}
-	})
-
-	t.Run("free plan at limit succeeds", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "free", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-		}
-	})
+	w := post(newTestRouterWithConfig(&mockService{}, planBasic, cfg),
+		`{"domains":["example.com","example.org"],"lookups":["dns"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
 }
 
 func TestDomainLookup_MaxDomains_SubdomainCapTighter(t *testing.T) {
-	cfg := testCfg(map[string]any{
-		"domain.max_domains.basic":    5,
-		"subdomain.max_domains.basic": 3,
+	cfg := viper.New()
+	cfg.Set("domain.max_domains.basic", 5)
+	cfg.Set("subdomain.max_domains.basic", 2)
+
+	body := `{"domains":["a.com","b.com","c.com"],"lookups":["%s"]}`
+
+	// Without subdomains the looser cap applies.
+	if w := post(newTestRouterWithConfig(&mockService{}, planBasic, cfg), fmt.Sprintf(body, "dns")); w.Code != http.StatusOK {
+		t.Fatalf("dns-only status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	// With subdomains the tighter cap applies.
+	w := post(newTestRouterWithConfig(&mockService{}, planBasic, cfg), fmt.Sprintf(body, "subdomains"))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("subdomains status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+	if msg := assertErrorBody(t, w); !strings.Contains(msg, "subdomains is requested") {
+		t.Errorf("error = %q", msg)
+	}
+}
+
+// --- Context keys for logging and usage tracking ---
+
+func TestDomainLookup_SetsContextKeys(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(&mockService{stats: domain.CacheStats{Hits: 3, Misses: 1}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	var (
+		lookups            []string
+		hits, misses       int
+		domainCount, errCt int
+		found              = map[string]bool{}
+	)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_plan", planPro)
+		c.Next()
+		for _, k := range []string{"lookups_requested", "cache_hits", "cache_misses", "domain_count", "error_count"} {
+			_, found[k] = c.Get(k)
+		}
+		if v, ok := c.Get("lookups_requested"); ok {
+			lookups, _ = v.([]string)
+		}
+		if v, ok := c.Get("cache_hits"); ok {
+			hits, _ = v.(int)
+		}
+		if v, ok := c.Get("cache_misses"); ok {
+			misses, _ = v.(int)
+		}
+		if v, ok := c.Get("domain_count"); ok {
+			domainCount, _ = v.(int)
+		}
+		if v, ok := c.Get("error_count"); ok {
+			errCt, _ = v.(int)
+		}
 	})
 
-	t.Run("under domain cap but over subdomain cap returns 400 when subdomains requested", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"],"subdomains":true}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
+	w := post(r, `{"domains":["example.com","EXAMPLE.com"],"lookups":["dns","ssl"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
 
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	for k, ok := range found {
+		if !ok {
+			t.Errorf("context key %q not set", k)
 		}
-		var body map[string]string
-		json.Unmarshal(w.Body.Bytes(), &body)
-		want := "too many domains: maximum 3 allowed for basic plan when subdomains is requested"
-		if body["error"] != want {
-			t.Errorf("error = %q, want %q", body["error"], want)
+	}
+	if len(lookups) != 2 || !slices.Contains(lookups, "dns") || !slices.Contains(lookups, "ssl") {
+		t.Errorf("lookups_requested = %v, want {dns, ssl}", lookups)
+	}
+	// One unique normalized domain, so one Lookup call contributing its stats.
+	if hits != 3 || misses != 1 {
+		t.Errorf("cache_hits/cache_misses = %d/%d, want 3/1", hits, misses)
+	}
+	// domain_count counts submitted entries.
+	if domainCount != 2 {
+		t.Errorf("domain_count = %d, want 2", domainCount)
+	}
+	if errCt != 0 {
+		t.Errorf("error_count = %d, want 0", errCt)
+	}
+}
+
+func TestDomainLookup_CacheStatsSummedAcrossDomains(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(&mockService{stats: domain.CacheStats{Hits: 1, Misses: 2}}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	var hits, misses int
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_plan", planPro)
+		c.Next()
+		if v, ok := c.Get("cache_hits"); ok {
+			hits, _ = v.(int)
+		}
+		if v, ok := c.Get("cache_misses"); ok {
+			misses, _ = v.(int)
+		}
+	})
+
+	post(r, `{"domains":["example.com","example.org"],"lookups":["dns","ssl","whois"]}`)
+	if hits != 2 || misses != 4 {
+		t.Errorf("cache_hits/cache_misses = %d/%d, want 2/4 (summed across two domains)", hits, misses)
+	}
+}
+
+func TestDomainLookup_ErrorCountIncludesValidationErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	var errCt int
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
+		c.Set("api_key_plan", planPro)
+		c.Next()
+		if v, ok := c.Get("error_count"); ok {
+			errCt, _ = v.(int)
 		}
 	})
 
-	t.Run("at subdomain cap succeeds when subdomains requested", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com"],"subdomains":true}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-		}
-	})
-
-	t.Run("over subdomain cap but subdomains not requested still succeeds", func(t *testing.T) {
-		r := newTestRouterWithCfg(&mockService{}, "basic", cfg)
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-			strings.NewReader(`{"domains":["a.com","b.com","c.com","d.com"]}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-		}
-	})
-}
-
-func TestDomainLookup_EmailSecurity_AllPlansAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"email_security":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	post(r, `{"domains":["example.com","not-a-domain"],"lookups":["dns"]}`)
+	if errCt != 1 {
+		t.Errorf("error_count = %d, want 1", errCt)
 	}
 }
 
-func TestDomainLookup_Reputation_AbsentWhenNotRequested(t *testing.T) {
-	svc := &mockService{
-		resp: &domain.DomainResponse{Domain: "example.com"},
-	}
-	r := newTestRouter(svc)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	var resp []*domain.DomainResponse
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Reputation != nil {
-		t.Error("expected reputation to be nil when not requested")
-	}
-}
-
-func TestDomainLookup_CTLogs_AllPlansAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"ct_logs":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_BGP_AllPlansAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"bgp":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_Fingerprint_AllPlansAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"fingerprint":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_ThreatIntel_ProAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "pro")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_ThreatIntel_AdminAllowed(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "admin")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-}
-
-func TestDomainLookup_ThreatIntel_FreeForbidden(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "free")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
-	if body["error"] != "threat_intel requires a pro plan" {
-		t.Errorf("error = %q, want %q", body["error"], "threat_intel requires a pro plan")
-	}
-}
-
-func TestDomainLookup_ThreatIntel_BasicForbidden(t *testing.T) {
-	r := newTestRouterWithPlan(&mockService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"threat_intel":true}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
-	if body["error"] != "threat_intel requires a pro plan" {
-		t.Errorf("error = %q, want %q", body["error"], "threat_intel requires a pro plan")
-	}
-}
-
-// --- Body limit 413 ---
+// --- Body limits ---
 
 func TestDomainLookup_OversizedBody_Returns413(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(middleware.BodyLimit(128)) // small limit for testing
-	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	h.RegisterProtectedRoutes(r, func(c *gin.Context) {
-		c.Set("api_key_plan", "pro")
+	r.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16)
 		c.Next()
 	})
+	h := New(&mockService{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h.RegisterProtectedRoutes(r, func(c *gin.Context) { c.Set("api_key_plan", planPro); c.Next() })
 
-	w := httptest.NewRecorder()
-	oversized := `{"domains":["` + strings.Repeat("example.com,", 50) + `example.com"]}`
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(oversized))
-	req.Header.Set("Content-Type", "application/json")
-	// Remove Content-Length to force the MaxBytesReader path (not the early reject)
-	req.ContentLength = -1
-	r.ServeHTTP(w, req)
-
+	w := post(r, `{"domains":["example.com"],"lookups":["dns","ssl","whois","headers"]}`)
 	if w.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusRequestEntityTooLarge, w.Body.String())
-	}
-	var body map[string]string
-	json.Unmarshal(w.Body.Bytes(), &body)
-	if body["error"] != "request body too large" {
-		t.Errorf("error = %q, want %q", body["error"], "request body too large")
+		t.Fatalf("status = %d, want 413; body: %s", w.Code, w.Body.String())
 	}
 }

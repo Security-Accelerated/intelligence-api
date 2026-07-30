@@ -1,9 +1,12 @@
 package usage
 
 import (
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"go.uber.org/zap"
 )
 
@@ -58,4 +61,49 @@ func TestNoopRecorder(t *testing.T) {
 	var r NoopRecorder
 	// Should not panic.
 	r.Record(UsageEntry{Method: "GET", Path: "/v1/hello", StatusCode: 200})
+}
+
+func TestUsageLogger_FlushInsertsCacheAndLookupColumns(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	ul := &UsageLogger{db: db, logger: zap.NewNop()}
+
+	mock.ExpectExec("INSERT INTO request_log").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			"POST", "/v1/domain/lookup", 200, 12, 2, 0, // method..ip_count
+			3, 1, // cache_hits, cache_misses
+			true, true, false, false, // whois, dns, ssl, headers
+			false, false, false, false, false, false, false, false, // remaining lookups
+			sqlmock.AnyArg(), // created_at
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	ul.flush([]UsageEntry{{
+		Method: "POST", Path: "/v1/domain/lookup", StatusCode: 200, LatencyMs: 12,
+		DomainCount: 2, CacheHits: 3, CacheMisses: 1,
+		Lookups: []string{"whois", "dns"},
+	}})
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unfulfilled expectations: %v", err)
+	}
+}
+
+// TestLookupColumns_MatchesDomainCatalog guards against the request_log schema
+// drifting away from the set of lookups the API accepts. A new lookup needs a
+// matching column and migration before it can be tracked.
+func TestLookupColumns_MatchesDomainCatalog(t *testing.T) {
+	if len(LookupColumns) != len(domain.AllLookupNames) {
+		t.Fatalf("LookupColumns has %d entries, domain.AllLookupNames has %d",
+			len(LookupColumns), len(domain.AllLookupNames))
+	}
+	for _, name := range domain.AllLookupNames {
+		if !slices.Contains(LookupColumns, name) {
+			t.Errorf("LookupColumns is missing %q", name)
+		}
+	}
 }

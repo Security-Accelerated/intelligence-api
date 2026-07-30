@@ -20,7 +20,7 @@ const (
 // a scored reputation result. The result is always non-nil (even if all providers
 // report clean). Per-provider errors are returned separately so callers can see
 // partial results.
-func LookupReputation(ctx context.Context, domain string) (*ReputationResult, []LookupError) {
+func LookupReputation(ctx context.Context, domain string) (*ReputationInfo, []LookupError) {
 	type providerResult struct {
 		result *ProviderResult
 		err    error
@@ -75,7 +75,7 @@ func LookupReputation(ctx context.Context, domain string) (*ReputationResult, []
 	}
 
 	score, risk := ScoreReputation(providers)
-	return &ReputationResult{
+	return &ReputationInfo{
 		Score:     score,
 		Risk:      risk,
 		Providers: providers,

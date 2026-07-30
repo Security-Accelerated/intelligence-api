@@ -104,33 +104,45 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	// Fixed metadata columns, followed by one boolean column per lookup, then
+	// created_at. LookupColumns must match the request_log schema.
+	baseColumns := []string{
+		"customer_id", "api_key_id", "plan", "method", "path", "status_code",
+		"latency_ms", "domain_count", "ip_count", "cache_hits", "cache_misses",
+	}
+	columns := append(append(append([]string{}, baseColumns...), LookupColumns...), "created_at")
+	cols := len(columns)
+
 	// Build a multi-row INSERT for efficiency.
-	const cols = 19
 	valueStrings := make([]string, 0, len(entries))
 	args := make([]any, 0, len(entries)*cols)
+	placeholders := make([]string, cols)
 
 	now := time.Now().UTC()
 	for i, e := range entries {
 		base := i * cols
-		valueStrings = append(valueStrings, fmt.Sprintf(
-			"($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)",
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9,
-			base+10, base+11, base+12, base+13, base+14, base+15, base+16, base+17, base+18, base+19,
-		))
+		for j := range placeholders {
+			placeholders[j] = fmt.Sprintf("$%d", base+j+1)
+		}
+		valueStrings = append(valueStrings, "("+strings.Join(placeholders, ",")+")")
+
 		args = append(args,
 			nilIfZero(e.CustomerID), nilIfZero(e.APIKeyID), nilIfEmpty(e.Plan),
 			e.Method, e.Path, e.StatusCode, e.LatencyMs, e.DomainCount, e.IPCount,
-			e.CacheHit, e.Screenshot, e.Reputation, e.EmailSecurity,
-			e.Subdomains, e.CTLogs, e.BGP, e.Fingerprint, e.ThreatIntel,
-			now,
+			e.CacheHits, e.CacheMisses,
 		)
+		requested := make(map[string]bool, len(e.Lookups))
+		for _, name := range e.Lookups {
+			requested[name] = true
+		}
+		for _, name := range LookupColumns {
+			args = append(args, requested[name])
+		}
+		args = append(args, now)
 	}
 
-	query := fmt.Sprintf(`INSERT INTO request_log
-		(customer_id, api_key_id, plan, method, path, status_code, latency_ms,
-		 domain_count, ip_count, cache_hit, screenshot, reputation, email_security,
-		 subdomains, ct_logs, bgp, fingerprint, threat_intel, created_at)
-		VALUES %s`, strings.Join(valueStrings, ","))
+	query := fmt.Sprintf(`INSERT INTO request_log (%s) VALUES %s`,
+		strings.Join(columns, ", "), strings.Join(valueStrings, ","))
 
 	if _, err := ul.db.ExecContext(ctx, query, args...); err != nil {
 		ul.logger.Error("failed to flush usage entries", zap.Error(err), zap.Int("count", len(entries)))
