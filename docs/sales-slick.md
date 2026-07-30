@@ -52,6 +52,12 @@ Map domains to their hosting infrastructure via IP-to-ASN lookups. Identify host
 ### Technology Fingerprinting
 Detect web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers — with zero extra network requests. Identify technology stacks for vulnerability assessment and attack surface mapping.
 
+### DNSSEC & CAA
+Verify a domain's DNS is cryptographically signed (DS records at the parent, DNSKEY at the zone, and the algorithms in use) and read its CAA records to see which certificate authorities are permitted to issue for it. Spot domains vulnerable to DNS spoofing, and certificate issuance that should not have been possible.
+
+### Aggregate Risk Score
+One weighted 0–100 score across everything you requested — threat intelligence, reputation, certificate health, security headers, email authentication, and domain age — graded `none`, `low`, `medium`, `high`, or `critical` on the same thresholds as threat intelligence. (The per-provider reputation score above is separate and uses its own `clean`/`low`/`medium`/`high` scale.) Costs no extra network call and reweights itself over whichever lookups you actually asked for, so you get a single comparable number instead of interpreting eight result sets by hand.
+
 ### IP Intelligence
 Profile any public IP address with a single call. Get geolocation (country, city, coordinates), ASN ownership, reverse DNS hostnames, and abuse contact information via RDAP. Add threat intelligence to check if an IP is associated with known malicious activity across VirusTotal, URLhaus, and AlienVault OTX. Powered by MaxMind GeoLite2 databases with hot-reload support.
 
@@ -66,7 +72,8 @@ POST /v1/domain/lookup
   "lookups": [
     "whois", "dns", "ssl", "headers",
     "reputation", "email_security", "screenshot", "subdomains",
-    "ct_logs", "bgp", "fingerprint", "threat_intel"
+    "ct_logs", "bgp", "fingerprint", "threat_intel",
+    "dns_security", "risk"
   ]
 }
 ```

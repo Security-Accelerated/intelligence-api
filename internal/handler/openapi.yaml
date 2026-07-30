@@ -23,14 +23,20 @@ paths:
       summary: Domain intelligence lookup
       description: |
         Performs concurrent intelligence lookups for one or more domains.
-        WHOIS, DNS, SSL, and HTTP header lookups always run; the remaining
-        lookups are opt-in via boolean request flags.
+        Name exactly what you want in the required `lookups` array: nothing
+        runs unless you ask for it, and there is no default set and no "all"
+        value. An unrecognized name returns 400.
 
         Per-plan limits on the number of domains per request: free = 1,
-        basic = 5, pro = 20.
+        basic = 5, pro = 20. The limit counts the entries you submit, before
+        deduplication.
 
-        The `screenshot`, `reputation`, and `threat_intel` flags require a
-        pro (or admin) plan; lower plans receive HTTP 403 when requesting them.
+        Requesting `screenshot`, `reputation`, or `threat_intel` requires a
+        pro (or admin) plan; lower plans receive HTTP 403 naming the lookup.
+
+        Results are returned in a `results` envelope, one element per unique
+        normalized domain. Match results by the `domain` field rather than by
+        array position.
 
         Individual lookup failures do not fail the request — they are reported
         in each result's `errors` array alongside whatever data was gathered.
@@ -49,9 +55,14 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/DomainResponse'
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DomainResponse'
+                required:
+                  - results
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -67,15 +78,22 @@ paths:
       operationId: ipLookup
       summary: IP intelligence lookup
       description: |
-        Performs concurrent intelligence lookups for one or more IP addresses:
-        GeoIP, ASN, reverse DNS, and abuse contact always run; threat
-        intelligence is opt-in via the `threat_intel` flag.
+        Performs concurrent intelligence lookups for one or more IP addresses.
+        Name exactly what you want in the required `lookups` array: nothing
+        runs unless you ask for it. Domain-only names such as `whois` return
+        400 on this endpoint.
 
         Per-plan limits on the number of IPs per request: free = 1, basic = 5,
-        pro = 20.
+        pro = 20. The limit counts the entries you submit, before
+        deduplication.
 
-        The `threat_intel` flag requires a pro (or admin) plan; lower plans
-        receive HTTP 403 when requesting it.
+        Requesting `threat_intel` requires a pro (or admin) plan; lower plans
+        receive HTTP 403 naming the lookup.
+
+        Results are returned in a `results` envelope, one element per unique
+        canonicalized IP. Match results by the `ip` field rather than by array
+        position. `geo` and `asn` are never cached, so their `cache_hit` is
+        always false.
 
         Private, loopback, link-local, multicast, and other non-globally-routable
         addresses are rejected.
@@ -94,9 +112,14 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/IPResponse'
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IPResponse'
+                required:
+                  - results
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -218,56 +241,41 @@ components:
           minItems: 1
           description: >
             Domain names to look up. Schemes, paths, ports, and userinfo are
-            stripped automatically. Raw IP addresses are not accepted.
+            stripped automatically. Raw IP addresses are not accepted. Entries
+            that normalize to the same domain are deduplicated into one result;
+            plan limits count the entries you submit.
           examples:
             - ["example.com"]
-        screenshot:
-          type: boolean
-          default: false
-          description: Capture a homepage screenshot (pro plan only).
-        reputation:
-          type: boolean
-          default: false
-          description: Query DNSBL reputation providers (pro plan only).
-        email_security:
-          type: boolean
-          default: false
-          description: Check SPF, DMARC, DKIM, MTA-STS, TLS-RPT, and BIMI records.
-        subdomains:
-          type: boolean
-          default: false
-          description: Enumerate known subdomains.
-        ct_logs:
-          type: boolean
-          default: false
-          description: Query certificate transparency logs.
-        bgp:
-          type: boolean
-          default: false
-          description: BGP/ASN enrichment for resolved IPs.
-        fingerprint:
-          type: boolean
-          default: false
-          description: Technology fingerprinting from HTTP response headers.
-        threat_intel:
-          type: boolean
-          default: false
-          description: Query threat intelligence providers (pro plan only).
-        dns_security:
-          type: boolean
-          default: false
-          description: Check DNSSEC and CAA records.
+        lookups:
+          type: array
+          items:
+            type: string
+            enum: [whois, dns, ssl, headers, screenshot, reputation, email_security, subdomains, ct_logs, bgp, fingerprint, threat_intel, dns_security, risk]
+          minItems: 1
+          description: >
+            Which lookups to run. Required and must be non-empty: there is no
+            default set and no "all" value. Names are trimmed, lowercased and
+            deduplicated. An unrecognized name returns 400; a name outside your
+            plan returns 403 naming that lookup.
+          examples:
+            - ["whois", "dns", "ssl"]
       required:
         - domains
+        - lookups
     DomainResponse:
       type: object
       properties:
         domain:
           type: string
-          description: The domain this result applies to.
-        cache_hit:
-          type: boolean
-          description: True when the result was served from cache.
+          description: >
+            The normalized domain this result applies to. Match results by this
+            field: array position is not part of the contract.
+        inputs:
+          type: array
+          items:
+            type: string
+          description: >
+            The verbatim request entries that normalized to this domain.
         whois:
           $ref: '#/components/schemas/WhoisInfo'
         dns:
@@ -303,10 +311,13 @@ components:
           description: Per-lookup failures; the rest of the response is still populated.
       required:
         - domain
-        - cache_hit
+        - inputs
     WhoisInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         domain_name:
           type: string
         registrar:
@@ -345,6 +356,9 @@ components:
     DNSInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         a:
           type: array
           items:
@@ -384,6 +398,9 @@ components:
     SSLInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         subject:
           type: string
         issuer:
@@ -413,6 +430,9 @@ components:
     HeadersInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         status_code:
           type: integer
         headers:
@@ -444,6 +464,9 @@ components:
     ScreenshotInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         status_code:
           type: integer
         png:
@@ -454,6 +477,9 @@ components:
     ReputationResult:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         score:
           type: integer
         risk:
@@ -483,6 +509,9 @@ components:
     EmailSecurityInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         spf:
           $ref: '#/components/schemas/SPFRecord'
         dmarc:
@@ -597,6 +626,9 @@ components:
     SubdomainInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         count:
           type: integer
         capped:
@@ -623,6 +655,9 @@ components:
     CTLogsInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         count:
           type: integer
         capped:
@@ -664,6 +699,9 @@ components:
     BGPInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         records:
           type: array
           items:
@@ -695,6 +733,9 @@ components:
     FingerprintInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         count:
           type: integer
         technologies:
@@ -722,6 +763,9 @@ components:
     ThreatIntelInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         risk_level:
           type: string
           enum:
@@ -766,6 +810,9 @@ components:
     DNSSecurityInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         dnssec:
           $ref: '#/components/schemas/DNSSECInfo'
         caa:
@@ -819,6 +866,9 @@ components:
     RiskSummary:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         score:
           type: integer
           minimum: 0
@@ -875,24 +925,41 @@ components:
           items:
             type: string
           minItems: 1
-          description: IPv4 or IPv6 addresses to look up. Must be globally routable.
+          description: >
+            IPv4 or IPv6 addresses to look up. Must be globally routable.
+            Canonicalized before use, so addresses that canonicalize to the same
+            value are deduplicated into one result; plan limits count the
+            entries you submit.
           examples:
             - ["8.8.8.8"]
-        threat_intel:
-          type: boolean
-          default: false
-          description: Query threat intelligence providers (pro plan only).
+        lookups:
+          type: array
+          items:
+            type: string
+            enum: [geo, asn, reverse_dns, abuse_contact, threat_intel]
+          minItems: 1
+          description: >
+            Which lookups to run. Required and must be non-empty. Domain-only
+            names such as whois return 400 on this endpoint.
+          examples:
+            - ["geo", "asn", "reverse_dns"]
       required:
         - ips
+        - lookups
     IPResponse:
       type: object
       properties:
         ip:
           type: string
-          description: The IP address this result applies to (canonical form).
-        cache_hit:
-          type: boolean
-          description: True when the result was served from cache.
+          description: >
+            The canonicalized IP this result applies to. Match results by this
+            field: array position is not part of the contract.
+        inputs:
+          type: array
+          items:
+            type: string
+          description: >
+            The verbatim request entries that canonicalized to this IP.
         geo:
           $ref: '#/components/schemas/GeoIPInfo'
         asn:
@@ -910,10 +977,13 @@ components:
           description: Per-lookup failures; the rest of the response is still populated.
       required:
         - ip
-        - cache_hit
+        - inputs
     GeoIPInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         continent:
           type: string
         continent_code:
@@ -942,6 +1012,9 @@ components:
     IPASNInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         asn:
           type: integer
         organization:
@@ -953,6 +1026,9 @@ components:
     ReverseDNSInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         hostnames:
           type: array
           items:
@@ -962,6 +1038,9 @@ components:
     AbuseContactInfo:
       type: object
       properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
         network:
           type: string
         organization:
@@ -994,7 +1073,11 @@ components:
           type: object
           additionalProperties:
             type: integer
-          description: Request counts keyed by feature flag.
+          description: >
+            Counts keyed by lookup name, counting lookups *requested* however
+            they were served — a cache hit does not make a lookup look less
+            used. Cache behaviour is reported separately by cache_hits and
+            cache_misses.
         requests_by_path:
           type: object
           additionalProperties:

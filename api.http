@@ -337,6 +337,17 @@ X-API-Key: {{adminKey}}
   "lookups": ["dns_security"]
 }
 
+### Domain lookup with aggregate risk score (admin key)
+# The risk score is computed from whichever other lookups you request, and costs no extra network call.
+POST {{host}}/v1/domain/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "domains": ["example.com"],
+  "lookups": ["risk", "ssl", "headers", "email_security"]
+}
+
 ### Invalidate auth cache (admin only)
 POST {{host}}/v1/admin/auth/cache/invalidate
 X-API-Key: {{adminKey}}
