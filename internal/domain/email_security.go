@@ -24,7 +24,7 @@ var commonDKIMSelectors = []string{
 // records for a domain. All sub-lookups run concurrently. It returns partial
 // results when some sub-lookups fail and (nil, nil) when none produce data.
 func LookupEmailSecurity(ctx context.Context, domainName string) (*EmailSecurityInfo, error) {
-	resolver := net.DefaultResolver
+	resolver := Resolver()
 
 	info := &EmailSecurityInfo{}
 	var mu sync.Mutex

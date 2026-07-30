@@ -85,9 +85,12 @@ func Run(logger *zap.Logger, version string) error {
 	}
 	logger.Info("connected to redis", zap.Any("config", status.Cache))
 
-	// DNS resolver — override AFTER DB and Redis are connected so platform-internal
-	// hostnames (postgres, redis) resolve via system DNS. All subsequent lookups
-	// (domain intelligence, IP intelligence) use external resolvers.
+	// DNS resolver for intelligence lookups. Scoped to the domain package via
+	// domain.Resolver(), so this no longer has to run after Postgres and Redis
+	// connect: net.DefaultResolver is untouched and platform-internal hostnames
+	// keep resolving through the system resolver for the life of the process.
+	// The old ordering requirement only ever protected the *initial*
+	// connections, and pooled reconnects failed once they aged out (issue #62).
 	dnsServers := cfg.GetStringSlice("dns.servers")
 	dnsTimeout := cfg.GetDuration("dns.timeout")
 	domain.InitResolver(dnsServers, dnsTimeout)
