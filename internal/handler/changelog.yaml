@@ -11,6 +11,10 @@
 - version: v0.58.0
   date: 2026-07-30
   changes:
+    - text: "Docker Compose now passes MAXMIND_LICENSE_KEY through from .env, so local dev downloads and persists the GeoIP databases to ./data/maxmind the same way production does. Previously geo and asn were permanently unavailable locally"
+      audience: internal
+    - text: "The smoke test asks /v1/health about GeoIP before the geo/asn content checks and reports the cause, rather than emitting opaque 'jq filter failed' lines. Still a failure, not a warning — geo being unavailable is a real problem wherever it runs"
+      audience: internal
     - text: "The OpenAPI spec at /docs/openapi.yaml was still describing the pre-v0.54.0 request contract — per-feature booleans instead of the `lookups` array, a bare array response instead of the `results` envelope, and a top-level `cache_hit`. Anyone generating a client from it would have built requests that fail validation. It now matches the live API"
       audience: public
     - text: "The domain docs page listed `dns_security` as an optional boolean request field alongside `lookups`. That row is gone; dns_security is a lookup name, as the Valid Lookups table already showed"
@@ -42,10 +46,6 @@
     - text: "Added a maxmind_data volume mounted at /data/maxmind. Machine filesystems are recreated from the image on every start, so without it the databases are re-downloaded on every cold start"
       audience: internal
     - text: "Fly requires one volume per machine — two volumes for two machines, provisioned in separate zones"
-      audience: internal
-    - text: "Docker Compose now passes MAXMIND_LICENSE_KEY through from .env, so local dev downloads and persists the GeoIP databases to ./data/maxmind the same way production does. Previously geo and asn were permanently unavailable locally"
-      audience: internal
-    - text: "The smoke test asks /v1/health about GeoIP before the geo/asn content checks and reports the cause, rather than emitting opaque 'jq filter failed' lines. Still a failure, not a warning — geo being unavailable is a real problem wherever it runs"
       audience: internal
     - text: "Volumes mount root-owned with no uid/gid option, so docker-entrypoint.sh chowns the mount as root and execs the app as appuser via su-exec. The Dockerfile no longer sets USER; the application still runs unprivileged. An unwritable mount warns loudly and keeps serving rather than crash-looping the machine over one degraded lookup"
       audience: internal
