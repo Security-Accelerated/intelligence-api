@@ -8,6 +8,26 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.56.0
+  date: 2026-07-30
+  changes:
+    - text: "DNS lookups now fail over correctly. Failover never triggered over UDP, so a lookup could stall on an unresponsive resolver instead of moving to the next one; a resolver that cannot be reached at all is now skipped as well"
+      audience: public
+    - text: "The Go code examples on the docs pages declared the same variable twice and did not compile. The JavaScript, Python and Go examples on the IP page were also still on the pre-v0.55.0 request contract"
+      audience: public
+    - text: "A target that rejects the TLS handshake is reported as a finding about that target rather than as an internal error"
+      audience: public
+    - text: "failoverConn retries the pending query against the next server when one goes silent, since UDP dials succeed for any routable address and a dial-time loop always selects the first server. Dial errors cascade too, for the unroutable case"
+      audience: internal
+    - text: "Lookup error classification keys on types and sentinels (errors.Is/errors.As) instead of substring matches on message text, so a dependency rewording an error no longer silently changes what pages someone"
+      audience: internal
+    - text: "Remote TLS alerts arrive as *net.OpError{Op: \"remote error\"} with an unexported alert type, so the tls.AlertError check never matched a real handshake failure; both shapes are now classified"
+      audience: internal
+    - text: "The test suite no longer touches the network — DNS tests run against a local miekg/dns server and TLS classification against a loopback listener, so the suite passes with no egress at all"
+      audience: internal
+    - text: "TestDocs_GoExamplesCompile builds each page's Go example rather than string-matching it; the smoke test's crt.sh assertion no longer downgrades failures from our own API to warnings"
+      audience: internal
+
 - version: v0.55.0
   date: 2026-07-30
   changes:

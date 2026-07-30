@@ -14,7 +14,9 @@ fi
 
 pass=0
 fail=0
+warn=0
 errors=()
+warnings=()
 
 check() {
     local expect="$1"
@@ -29,6 +31,45 @@ check() {
         printf "  \033[31m✗\033[0m %s → %s (expected %s)\n" "$desc" "$status" "$expect"
         fail=$((fail + 1))
         errors+=("$desc: got $status, expected $expect")
+    fi
+}
+
+# assert_json — applies a jq filter to an already-captured response body.
+# Failure is fatal. Split out from check_json so one response can carry several
+# assertions without re-issuing the request.
+#   $1  description
+#   $2  jq filter that must produce a non-empty/true result
+#   $3  response body
+assert_json() {
+    local desc="$1" filter="$2" body="$3"
+    if echo "$body" | jq -e "$filter" > /dev/null 2>&1; then
+        printf "  \033[32m✓\033[0m %s\n" "$desc"
+        pass=$((pass + 1))
+    else
+        printf "  \033[31m✗\033[0m %s (jq filter failed: %s)\n" "$desc" "$filter"
+        fail=$((fail + 1))
+        errors+=("$desc: jq filter '$filter' failed")
+    fi
+}
+
+# assert_json_upstream — assert_json, but a failure is a warning rather than
+# counting against the exit status. For assertions that depend on a third-party
+# service we do not control: crt.sh in particular returns 502s and rate-limits
+# wildcard queries, and a release check that goes red because somebody else had
+# a bad minute is a check people learn to ignore.
+#
+# Use this ONLY for the part of a response the third party supplies. Whether our
+# own API answered at all is never in this category — assert that with
+# assert_json first, or a 5xx from us reads as somebody else's outage.
+assert_json_upstream() {
+    local desc="$1" filter="$2" body="$3"
+    if echo "$body" | jq -e "$filter" > /dev/null 2>&1; then
+        printf "  \033[32m✓\033[0m %s\n" "$desc"
+        pass=$((pass + 1))
+    else
+        printf "  \033[33m!\033[0m %s (upstream unavailable, not fatal)\n" "$desc"
+        warn=$((warn + 1))
+        warnings+=("$desc: upstream did not return the expected data")
     fi
 }
 
@@ -281,11 +322,20 @@ post 200 "pro 3 domains" "/v1/domain/lookup" "$PRO" '{"domains":["example.com","
 
 echo ""
 echo "=== All Features Combined ==="
-check_json "all features return populated fields" \
-    '.results[0] | .email_security and .subdomains and .bgp and .fingerprint and .ct_logs' \
-    -X POST "$HOST/v1/domain/lookup" \
+# One request, two assertions with different severities. Our own lookups must
+# populate their fields or the release is broken; ct_logs and subdomains both
+# come from crt.sh, so those degrade to a warning.
+all_features_body=$(curl -s -X POST "$HOST/v1/domain/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
-    -d '{"domains":["example.com"],"lookups":["email_security","subdomains","ct_logs","bgp","fingerprint"]}'
+    -d '{"domains":["example.com"],"lookups":["email_security","subdomains","ct_logs","bgp","fingerprint"]}') || true
+
+assert_json "all features: our own lookups return populated fields" \
+    '.results[0] | .email_security and .bgp and .fingerprint' \
+    "$all_features_body"
+
+assert_json_upstream "all features: ct_logs and subdomains populated (crt.sh dependent)" \
+    '.results[0] | .ct_logs and .subdomains' \
+    "$all_features_body"
 
 echo ""
 echo "=== Selectable Lookups ==="
@@ -432,12 +482,19 @@ post 401 "refresh (no key)" /v1/admin/geoip/refresh "" '{}'
 # Summary
 echo ""
 echo "================================"
-printf "  \033[32m%d passed\033[0m, \033[31m%d failed\033[0m\n" "$pass" "$fail"
+printf "  \033[32m%d passed\033[0m, \033[31m%d failed\033[0m, \033[33m%d warned\033[0m\n" "$pass" "$fail" "$warn"
 if [ ${#errors[@]} -gt 0 ]; then
     echo ""
     echo "  Failures:"
     for e in "${errors[@]}"; do
         printf "    \033[31m✗\033[0m %s\n" "$e"
+    done
+fi
+if [ ${#warnings[@]} -gt 0 ]; then
+    echo ""
+    echo "  Warnings (third-party services, not release blockers):"
+    for w in "${warnings[@]}"; do
+        printf "    \033[33m!\033[0m %s\n" "$w"
     done
 fi
 echo "================================"
