@@ -149,6 +149,79 @@ func TestIsExpectedError_MatchesByTypeNotMessage(t *testing.T) {
 	}
 }
 
+// TestIsExpectedError_RemoteTLSAlert dials a server that answers the
+// ClientHello with a fatal handshake_failure alert — a target speaking TLS
+// badly, which is a finding about them rather than a fault of ours.
+//
+// This does a real handshake against a loopback listener rather than
+// constructing the error, because the constructed form is not the one that
+// occurs. crypto/tls reports a received alert as
+// *net.OpError{Op: "remote error", Err: alert} with the alert type unexported,
+// so errors.As(err, &tls.AlertError{}) is false and a test that builds a
+// tls.AlertError by hand passes while production still pages someone.
+func TestIsExpectedError_RemoteTLSAlert(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		// Read the ClientHello, then write a raw alert record: content type 21
+		// (alert), version TLS 1.2, length 2, level 2 (fatal), description 40
+		// (handshake_failure).
+		_, _ = conn.Read(make([]byte, 1024))
+		_, _ = conn.Write([]byte{0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 40})
+	}()
+
+	_, err = tls.Dial("tcp", ln.Addr().String(), &tls.Config{InsecureSkipVerify: true})
+	if err == nil {
+		t.Fatal("expected the handshake to fail")
+	}
+
+	var alertErr tls.AlertError
+	if errors.As(err, &alertErr) {
+		t.Log("note: this Go version surfaces remote alerts as tls.AlertError; " +
+			"the *net.OpError branch may no longer be load-bearing")
+	}
+	if !IsExpectedError(err) {
+		t.Errorf("IsExpectedError(%v) = false, want true — a target sending a "+
+			"handshake alert would page someone", err)
+	}
+}
+
+// TestIsExpectedError_LocalTLSAlert covers the tls.AlertError branch directly.
+// Unlike the remote case this value is constructed, because the paths that
+// produce a local alert require a handshake we would have to sabotage from the
+// inside; the type is exported and its use in IsExpectedError is a plain
+// errors.As, so the constructed value exercises the same code.
+func TestIsExpectedError_LocalTLSAlert(t *testing.T) {
+	if !IsExpectedError(tls.AlertError(40)) { // handshake_failure
+		t.Error("a local TLS alert should be classified as expected")
+	}
+}
+
+// TestIsExpectedError_LocalOpErrorsStillUnexpected pins the boundary of the
+// "remote error" check: net.OpError is an extremely common wrapper, and only
+// the received-alert case may be treated as expected on its Op alone. The
+// others reach IsExpectedError's earlier branches on their own merits or not
+// at all.
+func TestIsExpectedError_LocalOpErrorsStillUnexpected(t *testing.T) {
+	for _, op := range []string{"read", "write", "dial", "local error"} {
+		t.Run(op, func(t *testing.T) {
+			err := &net.OpError{Op: op, Err: errors.New("something broke")}
+			if IsExpectedError(err) {
+				t.Errorf("a %q OpError was classified as expected", op)
+			}
+		})
+	}
+}
+
 // timeoutError is a minimal net.Error that reports a timeout, for constructing
 // wrapped timeout errors without doing real I/O.
 type timeoutError struct{}

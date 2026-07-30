@@ -84,8 +84,19 @@ func IsExpectedError(err error) bool {
 	if errors.As(err, &recordErr) {
 		return true
 	}
+	// tls.AlertError covers alerts this side raises. It does not cover the far
+	// more common case of one arriving from the peer: crypto/tls reports those
+	// as *net.OpError{Op: "remote error", Err: alert}, where the alert type is
+	// unexported, so errors.As(&tls.AlertError) is false for every real
+	// handshake_failure a target sends us. Op is set to "remote error" in
+	// exactly one place in crypto/tls — when a received alert is recorded — so
+	// matching it is still a structural check rather than a message match.
 	var alertErr tls.AlertError
 	if errors.As(err, &alertErr) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) && opErr.Op == "remote error" {
 		return true
 	}
 
