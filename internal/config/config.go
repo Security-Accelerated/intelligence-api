@@ -144,6 +144,9 @@ func init() {
 	}
 }
 
+// Config returns the process-wide Viper instance, populated at init with
+// defaults, any config file found on the search path, and environment
+// overrides.
 func Config() *viper.Viper {
 	return config
 }

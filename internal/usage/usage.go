@@ -77,4 +77,5 @@ var LookupColumns = []string{
 // NoopRecorder silently discards all entries.
 type NoopRecorder struct{}
 
+// Record discards the entry.
 func (NoopRecorder) Record(UsageEntry) {}

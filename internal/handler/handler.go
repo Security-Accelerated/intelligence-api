@@ -84,6 +84,9 @@ type Handler struct {
 	changelog          []ChangelogVersion
 }
 
+// New builds the Handler with every service it routes to. Nil services are
+// tolerated — the corresponding endpoints return 503 rather than panicking,
+// which keeps partially-configured deployments serving what they can.
 func New(domainService DomainLookupService, ipService IPLookupService, fingerprintService FingerprintAdminService, billingService billing.Service, usageService usage.Queryer, keyRotationService KeyRotationService, geoRefresher GeoIPRefresher, cfg *viper.Viper, redisCache *cache.RedisCache, authCacheStats AuthCacheStats, db *sql.DB, status *config.StatusSnapshot) *Handler {
 	changelog, err := parseChangelog()
 	if err != nil {

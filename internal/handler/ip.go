@@ -32,6 +32,8 @@ func validateIP(raw string) (string, bool) {
 	return canonical, true
 }
 
+// IPLookup handles POST /v1/ip/lookup. Non-globally-routable addresses are
+// rejected at validation; threat intel is gated to pro and admin plans.
 func (h *Handler) IPLookup(c *gin.Context) {
 	if h.ipService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "ip intelligence not configured"})

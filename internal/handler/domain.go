@@ -153,6 +153,9 @@ func groupDomains(raw []string) []*domainGroup {
 	return groups
 }
 
+// DomainLookup handles POST /v1/domain/lookup. It normalizes and validates the
+// request, resolves the requested lookups against the caller's plan, fans out
+// across the unique domains, and returns a results envelope.
 func (h *Handler) DomainLookup(c *gin.Context) {
 	if h.domainService == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "domain intelligence not configured"})

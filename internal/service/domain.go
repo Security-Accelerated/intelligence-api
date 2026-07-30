@@ -104,6 +104,13 @@ type DomainService struct {
 	lookupDNSSecurity   func(ctx context.Context, d string) (*domain.DNSSecurityInfo, error)
 }
 
+// NewDomainService wires a DomainService to its real lookup implementations.
+//
+// defaultCacheTTL covers any lookup without an entry in cacheTTLs; see ttlFor.
+// screenshotMaxConcurrent sizes the process-wide Chromium semaphore, and
+// tiProviders is the set of threat intelligence backends built from config at
+// startup. Non-positive numeric arguments fall back to sane defaults, so a
+// zero-valued config cannot produce an unusable service.
 func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs map[string]time.Duration, lookupTimeout, screenshotTimeout time.Duration, screenshotMaxConcurrent, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
@@ -150,6 +157,8 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 	}
 }
 
+// SetLookups replaces the base lookup functions. Test-only: production wiring
+// happens in NewDomainService.
 func (s *DomainService) SetLookups(
 	whois func(context.Context, string) (*domain.WhoisInfo, error),
 	dns func(context.Context, string) (*domain.DNSInfo, error),

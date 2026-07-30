@@ -61,6 +61,9 @@ type cacheStats struct {
 	AuthCacheSize    *int              `json:"auth_cache_size,omitempty"`
 }
 
+// Info handles GET /v1/info. It merges the static startup StatusSnapshot with
+// live runtime data (goroutines, DB pool, Redis ping, auth cache size)
+// gathered at request time.
 func (h *Handler) Info(c *gin.Context) {
 	if h.status == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "status not configured"})
