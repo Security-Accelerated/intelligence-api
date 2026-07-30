@@ -613,7 +613,7 @@ Each component entry contains:
 **Request:**
 ```json
 {
-  "ips": ["8.8.8.8", "1.1.1.1"],
+  "ips": [" 8.8.8.8 ", "8.8.8.8"],
   "lookups": ["geo", "asn", "reverse_dns"]
 }
 ```
@@ -644,7 +644,7 @@ The IP and domain catalogs are separate. `threat_intel` appears in both and beha
   "results": [
     {
       "ip": "8.8.8.8",
-      "inputs": [" 8.8.8.8 "],
+      "inputs": [" 8.8.8.8 ", "8.8.8.8"],
       "geo": { "cache_hit": false, "country": "United States", "city": "Mountain View" },
       "asn": { "cache_hit": false, "asn": 15169, "organization": "GOOGLE" },
       "reverse_dns": { "cache_hit": true, "hostnames": ["dns.google"] },

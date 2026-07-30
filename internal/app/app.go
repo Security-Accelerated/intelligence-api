@@ -27,7 +27,10 @@ func Run(logger *zap.Logger, version string) error {
 	logger = logger.With(zap.String("version", version))
 	cfg := config.Config()
 
-	status := config.NewStatusSnapshot(version, domain.AllLookupNames)
+	// Both catalogs, so /info reports the same TTL table the services resolve.
+	lookupNames := append(append([]string{}, domain.AllLookupNames...), domain.AllIPLookupNames...)
+
+	status := config.NewStatusSnapshot(version, lookupNames)
 
 	rlCfg := middleware.RateLimitConfig{
 		Free:  cfg.GetInt("rate_limit.free"),
@@ -132,7 +135,7 @@ func Run(logger *zap.Logger, version string) error {
 
 	// Services
 	defaultCacheTTL := config.DefaultCacheTTL(cfg)
-	cacheTTLs := config.CacheTTLs(cfg, append(append([]string{}, domain.AllLookupNames...), domain.AllIPLookupNames...))
+	cacheTTLs := config.CacheTTLs(cfg, lookupNames)
 	// Neither service negative-caches any more: with per-lookup TTLs, one flaky
 	// provider can no longer shorten everything else's lifetime, and a failing
 	// lookup is better retried than remembered.
