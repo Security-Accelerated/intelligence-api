@@ -8,6 +8,20 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.58.0
+  date: 2026-07-30
+  changes:
+    - text: "The OpenAPI spec at /docs/openapi.yaml was still describing the pre-v0.54.0 request contract — per-feature booleans instead of the `lookups` array, a bare array response instead of the `results` envelope, and a top-level `cache_hit`. Anyone generating a client from it would have built requests that fail validation. It now matches the live API"
+      audience: public
+    - text: "The domain docs page listed `dns_security` as an optional boolean request field alongside `lookups`. That row is gone; dns_security is a lookup name, as the Valid Lookups table already showed"
+      audience: public
+    - text: "OpenAPI now documents `lookups` with an enum of valid names on both endpoints, both request fields as required, the results envelope, per-lookup cache_hit on all 18 lookup schemas, and the `inputs` array on responses"
+      audience: internal
+    - text: "TestOpenAPIMatchesLookupContract compares the spec's lookups enum and required fields against domain.AllLookupNames and AllIPLookupNames, so adding a lookup without updating the spec now fails CI"
+      audience: internal
+    - text: "TestDocs_RequestBodyListsOnlyContractFields asserts the docs request-body tables list only the target array and lookups — a per-feature boolean row reappearing fails the build. Grepping could not catch the stale row, since the lookup names legitimately appear all over those pages"
+      audience: internal
+
 - version: v0.57.0
   date: 2026-07-30
   changes:
