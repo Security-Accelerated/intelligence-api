@@ -2398,10 +2398,11 @@ func TestIntegration_AdminChangelog_AdminAllowed(t *testing.T) {
 		t.Fatal("admin changelog is empty")
 	}
 
+	// Release notes live on their own page; /docs only links to it.
 	docsResp := httptest.NewRecorder()
-	r.ServeHTTP(docsResp, httptest.NewRequest(http.MethodGet, "/docs", nil))
+	r.ServeHTTP(docsResp, httptest.NewRequest(http.MethodGet, "/docs/changelog", nil))
 	if docsResp.Code != http.StatusOK {
-		t.Fatalf("/docs status = %d, want %d", docsResp.Code, http.StatusOK)
+		t.Fatalf("/docs/changelog status = %d, want %d", docsResp.Code, http.StatusOK)
 	}
 	docsBody := docsResp.Body.String()
 
@@ -2429,9 +2430,9 @@ func TestIntegration_AdminChangelog_AdminAllowed(t *testing.T) {
 
 		if got := strings.Contains(docsBody, version); got != wantRendered {
 			if wantRendered {
-				t.Errorf("version %s has public changes but is not on the docs page", version)
+				t.Errorf("version %s has public changes but is not on the changelog page", version)
 			} else {
-				t.Errorf("version %s has only internal changes but appears on the docs page", version)
+				t.Errorf("version %s has only internal changes but appears on the changelog page", version)
 			}
 		}
 	}

@@ -8,6 +8,24 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.64.0
+  date: 2026-07-31
+  changes:
+    - text: "Release notes have moved to their own page at /docs/changelog, linked from the top nav of every docs page. They previously ran down the bottom of both the overview and the domain reference, which put a list that only grows on two pages people open to look something up"
+      audience: public
+    - text: "The full response example is now the last section on both reference pages, immediately before the end, rather than sitting between the field docs and Caching"
+      audience: public
+    - text: "Fixed the overview page footer. The panel declared a three-column grid and the markup had grown to four children, so the support address wrapped onto a second row and sat under the copyright with an alignment meant for a column it was no longer in. It is now two flex groups — identity left, links right — which cannot break when a link is added or removed"
+      audience: internal
+    - text: "The IP page sidebar listed Example before Validation while the page had them the other way round, so working down the nav jumped backwards through the document"
+      audience: internal
+    - text: "TestDocs_SidebarMatchesDocumentOrder checks every reference sidebar for links pointing at anchors no heading defines, and for entries listed out of document order. Both are invisible on the rendered page unless you happen to click the wrong link, and moving a section is exactly when they happen"
+      audience: internal
+    - text: "Page-wide docs tests now iterate a shared list of pages rather than hardcoding paths, so a new page cannot quietly opt out of the CSP, inline-script, footer, or OpenAPI-link assertions. The changelog page was picked up by all of them on the first run"
+      audience: internal
+    - text: "The internal-audience filter is now asserted on every docs page rather than only the one rendering the list, since that filter is the only thing keeping internal notes off a public page"
+      audience: internal
+
 - version: v0.63.0
   date: 2026-07-31
   changes:

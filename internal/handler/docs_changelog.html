@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Release notes for the Intelligence API. New lookups, contract changes, and fixes, newest first.">
+<meta property="og:title" content="Changelog - Intelligence API">
+<meta property="og:description" content="Release notes for the Intelligence API, newest first.">
+<meta property="og:type" content="website">
+<title>Changelog - Intelligence API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/styles.css">
+<script src="/docs/theme.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="/docs" class="topbar-brand"><span>Security</span> Accelerated</a>
+  <div class="topbar-actions">
+    <nav class="topbar-nav">
+      <a href="/docs">Overview</a>
+      <a href="/docs/domain">Domain</a>
+      <a href="/docs/ip">IP</a>
+      <a href="/docs/changelog" class="active">Changelog</a>
+    </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Theme toggle" aria-pressed="false" title="Switch theme">
+      <span class="theme-toggle-glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="transparent" stroke="var(--theme-icon-ring)" stroke-width="1.5"></circle>
+          <path d="M12 4.5A7.5 7.5 0 0 0 12 19.5Z" fill="var(--theme-icon-dark)"></path>
+          <path d="M12 4.5A7.5 7.5 0 0 1 12 19.5Z" fill="var(--theme-icon-light)"></path>
+          <path d="M12 4.6v14.8" stroke="var(--theme-icon-divider)" stroke-width="1"></path>
+        </svg>
+      </span>
+      <span class="theme-toggle-label">Dark mode</span>
+    </button>
+  </div>
+</header>
+
+<button class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle navigation">&#9776;</button>
+
+<div class="sidebar-backdrop" data-sidebar-close></div>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h2>Changelog</h2>
+    <span>Release notes, newest first.</span>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Reference</div>
+    <a href="/docs/domain">Domain Intelligence</a>
+    <a href="/docs/ip">IP Intelligence</a>
+    <a href="/docs/openapi.yaml">OpenAPI spec</a>
+  </div>
+
+  {{if .Changelog}}
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Releases</div>
+    {{range .Changelog}}<a href="#{{.Version}}">{{.Version}}</a>
+    {{end}}
+  </div>
+  {{end}}
+</nav>
+
+<main class="main">
+
+  <section class="hero" id="top">
+    <p class="eyebrow">Release Notes</p>
+    <h1>Changelog</h1>
+    <p>Every customer-facing change to the Intelligence API, newest first. Requests and responses are versionless &mdash; there is no version in the URL and no header to pin &mdash; so anything that would break an existing integration is called out explicitly rather than shipped quietly.</p>
+    <div class="hero-actions">
+      <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span class="version-pill">{{.Version}}</span>{{end}}</div>
+      <a href="mailto:support@securityaccelerated.com" class="support-link">support@securityaccelerated.com</a>
+    </div>
+  </section>
+
+  {{if .Changelog}}
+  {{range .Changelog}}
+  <div class="changelog-entry">
+    <h3 id="{{.Version}}">{{.Version}} <span class="changelog-entry-meta">{{.Date}}</span></h3>
+    <ul>
+      {{range .Changes}}<li>{{.}}</li>
+      {{end}}
+    </ul>
+  </div>
+  {{end}}
+  {{else}}
+  <p>No release notes are available yet.</p>
+  {{end}}
+
+<footer class="page-footer">
+  <p>
+    Prefer to generate a client? The full
+    <a href="/docs/openapi.yaml">OpenAPI 3.1 specification</a>
+    covers every endpoint &mdash; domain lookup, IP lookup, usage, and key rotation.
+  </p>
+  <p class="page-footer-meta">
+    Questions: <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a>
+  </p>
+</footer>
+
+</main>
+
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

@@ -255,6 +255,7 @@
       <a href="/docs" class="active">Overview</a>
       <a href="/docs/domain">Domain</a>
       <a href="/docs/ip">IP</a>
+      <a href="/docs/changelog">Changelog</a>
     </nav>
     <button class="theme-toggle" type="button" data-theme-toggle aria-label="Theme toggle" aria-pressed="false" title="Switch theme">
       <span class="theme-toggle-glyph" aria-hidden="true">
@@ -451,27 +452,22 @@
     <div class="note">The rotated key cannot be retrieved again &mdash; store it immediately. The response includes <code>old_keys_expire_at</code> so you know exactly when previous keys stop working.</div>
   </section>
 
-  {{if .Changelog}}
   <section class="section-card">
     <p class="section-label">Release Notes</p>
     <h2>What's New</h2>
-    {{range .Changelog}}
-    <div class="changelog-entry">
-      <h3>{{.Version}} <span>{{.Date}}</span></h3>
-      <ul>{{range .Changes}}<li>{{.}}</li>{{end}}</ul>
-    </div>
-    {{end}}
+    <p>Every customer-facing change is listed on the <a href="/docs/changelog">changelog</a>, newest first.</p>
   </section>
-  {{end}}
 </main>
 
 <footer class="docs-footer docs-footer-overview">
   <div class="docs-footer-shell">
     <div class="docs-footer-panel">
       <p class="docs-footer-copy">&copy; 2026 Security Accelerated</p>
-      <a href="/docs/openapi.yaml" class="docs-footer-link">OpenAPI spec</a>
-      <a href="https://x.com/SecAccelerated" class="docs-footer-link docs-footer-link-icon" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
-      <a href="mailto:support@securityaccelerated.com" class="docs-footer-link docs-footer-support">support@securityaccelerated.com</a>
+      <nav class="docs-footer-links" aria-label="Footer links">
+        <a href="/docs/openapi.yaml" class="docs-footer-link">OpenAPI spec</a>
+        <a href="mailto:support@securityaccelerated.com" class="docs-footer-link">support@securityaccelerated.com</a>
+        <a href="https://x.com/SecAccelerated" class="docs-footer-link docs-footer-link-icon" target="_blank" rel="noopener noreferrer" aria-label="Follow us on X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+      </nav>
     </div>
   </div>
 </footer>

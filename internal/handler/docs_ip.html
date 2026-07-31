@@ -23,6 +23,7 @@
       <a href="/docs">Overview</a>
       <a href="/docs/domain">Domain</a>
       <a href="/docs/ip" class="active">IP</a>
+      <a href="/docs/changelog">Changelog</a>
     </nav>
     <button class="theme-toggle" type="button" data-theme-toggle aria-label="Theme toggle" aria-pressed="false" title="Switch theme">
       <span class="theme-toggle-glyph" aria-hidden="true">
@@ -58,8 +59,8 @@
     <div class="sidebar-section-title">Endpoint</div>
     <a href="#ip-lookup">IP Intelligence</a>
     <a href="#request-body" class="indent">Request Body</a>
-    <a href="#example-request" class="indent">Example</a>
     <a href="#validation" class="indent">Validation</a>
+    <a href="#example-request" class="indent">Example</a>
   </div>
 
   <div class="sidebar-section">
@@ -74,11 +75,11 @@
 
   <div class="sidebar-section">
     <div class="sidebar-section-title">Reference</div>
+    <a href="#error-handling">Error Handling</a>
+    <a href="#caching">Caching</a>
+    <a href="#request-correlation">Request Correlation</a>
     <a href="#full-response-example">Full Response</a>
     <a href="#response-headers" class="indent">Response Headers</a>
-    <a href="#caching">Caching</a>
-    <a href="#error-handling">Error Handling</a>
-    <a href="#request-correlation">Request Correlation</a>
     <a href="/docs/openapi.yaml">OpenAPI Spec</a>
   </div>
 
@@ -342,6 +343,55 @@ resp = requests.post(
   { <span class="str">"lookup"</span>: <span class="str">"reverse_dns"</span>, <span class="str">"message"</span>: <span class="str">"ptr lookup: no such host"</span> }
 ]</code></pre>
 
+  <h2 id="error-handling">Error Handling</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>ips</code> field, or non-routable IP address</td></tr>
+      <tr><td><code>400 Bad Request</code></td><td><code>lookups</code> missing or empty after normalization &mdash; <code>lookups is required, e.g. ["geo", "asn"]</code></td></tr>
+      <tr><td><code>400 Bad Request</code></td><td>Unrecognized lookup name (including domain-only names such as <code>whois</code>) &mdash; the message names the offending entry</td></tr>
+      <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
+      <tr><td><code>403 Forbidden</code></td><td>A requested lookup is outside your plan &mdash; e.g. <code>threat_intel requires a pro plan</code></td></tr>
+      <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
+      <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
+      <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
+    </tbody>
+  </table>
+  <p>All error responses use this format:</p>
+  <pre><code>{
+  <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
+}</code></pre>
+  <div class="note">Partial lookup failures are different from HTTP errors. When individual lookups fail (e.g., reverse DNS timeout), the request still returns <code>200 OK</code> with successful lookups populated and failures listed in the <code>errors</code> array.</div>
+
+  <h2 id="caching">Caching</h2>
+  <p>Results are cached <strong>per lookup, per IP</strong> under <code>ip:&lt;ip&gt;:&lt;lookup&gt;</code> &mdash; a namespace separate from domain lookups, so <code>threat_intel</code> on the two endpoints never collides. Each lookup object carries its own <code>cache_hit</code>, so one result can mix cached and freshly fetched fields.</p>
+  <table>
+    <thead><tr><th>Lookup</th><th>TTL</th></tr></thead>
+    <tbody>
+      <tr><td><code>abuse_contact</code></td><td>24 hours</td></tr>
+      <tr><td><code>reverse_dns</code></td><td>6 hours</td></tr>
+      <tr><td><code>threat_intel</code></td><td>30 minutes</td></tr>
+      <tr><td><code>geo</code>, <code>asn</code></td><td>never cached</td></tr>
+    </tbody>
+  </table>
+  <h4><code>geo</code> and <code>asn</code> are never cached</h4>
+  <p>Both read a local MaxMind memory-mapped database with no network call, so a Redis round trip would cost <em>more</em> than simply doing the lookup again. They are recomputed on every request and their <code>cache_hit</code> is always <code>false</code> &mdash; which is accurate, since the data really was produced for that request.</p>
+  <h4>Cache failures never fail a request</h4>
+  <p>Caching is fail-open: an unreachable cache means every lookup is fetched live, an unreadable entry is treated as a miss and overwritten, and a failed write still returns the fetched result. Failed lookups are never cached &mdash; a failing lookup is retried on the next request rather than remembered.</p>
+
+  <h2 id="request-correlation">Request Correlation</h2>
+  <p>Every response carries an <code>X-Request-ID</code> the API generates for you. You can additionally send your own <code>X-Client-Request-ID</code> to tie a request to an identifier your systems already use &mdash; it is echoed back and recorded in server-side logs.</p>
+  <table>
+    <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>X-Client-Request-ID</code></td><td>Request</td><td>Your correlation ID. Up to 64 characters, limited to letters, digits, hyphens, underscores, dots, and colons &mdash; enough for UUIDs and common trace IDs.</td></tr>
+      <tr><td><code>X-Client-Request-ID</code></td><td>Response</td><td>Echoed back byte for byte when the value you sent was accepted.</td></tr>
+      <tr><td><code>X-Request-ID</code></td><td>Response</td><td>A UUID the API generates for every request, whether or not you sent a correlation ID. Quote this when contacting support.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">A correlation ID that is too long or contains other characters is ignored rather than rejected &mdash; the request succeeds normally, but nothing is echoed back. If you are relying on the header for tracing, treat a missing <code>X-Client-Request-ID</code> on the response as a signal that the value did not pass validation. <code>X-Request-ID</code> is always present &mdash; including on error responses, where correlation matters most &mdash; so it works as a fallback.</div>
+
   <h2 id="full-response-example">Full Response Example</h2>
 
   <h3 id="response-headers">Response Headers</h3>
@@ -394,55 +444,6 @@ resp = requests.post(
   }
   ]
 }</code></pre>
-
-  <h2 id="error-handling">Error Handling</h2>
-  <table>
-    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
-    <tbody>
-      <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>ips</code> field, or non-routable IP address</td></tr>
-      <tr><td><code>400 Bad Request</code></td><td><code>lookups</code> missing or empty after normalization &mdash; <code>lookups is required, e.g. ["geo", "asn"]</code></td></tr>
-      <tr><td><code>400 Bad Request</code></td><td>Unrecognized lookup name (including domain-only names such as <code>whois</code>) &mdash; the message names the offending entry</td></tr>
-      <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
-      <tr><td><code>403 Forbidden</code></td><td>A requested lookup is outside your plan &mdash; e.g. <code>threat_intel requires a pro plan</code></td></tr>
-      <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
-      <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
-      <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
-    </tbody>
-  </table>
-  <p>All error responses use this format:</p>
-  <pre><code>{
-  <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
-}</code></pre>
-  <div class="note">Partial lookup failures are different from HTTP errors. When individual lookups fail (e.g., reverse DNS timeout), the request still returns <code>200 OK</code> with successful lookups populated and failures listed in the <code>errors</code> array.</div>
-
-  <h2 id="caching">Caching</h2>
-  <p>Results are cached <strong>per lookup, per IP</strong> under <code>ip:&lt;ip&gt;:&lt;lookup&gt;</code> &mdash; a namespace separate from domain lookups, so <code>threat_intel</code> on the two endpoints never collides. Each lookup object carries its own <code>cache_hit</code>, so one result can mix cached and freshly fetched fields.</p>
-  <table>
-    <thead><tr><th>Lookup</th><th>TTL</th></tr></thead>
-    <tbody>
-      <tr><td><code>abuse_contact</code></td><td>24 hours</td></tr>
-      <tr><td><code>reverse_dns</code></td><td>6 hours</td></tr>
-      <tr><td><code>threat_intel</code></td><td>30 minutes</td></tr>
-      <tr><td><code>geo</code>, <code>asn</code></td><td>never cached</td></tr>
-    </tbody>
-  </table>
-  <h4><code>geo</code> and <code>asn</code> are never cached</h4>
-  <p>Both read a local MaxMind memory-mapped database with no network call, so a Redis round trip would cost <em>more</em> than simply doing the lookup again. They are recomputed on every request and their <code>cache_hit</code> is always <code>false</code> &mdash; which is accurate, since the data really was produced for that request.</p>
-  <h4>Cache failures never fail a request</h4>
-  <p>Caching is fail-open: an unreachable cache means every lookup is fetched live, an unreadable entry is treated as a miss and overwritten, and a failed write still returns the fetched result. Failed lookups are never cached &mdash; a failing lookup is retried on the next request rather than remembered.</p>
-
-  <h2 id="request-correlation">Request Correlation</h2>
-  <p>Every response carries an <code>X-Request-ID</code> the API generates for you. You can additionally send your own <code>X-Client-Request-ID</code> to tie a request to an identifier your systems already use &mdash; it is echoed back and recorded in server-side logs.</p>
-  <table>
-    <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>X-Client-Request-ID</code></td><td>Request</td><td>Your correlation ID. Up to 64 characters, limited to letters, digits, hyphens, underscores, dots, and colons &mdash; enough for UUIDs and common trace IDs.</td></tr>
-      <tr><td><code>X-Client-Request-ID</code></td><td>Response</td><td>Echoed back byte for byte when the value you sent was accepted.</td></tr>
-      <tr><td><code>X-Request-ID</code></td><td>Response</td><td>A UUID the API generates for every request, whether or not you sent a correlation ID. Quote this when contacting support.</td></tr>
-    </tbody>
-  </table>
-
-  <div class="note">A correlation ID that is too long or contains other characters is ignored rather than rejected &mdash; the request succeeds normally, but nothing is echoed back. If you are relying on the header for tracing, treat a missing <code>X-Client-Request-ID</code> on the response as a signal that the value did not pass validation. <code>X-Request-ID</code> is always present &mdash; including on error responses, where correlation matters most &mdash; so it works as a fallback.</div>
 
 <footer class="page-footer">
   <p>
