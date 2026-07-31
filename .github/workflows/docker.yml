@@ -10,7 +10,13 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Publishing an image that fails its own tests helps nobody. This gate is why
+  # test.yml is reusable rather than a standalone workflow.
+  test:
+    uses: ./.github/workflows/test.yml
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

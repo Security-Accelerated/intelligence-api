@@ -8,6 +8,18 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.60.0
+  date: 2026-07-30
+  changes:
+    - text: "CI now runs the full test suite before publishing an image or deploying. docker.yml and fly-deploy.yml built and shipped without running anything, so a failing test could reach production unnoticed"
+      audience: internal
+    - text: "test.yml is a reusable workflow (workflow_call) invoked by both pipelines through needs:, and runs directly on pull requests. It checks gofmt, go mod tidy -diff, go vet, build, unit tests with -race, and the tagged integration suite"
+      audience: internal
+    - text: "No push trigger on test.yml: pushes to main run docker.yml and pushes to release run fly-deploy.yml, both of which call it, so a push trigger would run the whole suite twice"
+      audience: internal
+    - text: "actionlint runs as the first CI step, since a typo in needs: would leave the gate silently not gating. Verified it catches exactly that"
+      audience: internal
+
 - version: v0.59.0
   date: 2026-07-30
   changes:
