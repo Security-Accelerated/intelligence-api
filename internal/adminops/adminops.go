@@ -192,6 +192,17 @@ func (s *Store) SetPlan(ctx context.Context, customerID int, plan string) error 
 	return s.exec(ctx, `UPDATE customers SET plan = $1 WHERE id = $2`, plan, customerID)
 }
 
+// SetName renames a customer. Names are what an operator reads when deciding
+// which row to change, so a stale or inconsistent one is a safety problem, not
+// a cosmetic one.
+func (s *Store) SetName(ctx context.Context, customerID int, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("name is required")
+	}
+	return s.exec(ctx, `UPDATE customers SET name = $1 WHERE id = $2`, name, customerID)
+}
+
 // SetActive activates or deactivates a customer. Deactivating rejects the
 // customer's keys at the next auth lookup without deleting anything, so it is
 // reversible.

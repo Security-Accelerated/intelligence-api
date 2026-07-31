@@ -20,6 +20,7 @@ func customerGroup() group {
 			customerCreate(),
 			customerList(),
 			customerPlan(),
+			customerRename(),
 			customerActive("activate", true),
 			customerActive("deactivate", false),
 		},
@@ -187,6 +188,57 @@ func customerPlan() command {
 // the command silently failed.
 const planCacheNote = "The API caches customer lookups, so this takes effect within auth.cache_ttl " +
 	"(default 5m)."
+
+type customerRenameFlags struct {
+	db   *dbFlags
+	id   int
+	name string
+}
+
+func customerRename() command {
+	return command{
+		name:    "rename",
+		summary: "change a customer's name",
+		usage:   "--id N --name NAME",
+		flags: func(fs *flag.FlagSet) any {
+			f := &customerRenameFlags{db: registerDBFlags(fs)}
+			fs.IntVar(&f.id, "id", 0, "customer ID (required)")
+			fs.StringVar(&f.name, "name", "", "new name (required)")
+			return f
+		},
+		run: func(ctx context.Context, cfg any, _ []string) error {
+			f := cfg.(*customerRenameFlags)
+			if f.id == 0 {
+				return errors.New("--id is required")
+			}
+			if strings.TrimSpace(f.name) == "" {
+				return errors.New("--name is required")
+			}
+			if err := requireWrites(fmt.Sprintf("rename customer %d", f.id)); err != nil {
+				return err
+			}
+
+			store, target, closeFn, err := f.db.openStore(ctx)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+
+			if err := confirm(f.db, target, fmt.Sprintf("Rename customer %d to %q", f.id, f.name)); err != nil {
+				return err
+			}
+
+			if err := store.SetName(ctx, f.id, f.name); err != nil {
+				if errors.Is(err, adminops.ErrNotFound) {
+					return fmt.Errorf("no customer with ID %d", f.id)
+				}
+				return err
+			}
+			fmt.Printf("Customer %d is now named %q.\n", f.id, strings.TrimSpace(f.name))
+			return nil
+		},
+	}
+}
 
 type customerActiveFlags struct {
 	db  *dbFlags

@@ -56,6 +56,15 @@ func (p *keyPool) take() string {
 
 type smokeKeys struct {
 	pools map[string]*keyPool
+	// rateLimit is a free-plan key held out of every pool.
+	//
+	// The rate limit check has to exhaust one key's window, which is the exact
+	// opposite of what the pool is for. Borrowing a pooled key created a choice
+	// between two bad outcomes: rotate, and the limit is never reached because
+	// the load is spread; or pin, and every later check risks stalling on a
+	// window the suite itself burned. A key nobody else touches removes the
+	// conflict, and the check no longer depends on running last.
+	rateLimit string
 }
 
 func (k smokeKeys) forPlan(plan string) string {
@@ -67,14 +76,6 @@ func (k smokeKeys) forPlan(plan string) string {
 
 // pinned returns one specific key from the plan's pool, so a caller can send
 // repeated requests on the same key rather than spreading them.
-func (k smokeKeys) pinned(plan string, i int) string {
-	p, ok := k.pools[plan]
-	if !ok || len(p.keys) == 0 {
-		return ""
-	}
-	return p.keys[i%len(p.keys)]
-}
-
 func (k smokeKeys) have(plan string) bool {
 	p, ok := k.pools[plan]
 	return ok && p.size() > 0
@@ -88,11 +89,12 @@ func (k smokeKeys) count(plan string) int {
 }
 
 type smokeFlags struct {
-	api      *apiFlags
-	keys     smokeKeys
-	keyFlags map[string]*stringList
-	quick    bool
-	maxWait  time.Duration
+	api          *apiFlags
+	keys         smokeKeys
+	rateLimitKey string
+	keyFlags     map[string]*stringList
+	quick        bool
+	maxWait      time.Duration
 }
 
 // stringList collects a repeatable flag, also splitting comma-separated values.
@@ -122,6 +124,8 @@ func smokeCommand() command {
 					"%s plan key; repeatable or comma-separated. Defaults to $SMOKE_%s_KEY, plus _2, _3, ...",
 					plan, strings.ToUpper(plan)))
 			}
+			fs.StringVar(&f.rateLimitKey, "ratelimit-key", "", "free plan key reserved for the rate limit check "+
+				"and excluded from the pool; defaults to $SMOKE_RATELIMIT_KEY")
 			fs.BoolVar(&f.quick, "quick", false,
 				"skip the slow lookups (screenshot, subdomains, ct_logs) and the rate limit test")
 			fs.DurationVar(&f.maxWait, "max-wait", 8*time.Minute,
@@ -183,6 +187,24 @@ func resolveSmokeKeys(f *smokeFlags) smokeKeys {
 		}
 
 		out.pools[plan] = &keyPool{keys: dedupeStrings(keys)}
+	}
+
+	out.rateLimit = strings.TrimSpace(f.rateLimitKey)
+	if out.rateLimit == "" {
+		out.rateLimit = strings.TrimSpace(os.Getenv("SMOKE_RATELIMIT_KEY"))
+	}
+	// Held out of the pool even if it was also listed as a free key, so the
+	// reservation holds however the environment is configured.
+	if out.rateLimit != "" {
+		if p, ok := out.pools["free"]; ok {
+			kept := p.keys[:0]
+			for _, k := range p.keys {
+				if k != out.rateLimit {
+					kept = append(kept, k)
+				}
+			}
+			p.keys = kept
+		}
 	}
 	return out
 }
@@ -283,11 +305,6 @@ type request struct {
 	// headers are set verbatim on the request, for cases that need to exercise
 	// a specific header value rather than a body or a key.
 	headers map[string]string
-	// pinKey selects one specific key from the plan's pool instead of taking
-	// the next in rotation. Needed by the rate limit check: rotating across a
-	// pool spreads the load, which is exactly what must not happen when the
-	// point is to exhaust one key's window.
-	pinKey int
 	// noRetry suppresses rate limit retrying, for the check that deliberately
 	// provokes a 429.
 	noRetry bool
@@ -397,9 +414,6 @@ func (r *smokeRunner) keyFor(req request) string {
 	}
 	if req.plan == "" {
 		return ""
-	}
-	if req.pinKey > 0 {
-		return r.f.keys.pinned(req.plan, req.pinKey-1)
 	}
 	return r.f.keys.forPlan(req.plan)
 }

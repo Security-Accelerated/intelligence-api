@@ -66,6 +66,7 @@ func extractGlobalFlags(args []string) []string {
 var mutatingCommands = []string{
 	"customer create",
 	"customer plan",
+	"customer rename",
 	"customer activate",
 	"customer deactivate",
 	"key rotate",

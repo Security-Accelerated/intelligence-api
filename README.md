@@ -1145,6 +1145,7 @@ sactl lookup ip 8.8.8.8 --lookups all
 sactl customer list
 sactl customer create --name "Acme" --plan pro --email ops@acme.com
 sactl customer plan --id 12 --plan basic
+sactl customer rename --id 12 --name "Acme Corp"
 sactl key list --customer 12
 sactl key rotate --customer 12
 sactl status
@@ -1169,6 +1170,31 @@ a hurry, and the mutating commands sit one word away from the read-only ones
 taken before the command is composed rather than one confirmed after it is
 typed. It works in any position, including `sactl --allow-writes` on its own to
 start the menu with changes enabled.
+
+### Smoke suite keys
+
+The suite runs every lookup against every plan, so it needs one key per plan.
+The rate limiter is **per key per minute** and free allows 5, so free-plan keys
+are **pooled and rotated** — one key alone makes a full run spend minutes
+waiting out windows. Numbered siblings are picked up automatically:
+
+| Variable | Purpose |
+|---|---|
+| `SMOKE_ADMIN_KEY` / `SMOKE_BASIC_KEY` / `SMOKE_PRO_KEY` / `SMOKE_FREE_KEY` | One per plan |
+| `SMOKE_FREE_KEY_2`, `_3`, … | Extra free keys, pooled round-robin |
+| `SMOKE_FREE_KEYS` | Comma-separated alternative to the numbered form |
+| `SMOKE_RATELIMIT_KEY` | A free key **reserved** for the rate limit check and held out of the pool |
+
+`SMOKE_RATELIMIT_KEY` is separate because that check has to exhaust one key's
+window, which is the opposite of what the pool is for: rotating would spread the
+load and never reach the limit, and reusing a pooled key would stall whichever
+later check drew it. Without it, the check is skipped rather than run wrongly.
+
+Mint more with the CLI itself:
+
+```sh
+sactl --allow-writes customer create --name "Smoke Free 4" --plan free
+```
 
 Every command reads `./.env` first, so credentials kept there work with no extra
 setup; `--env-file` points elsewhere. **Do not `source` that file** — connection

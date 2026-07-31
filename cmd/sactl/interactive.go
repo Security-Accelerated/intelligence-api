@@ -300,6 +300,7 @@ func (s *shell) customersMenu(ctx context.Context) error {
 		{"1", "List", s.customerListAction},
 		{"2", "Create", s.customerCreateAction},
 		{"3", "Change plan", s.customerPlanAction},
+		{"5", "Rename", s.customerRenameAction},
 		{"4", "Activate / deactivate", s.customerActiveAction},
 	}, "b) Back")
 }
@@ -409,6 +410,46 @@ func (s *shell) customerPlanAction(ctx context.Context) error {
 	}
 	s.printf("  Customer %d is now on the %s plan.\n", id, plan)
 	invalidateAuthCache(ctx, s.api)
+	return nil
+}
+
+func (s *shell) customerRenameAction(ctx context.Context) error {
+	if err := requireWrites("rename a customer"); err != nil {
+		return err
+	}
+	store, err := s.stores(ctx)
+	if err != nil {
+		return err
+	}
+	customers, err := store.ListCustomers(ctx)
+	if err != nil {
+		return err
+	}
+	printCustomers(customers)
+
+	id, err := s.askInt("  Customer ID")
+	if err != nil {
+		return err
+	}
+	name, err := s.askRequired("  New name")
+	if err != nil {
+		return err
+	}
+
+	ok, err := s.askYesNo(fmt.Sprintf("  Rename customer %d to %q, in %s?",
+		id, name, database.Describe(s.db.viperFor())))
+	if err != nil || !ok {
+		s.printf("  Cancelled.\n")
+		return err
+	}
+
+	if err := store.SetName(ctx, id, name); err != nil {
+		if errors.Is(err, adminops.ErrNotFound) {
+			return fmt.Errorf("no customer with ID %d", id)
+		}
+		return err
+	}
+	s.printf("  Customer %d is now named %q.\n", id, name)
 	return nil
 }
 

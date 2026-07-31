@@ -669,26 +669,22 @@ func (r *smokeRunner) limits(ctx context.Context) {
 		r.skip("rate limiter returns 429 with Retry-After", "quick mode")
 		return
 	}
-	if r.f.keys.forPlan("free") == "" {
-		r.skip("rate limiter returns 429 with Retry-After", "no free key configured")
+	if r.f.keys.rateLimit == "" {
+		r.skip("rate limiter returns 429 with Retry-After",
+			"no reserved key; set SMOKE_RATELIMIT_KEY to a free-plan key not used elsewhere")
 		return
 	}
 
-	// Deliberately exceed the free tier's 5/minute. Everything else in the run
-	// waits rate limits out; this one asserts the limiter actually engages,
-	// which nothing else would catch if it silently stopped working.
-	//
-	// pinKey is essential here. Requests normally rotate across the plan's key
-	// pool to spread load, which is the opposite of what this needs: with three
-	// free keys, ten rotating requests are three or four per key and never
-	// reach the limit, so the check would quietly stop testing anything the
-	// moment a second key was added.
+	// Deliberately exceed the free tier's 5/minute, on a key reserved for this
+	// and excluded from the pool. Every other check rotates across the pool to
+	// spread load; here the load must land on one key, and nothing else may be
+	// affected when its window is spent.
 	r.group("Rate limiting")
 	var limited *response
 	for i := 0; i < 12; i++ {
 		resp, err := r.do(ctx, request{
-			method: http.MethodGet, path: "/v1/usage?days=1", plan: "free",
-			pinKey: 1, noRetry: true,
+			method: http.MethodGet, path: "/v1/usage?days=1",
+			rawKey: r.f.keys.rateLimit, noRetry: true,
 		})
 		if err != nil {
 			r.bad("rate limiter engages on the free tier", err.Error())
@@ -702,7 +698,7 @@ func (r *smokeRunner) limits(ctx context.Context) {
 
 	if limited == nil {
 		r.bad("rate limiter engages on the free tier",
-			"12 rapid requests on one key of a 5/minute plan were all accepted")
+			"12 rapid requests on one reserved key of a 5/minute plan were all accepted")
 		return
 	}
 	r.ok("rate limiter engages on the free tier")
