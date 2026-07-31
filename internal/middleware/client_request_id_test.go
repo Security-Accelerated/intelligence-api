@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func TestClientRequestID_Valid(t *testing.T) {
@@ -140,5 +141,50 @@ func TestClientRequestID_Missing(t *testing.T) {
 	}
 	if got := w.Header().Get(ClientRequestIDHeader); got != "" {
 		t.Errorf("response header should be empty, got %q", got)
+	}
+}
+
+// TestClientRequestID_SurvivesAbortedResponses pins the behaviour the OpenAPI
+// spec publishes: both correlation headers are present on failures, not just on
+// success.
+//
+// This holds because ClientRequestID and RequestLogger write their headers on
+// the way in, before any later middleware or handler can abort. Moving either
+// below the auth or rate limit stage would silently strip correlation from
+// exactly the responses a caller most needs to trace, and no other test would
+// notice — the success path would still look perfect.
+func TestClientRequestID_SurvivesAbortedResponses(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	for _, code := range []int{
+		http.StatusBadRequest,
+		http.StatusUnauthorized,
+		http.StatusForbidden,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+	} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			r := gin.New()
+			r.Use(ClientRequestID())
+			r.Use(RequestLoggerWithLogger(zap.NewNop()))
+			r.GET("/", func(c *gin.Context) {
+				c.AbortWithStatusJSON(code, gin.H{"error": "failed"})
+			})
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set(ClientRequestIDHeader, "req-001")
+			r.ServeHTTP(w, req)
+
+			if w.Code != code {
+				t.Fatalf("status = %d, want %d", w.Code, code)
+			}
+			if got := w.Header().Get(ClientRequestIDHeader); got != "req-001" {
+				t.Errorf("%s = %q, want it echoed on a %d", ClientRequestIDHeader, got, code)
+			}
+			if w.Header().Get("X-Request-ID") == "" {
+				t.Errorf("X-Request-ID missing on a %d; the spec declares it on every response", code)
+			}
+		})
 	}
 }

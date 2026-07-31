@@ -25,6 +25,12 @@
       audience: internal
     - text: "Docs detail pages gained the OpenAPI spec link in the footer and sidebar nav, so the machine-readable contract is reachable from the reference pages rather than only the overview"
       audience: internal
+    - text: "Correlation headers are documented on error responses too, not only on 200. Review flagged the 429; checking the middleware chain showed it applies to every error, since ClientRequestID and RequestLogger write their headers before anything downstream can abort. All five shared error responses now declare them, so a caller reading the spec no longer concludes their correlation ID is dropped on exactly the responses they most need to trace"
+      audience: internal
+    - text: "The X-RateLimit pair is deliberately not declared on the shared error responses: the limiter runs after authentication and returns early without an API key in context, so a 401 never reaches it"
+      audience: internal
+    - text: "Two more tests: TestOpenAPIDeclaresCorrelationHeadersOnEveryResponse walks every documented response in the spec, and TestClientRequestID_SurvivesAbortedResponses asserts the middleware actually emits both headers across 400/401/403/429/500. Together they check the claim from both sides rather than trusting the chain order to stay put"
+      audience: internal
 
 - version: v0.62.0
   date: 2026-07-31

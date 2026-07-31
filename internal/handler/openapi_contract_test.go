@@ -167,3 +167,64 @@ func TestOpenAPIMatchesCorrelationIDContract(t *testing.T) {
 		})
 	}
 }
+
+// TestOpenAPIDeclaresCorrelationHeadersOnEveryResponse requires every documented
+// response to declare the correlation headers.
+//
+// ClientRequestID and RequestLogger sit near the top of the middleware chain, so
+// both headers are already written before any handler can succeed or fail —
+// there is no documented response that legitimately lacks them. Declaring them
+// per response is easy to forget, and a caller reading the spec would conclude
+// the correlation ID they sent had been dropped on exactly the responses where
+// they most need it: the failures.
+//
+// The X-RateLimit pair is deliberately not required here. The limiter runs after
+// authentication and returns early when there is no API key in context, so a 401
+// never reaches it.
+func TestOpenAPIDeclaresCorrelationHeadersOnEveryResponse(t *testing.T) {
+	var doc map[string]any
+	if err := yaml.Unmarshal(openapiYAML, &doc); err != nil {
+		t.Fatalf("openapi.yaml does not parse: %v", err)
+	}
+
+	want := []string{"X-Request-ID", middleware.ClientRequestIDHeader}
+
+	check := func(t *testing.T, where string, resp any) {
+		t.Helper()
+		m, ok := resp.(map[string]any)
+		if !ok {
+			return
+		}
+		// A $ref delegates to a shared response, which is checked on its own.
+		if _, isRef := m["$ref"]; isRef {
+			return
+		}
+		headers, _ := m["headers"].(map[string]any)
+		for _, h := range want {
+			if headers[h] == nil {
+				t.Errorf("%s does not declare the %s response header", where, h)
+			}
+		}
+	}
+
+	comps, _ := doc["components"].(map[string]any)
+	shared, _ := comps["responses"].(map[string]any)
+	for name, resp := range shared {
+		check(t, "components.responses."+name, resp)
+	}
+
+	paths, _ := doc["paths"].(map[string]any)
+	for path, pv := range paths {
+		methods, _ := pv.(map[string]any)
+		for method, ov := range methods {
+			op, ok := ov.(map[string]any)
+			if !ok {
+				continue
+			}
+			responses, _ := op["responses"].(map[string]any)
+			for status, resp := range responses {
+				check(t, strings.ToUpper(method)+" "+path+" -> "+status, resp)
+			}
+		}
+	}
+}

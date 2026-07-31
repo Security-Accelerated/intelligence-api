@@ -442,7 +442,7 @@ resp = requests.post(
     </tbody>
   </table>
 
-  <div class="note">A correlation ID that is too long or contains other characters is ignored rather than rejected &mdash; the request succeeds normally, but nothing is echoed back. If you are relying on the header for tracing, treat a missing <code>X-Client-Request-ID</code> on the response as a signal that the value did not pass validation. <code>X-Request-ID</code> is always present, so it works as a fallback.</div>
+  <div class="note">A correlation ID that is too long or contains other characters is ignored rather than rejected &mdash; the request succeeds normally, but nothing is echoed back. If you are relying on the header for tracing, treat a missing <code>X-Client-Request-ID</code> on the response as a signal that the value did not pass validation. <code>X-Request-ID</code> is always present &mdash; including on error responses, where correlation matters most &mdash; so it works as a fallback.</div>
 
 <footer class="page-footer">
   <p>

@@ -281,20 +281,38 @@ components:
       schema:
         type: integer
   responses:
+    # Correlation headers are set before any request can fail, so every error
+    # response carries them. The X-RateLimit pair is deliberately not declared
+    # here: the limiter runs after authentication, so a 401 never reaches it.
     BadRequest:
       description: Validation error (malformed body, too many items, invalid parameter).
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/XRequestID'
+        X-Client-Request-ID:
+          $ref: '#/components/headers/XClientRequestID'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
       description: Missing or invalid API key, or inactive account.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/XRequestID'
+        X-Client-Request-ID:
+          $ref: '#/components/headers/XClientRequestID'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
     Forbidden:
       description: The requested feature is not available on the current plan.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/XRequestID'
+        X-Client-Request-ID:
+          $ref: '#/components/headers/XClientRequestID'
       content:
         application/json:
           schema:
@@ -306,6 +324,8 @@ components:
           $ref: '#/components/headers/RetryAfter'
         X-Request-ID:
           $ref: '#/components/headers/XRequestID'
+        X-Client-Request-ID:
+          $ref: '#/components/headers/XClientRequestID'
         X-RateLimit-Limit:
           $ref: '#/components/headers/XRateLimitLimit'
         X-RateLimit-Remaining:
@@ -316,6 +336,11 @@ components:
             $ref: '#/components/schemas/Error'
     InternalError:
       description: Internal server error.
+      headers:
+        X-Request-ID:
+          $ref: '#/components/headers/XRequestID'
+        X-Client-Request-ID:
+          $ref: '#/components/headers/XClientRequestID'
       content:
         application/json:
           schema:
