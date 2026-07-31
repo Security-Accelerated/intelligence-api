@@ -929,6 +929,47 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
 }
 
 /* ----- Docs Footer ----- */
+/* Detail-page footer. Deliberately plain: a rule and two lines of muted text,
+   not the panelled treatment the overview uses. Its only job is making the
+   OpenAPI spec reachable from the pages people actually land on — the sidebar
+   link is the primary route, this catches anyone who reads to the end. */
+.page-footer {
+  margin-top: 56px;
+  padding-top: 20px;
+  border-top: 1px solid var(--divider);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 28px;
+}
+
+.page-footer p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.page-footer a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.page-footer a:hover {
+  text-decoration: underline;
+}
+
+.page-footer-meta {
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .page-footer {
+    margin-top: 40px;
+  }
+}
+
 .docs-footer {
   padding: 0 32px 32px;
 }

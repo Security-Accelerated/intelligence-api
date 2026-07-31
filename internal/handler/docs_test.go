@@ -8,11 +8,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/spf13/viper"
 )
 
@@ -330,7 +332,11 @@ func TestDocs_OverviewRendersFooter(t *testing.T) {
 	}
 }
 
-func TestDocs_DetailPagesNoFooter(t *testing.T) {
+// TestDocs_DetailPagesFooter guards the detail-page footer. These pages carry
+// the plain .page-footer, never the overview's panelled .docs-footer — the two
+// look nothing alike and the heavy one does not belong at the end of a
+// reference page.
+func TestDocs_DetailPagesFooter(t *testing.T) {
 	r := docsRouter()
 
 	for _, path := range []string{"/docs/domain", "/docs/ip"} {
@@ -344,20 +350,96 @@ func TestDocs_DetailPagesNoFooter(t *testing.T) {
 			}
 
 			body := w.Body.String()
-			if strings.Contains(body, "sidebar-footer") {
-				t.Error("detail pages should not have a sidebar footer")
+			if !strings.Contains(body, `class="page-footer"`) {
+				t.Error("detail page is missing its footer")
 			}
 			if strings.Contains(body, "docs-footer") {
-				t.Error("detail pages should not have a standalone footer")
+				t.Error("detail pages must not use the overview's panelled footer")
+			}
+			if strings.Contains(body, "sidebar-footer") {
+				t.Error("detail pages should not have a sidebar footer")
 			}
 		})
 	}
 }
 
-// TestDocs_LanguageTabsHavePanels guards the docs example tabs: the switcher in
-// docs.js resolves a tab's data-lang to a #tab-<lang> panel, so a tab without a
-// panel silently does nothing when clicked, and a panel without a tab is
-// unreachable. Neither shows up as a build or template failure.
+// TestDocs_PagesLinkToOpenAPISpec keeps the spec discoverable. It is the
+// machine-readable contract customers generate clients from, and it was
+// reachable only from the overview page's footer — invisible to anyone landing
+// on /docs/domain from a search, which is where the reference actually lives.
+func TestDocs_PagesLinkToOpenAPISpec(t *testing.T) {
+	r := docsRouter()
+
+	for _, path := range []string{"/docs", "/docs/domain", "/docs/ip"} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+			}
+			if !strings.Contains(w.Body.String(), `href="/docs/openapi.yaml"`) {
+				t.Error("page does not link to the OpenAPI spec")
+			}
+		})
+	}
+}
+
+// TestDocs_ResponseHeadersDocumented keeps the response-header documentation
+// honest. The headers a caller sees are as much the contract as the JSON body,
+// and they were previously described only in prose — the full response example
+// showed the body alone, so nothing told a reader that X-Request-ID exists.
+//
+// The length check is the real point. The IP page claimed the correlation ID
+// accepted "any string up to 128 chars" while the middleware capped it at 64
+// and rejected most punctuation, so a customer following the docs could send a
+// 100-character ID, get a 200 back, and silently lose their tracing with no
+// error to explain it. Deriving the expected number from the middleware
+// constant means the two cannot drift apart again.
+func TestDocs_ResponseHeadersDocumented(t *testing.T) {
+	r := docsRouter()
+
+	// Set by RequestLogger, ClientRequestID, and RateLimit respectively. A
+	// header a caller can observe but cannot find in the docs is a gap.
+	wantHeaders := []string{
+		"X-Request-ID",
+		"X-Client-Request-ID",
+		"X-RateLimit-Limit",
+		"X-RateLimit-Remaining",
+		"Retry-After",
+	}
+
+	for _, path := range []string{"/docs/domain", "/docs/ip"} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+			}
+			body := w.Body.String()
+
+			for _, h := range wantHeaders {
+				if !strings.Contains(body, h) {
+					t.Errorf("page never mentions the %s response header", h)
+				}
+			}
+
+			// The full response example must show headers, not just the body.
+			if !strings.Contains(body, `id="response-headers"`) {
+				t.Error("full response example does not show the returned headers")
+			}
+
+			wantLen := strconv.Itoa(middleware.ClientRequestIDMaxLen)
+			if !strings.Contains(body, "Up to "+wantLen+" characters") {
+				t.Errorf("page does not state the %s-character correlation ID limit enforced by middleware.ClientRequestIDMaxLen", wantLen)
+			}
+		})
+	}
+}
+
 func TestDocs_LanguageTabsHavePanels(t *testing.T) {
 	for _, tc := range []struct {
 		name string

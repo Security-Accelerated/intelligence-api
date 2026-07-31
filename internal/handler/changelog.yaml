@@ -8,6 +8,24 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.63.0
+  date: 2026-07-31
+  changes:
+    - text: "The domain and IP docs pages now show the headers returned with a lookup, not just the JSON body. The full response example gained a Response Headers section covering X-Request-ID, the echoed X-Client-Request-ID, and the rate limit pair"
+      audience: public
+    - text: "CORRECTION: the IP docs page said X-Client-Request-ID accepted \"any string up to 128 chars\". The real limit is 64 characters, restricted to letters, digits, hyphens, underscores, dots, and colons. An ID that fails validation is ignored rather than rejected, so anyone following the old text would have sent a longer ID, received 200, and silently lost their tracing with nothing to explain it. Both pages now state the enforced rule and call out the silent-drop behaviour"
+      audience: public
+    - text: "The OpenAPI spec documented no response headers at all and never mentioned X-Client-Request-ID, so generated clients had no idea either existed. Added components.parameters.ClientRequestID and components.headers, wired into every 200 and the shared 429 response across all four documented endpoints"
+      audience: public
+    - text: "Both docs pages claimed \"every response includes rate limit headers\", which is not true for every request path. Reworded to describe what the headers report without asserting they are universal"
+      audience: internal
+    - text: "clientRequestIDMaxLen is now exported as middleware.ClientRequestIDMaxLen, since the docs pages and the OpenAPI spec both publish the number"
+      audience: internal
+    - text: "TestDocs_ResponseHeadersDocumented asserts both pages name every observable response header and state the limit derived from the middleware constant. TestOpenAPIMatchesCorrelationIDContract runs candidate IDs through both the spec's regex and the real middleware and requires the same verdict, rather than comparing the two patterns as strings. Both were confirmed to fail against the old wrong values"
+      audience: internal
+    - text: "Docs detail pages gained the OpenAPI spec link in the footer and sidebar nav, so the machine-readable contract is reachable from the reference pages rather than only the overview"
+      audience: internal
+
 - version: v0.62.0
   date: 2026-07-31
   changes:

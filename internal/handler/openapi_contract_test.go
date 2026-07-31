@@ -1,10 +1,16 @@
 package handler
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"gopkg.in/yaml.v3"
 )
 
@@ -76,6 +82,87 @@ func TestOpenAPIMatchesLookupContract(t *testing.T) {
 				if prop.Type == "boolean" {
 					t.Errorf("%s is a boolean request field; lookups are values of the lookups array", name)
 				}
+			}
+		})
+	}
+}
+
+// TestOpenAPIMatchesCorrelationIDContract pins the published correlation-ID
+// rules to the ones actually enforced.
+//
+// The IP docs page advertised "any string up to 128 chars" while the middleware
+// capped it at 64 and rejected most punctuation. Nothing failed: an
+// over-length ID is dropped silently, so a customer following the docs would
+// send it, get a 200, and quietly lose the tracing they had set up — with no
+// error anywhere to explain why the header never came back.
+//
+// Rather than compare the spec's regex to the middleware's as strings (which
+// would pass for two patterns that are textually equal but semantically
+// different, and fail for equivalent ones written differently), this runs
+// candidate IDs through both and requires the same verdict.
+func TestOpenAPIMatchesCorrelationIDContract(t *testing.T) {
+	var doc struct {
+		Components struct {
+			Parameters map[string]struct {
+				Name   string `yaml:"name"`
+				In     string `yaml:"in"`
+				Schema struct {
+					MaxLength int    `yaml:"maxLength"`
+					Pattern   string `yaml:"pattern"`
+				} `yaml:"schema"`
+			} `yaml:"parameters"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(openapiYAML, &doc); err != nil {
+		t.Fatalf("openapi.yaml does not parse: %v", err)
+	}
+
+	p, ok := doc.Components.Parameters["ClientRequestID"]
+	if !ok {
+		t.Fatal("the spec does not document the X-Client-Request-ID parameter")
+	}
+	if p.Name != middleware.ClientRequestIDHeader || p.In != "header" {
+		t.Errorf("spec documents %s in %q, want %s in header", p.Name, p.In, middleware.ClientRequestIDHeader)
+	}
+	if p.Schema.MaxLength != middleware.ClientRequestIDMaxLen {
+		t.Errorf("spec maxLength = %d, middleware enforces %d", p.Schema.MaxLength, middleware.ClientRequestIDMaxLen)
+	}
+
+	specPattern, err := regexp.Compile(p.Schema.Pattern)
+	if err != nil {
+		t.Fatalf("spec pattern %q does not compile: %v", p.Schema.Pattern, err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.ClientRequestID())
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for _, id := range []string{
+		"req-001",
+		"550e8400-e29b-41d4-a716-446655440000",
+		"trace:abc.123_x",
+		"has space",
+		"has/slash",
+		"semi;colon",
+		strings.Repeat("a", middleware.ClientRequestIDMaxLen),
+		strings.Repeat("a", middleware.ClientRequestIDMaxLen+1),
+	} {
+		t.Run(id[:min(len(id), 24)], func(t *testing.T) {
+			specAccepts := len(id) <= p.Schema.MaxLength && specPattern.MatchString(id)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set(middleware.ClientRequestIDHeader, id)
+			r.ServeHTTP(w, req)
+			apiAccepts := w.Header().Get(middleware.ClientRequestIDHeader) != ""
+
+			if specAccepts != apiAccepts {
+				t.Errorf("spec accepts = %v but the API echoes = %v for %q — clients generated from the spec would disagree with the running service",
+					specAccepts, apiAccepts, id)
+			}
+			if apiAccepts && w.Header().Get(middleware.ClientRequestIDHeader) != id {
+				t.Errorf("echoed %q, want it back byte for byte", w.Header().Get(middleware.ClientRequestIDHeader))
 			}
 		})
 	}
