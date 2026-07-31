@@ -92,7 +92,7 @@ func TestShell_ActionErrorDoesNotExit(t *testing.T) {
 }
 
 func TestShell_SettingsChangeHost(t *testing.T) {
-	out := drive(t, "8\n1\nhttp://localhost:8080\nb\nq\n")
+	out := drive(t, "9\n1\nhttp://localhost:8080\nb\nq\n")
 	if !strings.Contains(out, "API host is now http://localhost:8080") {
 		t.Errorf("host change not applied:\n%s", out)
 	}
@@ -177,5 +177,41 @@ func TestShell_LookupMenuReachable(t *testing.T) {
 	out := drive(t, "1\nb\nq\n")
 	if !strings.Contains(out, "Lookups") {
 		t.Errorf("lookup menu not shown:\n%s", out)
+	}
+}
+
+// TestShell_MenuKeysAreUnique guards a real hazard in the dispatcher: it runs
+// every item whose key matches, so two options sharing a key would both fire
+// from one keystroke. With destructive actions in these menus that is worse
+// than an unreachable option.
+func TestShell_MenuKeysAreUnique(t *testing.T) {
+
+	// Drive each menu and collect the keys it renders, so the assertion covers
+	// what a user actually sees rather than a restated list.
+	for _, script := range []struct{ name, input string }{
+		{"main", "q\n"},
+		{"customers", "2\nb\nq\n"},
+		{"keys", "3\nb\nq\n"},
+		{"lookups", "1\nb\nq\n"},
+		{"dev", "8\nb\nq\n"},
+		{"settings", "9\nb\nq\n"},
+	} {
+		t.Run(script.name, func(t *testing.T) {
+			rendered := drive(t, script.input)
+			for _, block := range strings.Split(rendered, "\n\n") {
+				seen := map[string]bool{}
+				for _, line := range strings.Split(block, "\n") {
+					line = strings.TrimSpace(line)
+					key, _, ok := strings.Cut(line, ") ")
+					if !ok || len(key) != 1 {
+						continue
+					}
+					if seen[key] {
+						t.Errorf("menu option key %q appears twice; both actions would run:\n%s", key, block)
+					}
+					seen[key] = true
+				}
+			}
+		})
 	}
 }

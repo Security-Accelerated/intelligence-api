@@ -70,6 +70,7 @@ var mutatingCommands = []string{
 	"customer activate",
 	"customer deactivate",
 	"key rotate",
+	"dev reset",
 }
 
 func isMutating(name string) bool { return slices.Contains(mutatingCommands, name) }

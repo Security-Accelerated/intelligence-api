@@ -9,6 +9,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/adminops"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
@@ -240,7 +241,8 @@ func (s *shell) runShell(ctx context.Context) error {
 		{"5", "Service info", func(ctx context.Context) error { return runInfo(ctx, s.api) }},
 		{"6", "Usage analytics", s.usageAction},
 		{"7", "Run smoke test", s.smokeAction},
-		{"8", "Settings (host, database)", s.settingsMenu},
+		{"8", "Local dev stack", s.devMenu},
+		{"9", "Settings (host, database)", s.settingsMenu},
 	}, "q) Quit")
 
 	if errors.Is(err, errQuit) {
@@ -300,8 +302,8 @@ func (s *shell) customersMenu(ctx context.Context) error {
 		{"1", "List", s.customerListAction},
 		{"2", "Create", s.customerCreateAction},
 		{"3", "Change plan", s.customerPlanAction},
-		{"5", "Rename", s.customerRenameAction},
-		{"4", "Activate / deactivate", s.customerActiveAction},
+		{"4", "Rename", s.customerRenameAction},
+		{"5", "Activate / deactivate", s.customerActiveAction},
 	}, "b) Back")
 }
 
@@ -588,6 +590,35 @@ func (s *shell) smokeAction(ctx context.Context) error {
 		return err
 	}
 	return runSmoke(ctx, &smokeFlags{api: s.api})
+}
+
+// devMenu exposes the local-stack commands. Kept separate from the customer
+// and key menus, which normally act on production.
+func (s *shell) devMenu(ctx context.Context) error {
+	return s.menu(ctx, "Local dev stack", []menuItem{
+		{"1", "Reset (wipe volumes and rebuild)", s.devResetAction},
+	}, "b) Back")
+}
+
+func (s *shell) devResetAction(ctx context.Context) error {
+	if err := requireWrites("wipe and rebuild the local stack"); err != nil {
+		return err
+	}
+	root, err := repoRoot()
+	if err != nil {
+		return err
+	}
+
+	s.printf("\n  This wipes the LOCAL Docker stack in %s:\n", root)
+	s.printf("    containers stopped, postgres and redis volumes deleted, image rebuilt.\n")
+	s.printf("  Deployed environments are unaffected.\n\n")
+
+	ok, err := s.askYesNo("  Proceed?")
+	if err != nil || !ok {
+		s.printf("  Cancelled.\n")
+		return err
+	}
+	return runDevReset(ctx, root, &devResetFlags{yes: true, timeout: 5 * time.Minute})
 }
 
 func (s *shell) settingsMenu(ctx context.Context) error {

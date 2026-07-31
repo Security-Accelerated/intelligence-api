@@ -21,6 +21,12 @@
       audience: internal
     - text: "Screenshot capture moved behind domain.ScreenshotProvider (Name, Capture), selected by screenshot.provider and defaulting to chromium. An unrecognized name fails startup rather than silently falling back, since that would start a browser on a machine provisioned on the assumption it would not. Screenshots are the only lookup needing a browser, and in-process capture caps concurrency at about one browser per 500MB — bulk capture is not reachable by buying a larger instance, so a hosted provider needs to be a wiring change"
       audience: internal
+    - text: "sactl gained `dev reset`, porting scripts/docker-reset.sh. It lives in its own dev group because every other command in the binary normally points at production, and it bounds the readiness wait — the shell version looped forever, so a container that never came up left the terminal hanging with no indication of which dependency was stuck"
+      audience: internal
+    - text: "sactl gained `lookup domain` and `lookup ip`, which go through the HTTP API exactly as a customer request would. The CLI imports internal/domain only for lookup name constants, never to execute one, so what it prints is what the deployed service returns"
+      audience: internal
+    - text: "Mutating sactl commands now require a global --allow-writes flag. Read-only inspection is the common case, often against production and often in a hurry, and the mutating commands sit one word from the read-only ones (customer list vs customer plan)"
+      audience: internal
     - text: "TestConfig_Defaults asserted against the process-wide Viper, which merges in any config file on the search path. On a host carrying /etc/security-accelerated/intelligence-api.yaml it therefore tested the machine's configuration rather than the defaults, and a changed default read back as its old value locally while failing in CI. Defaults are now built into a fresh Viper by setDefaults"
       audience: internal
 
