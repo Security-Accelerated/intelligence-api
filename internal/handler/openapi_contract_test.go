@@ -1,10 +1,16 @@
 package handler
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"gopkg.in/yaml.v3"
 )
 
@@ -78,5 +84,147 @@ func TestOpenAPIMatchesLookupContract(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestOpenAPIMatchesCorrelationIDContract pins the published correlation-ID
+// rules to the ones actually enforced.
+//
+// The IP docs page advertised "any string up to 128 chars" while the middleware
+// capped it at 64 and rejected most punctuation. Nothing failed: an
+// over-length ID is dropped silently, so a customer following the docs would
+// send it, get a 200, and quietly lose the tracing they had set up — with no
+// error anywhere to explain why the header never came back.
+//
+// Rather than compare the spec's regex to the middleware's as strings (which
+// would pass for two patterns that are textually equal but semantically
+// different, and fail for equivalent ones written differently), this runs
+// candidate IDs through both and requires the same verdict.
+func TestOpenAPIMatchesCorrelationIDContract(t *testing.T) {
+	var doc struct {
+		Components struct {
+			Parameters map[string]struct {
+				Name   string `yaml:"name"`
+				In     string `yaml:"in"`
+				Schema struct {
+					MaxLength int    `yaml:"maxLength"`
+					Pattern   string `yaml:"pattern"`
+				} `yaml:"schema"`
+			} `yaml:"parameters"`
+		} `yaml:"components"`
+	}
+	if err := yaml.Unmarshal(openapiYAML, &doc); err != nil {
+		t.Fatalf("openapi.yaml does not parse: %v", err)
+	}
+
+	p, ok := doc.Components.Parameters["ClientRequestID"]
+	if !ok {
+		t.Fatal("the spec does not document the X-Client-Request-ID parameter")
+	}
+	if p.Name != middleware.ClientRequestIDHeader || p.In != "header" {
+		t.Errorf("spec documents %s in %q, want %s in header", p.Name, p.In, middleware.ClientRequestIDHeader)
+	}
+	if p.Schema.MaxLength != middleware.ClientRequestIDMaxLen {
+		t.Errorf("spec maxLength = %d, middleware enforces %d", p.Schema.MaxLength, middleware.ClientRequestIDMaxLen)
+	}
+
+	specPattern, err := regexp.Compile(p.Schema.Pattern)
+	if err != nil {
+		t.Fatalf("spec pattern %q does not compile: %v", p.Schema.Pattern, err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.ClientRequestID())
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for _, id := range []string{
+		"req-001",
+		"550e8400-e29b-41d4-a716-446655440000",
+		"trace:abc.123_x",
+		"has space",
+		"has/slash",
+		"semi;colon",
+		strings.Repeat("a", middleware.ClientRequestIDMaxLen),
+		strings.Repeat("a", middleware.ClientRequestIDMaxLen+1),
+	} {
+		t.Run(id[:min(len(id), 24)], func(t *testing.T) {
+			specAccepts := len(id) <= p.Schema.MaxLength && specPattern.MatchString(id)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Header.Set(middleware.ClientRequestIDHeader, id)
+			r.ServeHTTP(w, req)
+			apiAccepts := w.Header().Get(middleware.ClientRequestIDHeader) != ""
+
+			if specAccepts != apiAccepts {
+				t.Errorf("spec accepts = %v but the API echoes = %v for %q — clients generated from the spec would disagree with the running service",
+					specAccepts, apiAccepts, id)
+			}
+			if apiAccepts && w.Header().Get(middleware.ClientRequestIDHeader) != id {
+				t.Errorf("echoed %q, want it back byte for byte", w.Header().Get(middleware.ClientRequestIDHeader))
+			}
+		})
+	}
+}
+
+// TestOpenAPIDeclaresCorrelationHeadersOnEveryResponse requires every documented
+// response to declare the correlation headers.
+//
+// ClientRequestID and RequestLogger sit near the top of the middleware chain, so
+// both headers are already written before any handler can succeed or fail —
+// there is no documented response that legitimately lacks them. Declaring them
+// per response is easy to forget, and a caller reading the spec would conclude
+// the correlation ID they sent had been dropped on exactly the responses where
+// they most need it: the failures.
+//
+// The X-RateLimit pair is deliberately not required here. The limiter runs after
+// authentication and returns early when there is no API key in context, so a 401
+// never reaches it.
+func TestOpenAPIDeclaresCorrelationHeadersOnEveryResponse(t *testing.T) {
+	var doc map[string]any
+	if err := yaml.Unmarshal(openapiYAML, &doc); err != nil {
+		t.Fatalf("openapi.yaml does not parse: %v", err)
+	}
+
+	want := []string{"X-Request-ID", middleware.ClientRequestIDHeader}
+
+	check := func(t *testing.T, where string, resp any) {
+		t.Helper()
+		m, ok := resp.(map[string]any)
+		if !ok {
+			return
+		}
+		// A $ref delegates to a shared response, which is checked on its own.
+		if _, isRef := m["$ref"]; isRef {
+			return
+		}
+		headers, _ := m["headers"].(map[string]any)
+		for _, h := range want {
+			if headers[h] == nil {
+				t.Errorf("%s does not declare the %s response header", where, h)
+			}
+		}
+	}
+
+	comps, _ := doc["components"].(map[string]any)
+	shared, _ := comps["responses"].(map[string]any)
+	for name, resp := range shared {
+		check(t, "components.responses."+name, resp)
+	}
+
+	paths, _ := doc["paths"].(map[string]any)
+	for path, pv := range paths {
+		methods, _ := pv.(map[string]any)
+		for method, ov := range methods {
+			op, ok := ov.(map[string]any)
+			if !ok {
+				continue
+			}
+			responses, _ := op["responses"].(map[string]any)
+			for status, resp := range responses {
+				check(t, strings.ToUpper(method)+" "+path+" -> "+status, resp)
+			}
+		}
 	}
 }

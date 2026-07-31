@@ -15,8 +15,10 @@ const (
 	// ClientRequestIDKey is the gin context key where the validated ID is stored.
 	ClientRequestIDKey = "client_request_id"
 
-	// clientRequestIDMaxLen caps the accepted length after trimming whitespace.
-	clientRequestIDMaxLen = 64
+	// ClientRequestIDMaxLen caps the accepted length after trimming whitespace.
+	// Exported because it is part of the published contract: the docs pages
+	// state this number, and a drift test asserts they still agree.
+	ClientRequestIDMaxLen = 64
 )
 
 // safeClientIDPattern permits alphanumerics, hyphens, underscores, dots, and
@@ -36,7 +38,7 @@ func ClientRequestID() gin.HandlerFunc {
 			return
 		}
 
-		if len(raw) > clientRequestIDMaxLen {
+		if len(raw) > ClientRequestIDMaxLen {
 			c.Next()
 			return
 		}
