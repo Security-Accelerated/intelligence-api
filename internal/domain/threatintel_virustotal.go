@@ -33,8 +33,14 @@ func NewVirusTotalProvider(apiKey string) *VirusTotalProvider {
 func (p *VirusTotalProvider) Name() string { return "virustotal" }
 
 func (p *VirusTotalProvider) Query(ctx context.Context, domain string) (*ThreatIntelProviderResult, error) {
-	if !p.limiter.Allow() {
-		return &ThreatIntelProviderResult{Provider: "virustotal", Detected: false, Details: "skipped (rate limit)"}, nil
+	// Wait, not Allow: a rate-limited provider has no opinion about this
+	// domain, and reporting "not detected" would be a verdict we never
+	// obtained. ScoreThreatIntel weights VirusTotal at 0.50, so a skipped
+	// result returned as clean actively drags the composite toward safe. The
+	// coordinator excludes errored providers from scoring, so an error here is
+	// the honest answer; ctx bounds the wait.
+	if err := p.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("virustotal rate limit: %w", err)
 	}
 
 	url := "https://www.virustotal.com/api/v3/domains/" + domain

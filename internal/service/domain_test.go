@@ -711,10 +711,13 @@ func TestLookup_EachOptionalLookupFailureIsReported(t *testing.T) {
 			t.Errorf("no error reported for %s", name)
 		}
 	}
-	if mc.sets() != 2 {
-		// reputation and threat_intel return partial results alongside errors,
-		// so those two are still cached; nothing else should be.
-		t.Errorf("cache writes = %d, want 2 (partial reputation + threat_intel)", mc.sets())
+	if mc.sets() != 0 {
+		// Nothing is cached when every lookup failed. reputation and
+		// threat_intel return partial data alongside per-provider errors, and
+		// those used to be written back — after which every later caller was
+		// served the partial result as a complete, error-free success until
+		// the TTL expired.
+		t.Errorf("cache writes = %d, want 0 — no lookup succeeded", mc.sets())
 	}
 }
 
@@ -974,7 +977,16 @@ func TestLookup_ConcurrentSafety(t *testing.T) {
 	wg.Wait()
 }
 
-func TestLookup_ReputationPartialFailureStillCachesResult(t *testing.T) {
+// TestLookup_ReputationPartialFailureIsNotCached pins the fix for partial
+// results being frozen into the cache.
+//
+// The caller still gets whatever data was gathered — that is the point of
+// partial-failure tolerance — but it is not written back. Only the payload is
+// cached, never the errors, so a stored partial result is replayed to every
+// later caller as a complete success with nothing to retry. For threat
+// intelligence that means caching a verdict derived from providers that never
+// answered.
+func TestLookup_ReputationPartialFailureIsNotCached(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestService(mc)
 	svc.lookupReputation = failReputation
@@ -982,13 +994,13 @@ func TestLookup_ReputationPartialFailureStillCachesResult(t *testing.T) {
 	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupReputationName))
 
 	if resp.Reputation == nil {
-		t.Fatal("expected the partial reputation result to be returned")
+		t.Fatal("expected the partial reputation result to still be returned to this caller")
 	}
 	if len(resp.Errors) != 2 {
 		t.Errorf("errors = %+v, want 2 provider errors", resp.Errors)
 	}
-	if !mc.has(key("example.com", domain.LookupReputationName)) {
-		t.Error("expected the partial reputation result to be cached")
+	if mc.has(key("example.com", domain.LookupReputationName)) {
+		t.Error("a partial result must not be cached — later callers would see it as an error-free success")
 	}
 }
 

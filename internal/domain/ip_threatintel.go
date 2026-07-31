@@ -92,8 +92,10 @@ func NewVTIPProvider(inner *VirusTotalProvider) *VTIPProvider {
 func (p *VTIPProvider) Name() string { return "virustotal" }
 
 func (p *VTIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatIntelProviderResult, error) {
-	if !p.inner.limiter.Allow() {
-		return &ThreatIntelProviderResult{Provider: "virustotal", Detected: false, Details: "skipped (rate limit)"}, nil
+	// See the note in threatintel_virustotal.go: a rate-limited provider has
+	// no verdict, and returning "not detected" would invent one.
+	if err := p.inner.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("virustotal rate limit: %w", err)
 	}
 
 	apiURL := "https://www.virustotal.com/api/v3/ip_addresses/" + ip
@@ -168,8 +170,8 @@ func NewURLhausIPProvider(inner *URLhausProvider) *URLhausIPProvider {
 func (p *URLhausIPProvider) Name() string { return "urlhaus" }
 
 func (p *URLhausIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatIntelProviderResult, error) {
-	if !p.inner.limiter.Allow() {
-		return &ThreatIntelProviderResult{Provider: "urlhaus", Detected: false, Details: "skipped (rate limit)"}, nil
+	if err := p.inner.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("urlhaus rate limit: %w", err)
 	}
 
 	form := url.Values{"host": {ip}}
@@ -225,8 +227,8 @@ func NewOTXIPProvider(inner *AlienVaultProvider) *OTXIPProvider {
 func (p *OTXIPProvider) Name() string { return "alienvault_otx" }
 
 func (p *OTXIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatIntelProviderResult, error) {
-	if !p.inner.limiter.Allow() {
-		return &ThreatIntelProviderResult{Provider: "alienvault_otx", Detected: false, Details: "skipped (rate limit)"}, nil
+	if err := p.inner.limiter.Wait(ctx); err != nil {
+		return nil, fmt.Errorf("alienvault_otx rate limit: %w", err)
 	}
 
 	// OTX uses different paths for IPv4 vs IPv6
