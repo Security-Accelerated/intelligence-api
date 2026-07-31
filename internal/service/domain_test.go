@@ -1108,21 +1108,21 @@ func TestLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
 	}
 
 	const callers = 8
+	var arrived atomic.Int32
 	var wg sync.WaitGroup
 	results := make([]*domain.DomainResponse, callers)
 	for i := range callers {
 		wg.Go(func() {
+			arrived.Add(1)
 			results[i], _ = svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
 		})
 	}
 
-	// Give the callers time to converge on the same singleflight key.
-	for range 100 {
-		if calls.Load() > 0 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	// Wait for every caller to enter Lookup, not merely for the first fetch to
+	// begin. Releasing on the first fetch let it complete and its singleflight
+	// entry be deleted before the stragglers arrived, so they each started a
+	// fetch of their own — a flake whose count varied with scheduling.
+	waitForArrivals(&arrived, callers)
 	close(release)
 	wg.Wait()
 
@@ -1155,20 +1155,18 @@ func TestLookup_SingleflightSharesAcrossDifferentLookupSets(t *testing.T) {
 
 	// Per-lookup keying means overlapping-but-different requests still share
 	// the overlap — something per-response keying could not do.
+	var arrived atomic.Int32
 	var wg sync.WaitGroup
 	wg.Go(func() {
+		arrived.Add(1)
 		svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupSSLName))
 	})
 	wg.Go(func() {
+		arrived.Add(1)
 		svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupWhoisName))
 	})
 
-	for range 100 {
-		if dnsCalls.Load() > 0 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
+	waitForArrivals(&arrived, 2)
 	close(release)
 	wg.Wait()
 
@@ -1467,4 +1465,25 @@ func TestCacheStats_AttributesFingerprintToHeaders(t *testing.T) {
 	if stats.Hits != 0 || stats.Misses != 1 {
 		t.Errorf("stats = %+v, want 0 hits 1 miss", stats)
 	}
+}
+
+// waitForArrivals blocks until n callers have entered a lookup, then settles.
+//
+// Singleflight tests need every caller parked on the same in-flight call before
+// that call is allowed to finish. Waiting for the first *fetch* to start is not
+// enough — that only proves one caller arrived — and releasing then lets the
+// entry be deleted before the rest show up, so they start fetches of their own.
+//
+// The settle covers the gap between a caller incrementing the counter and
+// actually parking inside singleflight, which cannot be observed directly. The
+// fetch stays blocked throughout, so a caller arriving during the settle still
+// joins the existing call rather than starting one.
+func waitForArrivals(arrived *atomic.Int32, n int32) {
+	for range 1000 {
+		if arrived.Load() == n {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(50 * time.Millisecond)
 }

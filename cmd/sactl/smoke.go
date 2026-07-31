@@ -93,6 +93,9 @@ type smokeFlags struct {
 	keys         smokeKeys
 	rateLimitKey string
 	keyFlags     map[string]*stringList
+	// keysResolved marks keys as already supplied by the caller, so runSmoke
+	// does not overwrite an environment's credentials with the ambient ones.
+	keysResolved bool
 	quick        bool
 	maxWait      time.Duration
 }
@@ -140,7 +143,9 @@ func smokeCommand() command {
 
 // runSmoke executes the suite, shared by the command and the menu.
 func runSmoke(ctx context.Context, f *smokeFlags) error {
-	f.keys = resolveSmokeKeys(f)
+	if !f.keysResolved {
+		f.keys = resolveSmokeKeys(f)
+	}
 	if f.maxWait == 0 {
 		f.maxWait = 8 * time.Minute
 	}

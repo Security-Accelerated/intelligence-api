@@ -23,6 +23,12 @@
       audience: internal
     - text: "sactl gained `dev reset`, porting scripts/docker-reset.sh. It lives in its own dev group because every other command in the binary normally points at production, and it bounds the readiness wait — the shell version looped forever, so a container that never came up left the terminal hanging with no indication of which dependency was stuck"
       audience: internal
+    - text: "sactl can switch between the production and local environments from inside the interactive menu. Host, database and credentials move together, because pointing only the host at localhost while credentials still came from .env produced 401s that read as a broken deployment. Local needs no .env at all — it uses the plaintext keys from migrations/seed.sql, and a test reads that file so the two cannot drift"
+      audience: internal
+    - text: "seed.sql gained two more free-plan keys so a local smoke run has a rotation pool plus one key reserved for the rate limit check, matching production. With a single free key the run spends minutes waiting out the 5/minute limit"
+      audience: internal
+    - text: "Three singleflight tests released the blocked fetch as soon as the first one started, rather than once every caller had arrived. The first fetch then completed and its entry was deleted before the stragglers reached it, so they each started a fetch of their own — a flake whose count varied with scheduling and which failed CI"
+      audience: internal
     - text: "sactl gained `lookup domain` and `lookup ip`, which go through the HTTP API exactly as a customer request would. The CLI imports internal/domain only for lookup name constants, never to execute one, so what it prints is what the deployed service returns"
       audience: internal
     - text: "Commands that change deployed state now require a global --allow-writes flag. Read-only inspection is the common case, often against production and often in a hurry, and the mutating commands sit one word from the read-only ones (customer list vs customer plan). The gate is drawn at what a command can reach rather than at how destructive it is: dev reset wipes volumes and is ungated, since it cannot touch a deployed database and gating it would train the habit of passing the flag routinely"
