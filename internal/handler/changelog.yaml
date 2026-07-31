@@ -8,6 +8,18 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.60.0
+  date: 2026-07-30
+  changes:
+    - text: "SECURITY: fixed an SSRF weakness in the screenshot lookup. Headless Chrome could reach loopback and link-local addresses directly, so a page that passed the pre-flight safety check could redirect the browser to an internal service or cloud metadata endpoint and have it captured"
+      audience: public
+    - text: "Chromium bypasses the configured proxy for loopback and link-local addresses by default, so chromedp.ProxyServer alone never contained it — safenet saw none of that traffic. Added --proxy-bypass-list=<-loopback>, which removes the implicit bypass"
+      audience: internal
+    - text: "Reproduced before fixing: a Chrome capture aimed at a loopback HTTP server delivered 2 requests to it. After the fix, zero. The regression test asserts on whether the origin server was contacted rather than on the returned image, because a blocked navigation still yields a valid screenshot of Chrome's own error page"
+      audience: internal
+    - text: "captureScreenshot had no test coverage at all; it now has a real headless-Chrome regression test that skips when no browser is on PATH"
+      audience: internal
+
 - version: v0.59.0
   date: 2026-07-30
   changes:

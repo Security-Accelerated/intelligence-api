@@ -102,6 +102,13 @@ func captureScreenshot(ctx context.Context, url string) ([]byte, error) {
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.ProxyServer("http://"+ln.Addr().String()),
+		// Chromium bypasses the proxy for loopback and link-local addresses by
+		// default, so ProxyServer alone does not contain it: a page that passed
+		// the pre-flight probe can redirect to 127.0.0.1 or 169.254.169.254 and
+		// Chrome dials it directly, around every check safenet makes.
+		// "<-loopback>" removes that implicit bypass so everything is proxied.
+		// See https://chromium.googlesource.com/chromium/src/+/main/net/docs/proxy.md
+		chromedp.Flag("proxy-bypass-list", "<-loopback>"),
 	)
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
