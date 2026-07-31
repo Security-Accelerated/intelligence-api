@@ -56,6 +56,9 @@ func customerCreate() command {
 			if !auth.ValidPlan(f.plan) {
 				return fmt.Errorf("invalid plan %q; valid plans: %s", f.plan, strings.Join(auth.Plans, ", "))
 			}
+			if err := requireWrites(fmt.Sprintf("create customer %q", f.name)); err != nil {
+				return err
+			}
 
 			store, target, closeFn, err := f.db.openStore(ctx)
 			if err != nil {
@@ -150,6 +153,9 @@ func customerPlan() command {
 			if !auth.ValidPlan(f.plan) {
 				return fmt.Errorf("invalid plan %q; valid plans: %s", f.plan, strings.Join(auth.Plans, ", "))
 			}
+			if err := requireWrites(fmt.Sprintf("change customer %d to the %s plan", f.id, f.plan)); err != nil {
+				return err
+			}
 
 			store, target, closeFn, err := f.db.openStore(ctx)
 			if err != nil {
@@ -206,6 +212,9 @@ func customerActive(name string, active bool) command {
 			f := cfg.(*customerActiveFlags)
 			if f.id == 0 {
 				return errors.New("--id is required")
+			}
+			if err := requireWrites(fmt.Sprintf("%s customer %d", strings.ToLower(verb), f.id)); err != nil {
+				return err
 			}
 
 			store, target, closeFn, err := f.db.openStore(ctx)

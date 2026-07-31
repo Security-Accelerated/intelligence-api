@@ -49,7 +49,7 @@ func TestShell_UnknownOptionDoesNotExit(t *testing.T) {
 }
 
 func TestShell_SubmenuBackReturnsToMain(t *testing.T) {
-	out := drive(t, "1\nb\nq\n")
+	out := drive(t, "2\nb\nq\n")
 	if !strings.Contains(out, "Customers") {
 		t.Errorf("customers submenu not shown:\n%s", out)
 	}
@@ -61,7 +61,7 @@ func TestShell_SubmenuBackReturnsToMain(t *testing.T) {
 // TestShell_QuitFromSubmenu checks that q unwinds the whole stack rather than
 // only the innermost menu.
 func TestShell_QuitFromSubmenu(t *testing.T) {
-	out := drive(t, "1\nq\n")
+	out := drive(t, "2\nq\n")
 	if !strings.Contains(out, "Bye.") {
 		t.Errorf("q inside a submenu should exit the shell:\n%s", out)
 	}
@@ -75,7 +75,7 @@ func TestShell_ActionErrorDoesNotExit(t *testing.T) {
 	// No database is configured in the test environment, so any customer action
 	// fails to connect. Choosing "Customers > List" then quitting must still
 	// reach the goodbye.
-	sh := newShell(strings.NewReader("1\n1\nb\nq\n"), &out)
+	sh := newShell(strings.NewReader("2\n1\nb\nq\n"), &out)
 	sh.db.databaseURL = "postgres://nobody@127.0.0.1:1/none?sslmode=disable&connect_timeout=1"
 	defer sh.close()
 
@@ -92,7 +92,7 @@ func TestShell_ActionErrorDoesNotExit(t *testing.T) {
 }
 
 func TestShell_SettingsChangeHost(t *testing.T) {
-	out := drive(t, "7\n1\nhttp://localhost:8080\nb\nq\n")
+	out := drive(t, "8\n1\nhttp://localhost:8080\nb\nq\n")
 	if !strings.Contains(out, "API host is now http://localhost:8080") {
 		t.Errorf("host change not applied:\n%s", out)
 	}
@@ -142,5 +142,40 @@ func TestAskInt_RejectsNonPositive(t *testing.T) {
 	}
 	if got != 7 {
 		t.Errorf("got %d, want 7", got)
+	}
+}
+
+// TestShell_WritesGated is the safety property: with the flag absent, no
+// interactive path may reach a mutation. The menu still offers the action —
+// hiding it would leave an operator wondering where it went — but choosing it
+// explains how to enable it instead of doing it.
+func TestShell_WritesGated(t *testing.T) {
+	allowWrites = false
+	out := drive(t, "2\n2\nb\nq\n") // Customers > Create
+	if !strings.Contains(out, writeFlagName) {
+		t.Errorf("gate did not name the flag that enables writes:\n%s", out)
+	}
+	if strings.Contains(out, "Name:") {
+		t.Errorf("the create prompt ran despite writes being disabled:\n%s", out)
+	}
+}
+
+func TestShell_ReadOnlyBannerOnlyWhenGated(t *testing.T) {
+	allowWrites = false
+	if out := drive(t, "q\n"); !strings.Contains(out, "read-only") {
+		t.Errorf("no read-only banner when writes are disabled:\n%s", out)
+	}
+
+	allowWrites = true
+	defer func() { allowWrites = false }()
+	if out := drive(t, "q\n"); strings.Contains(out, "read-only") {
+		t.Errorf("read-only banner shown when writes are enabled:\n%s", out)
+	}
+}
+
+func TestShell_LookupMenuReachable(t *testing.T) {
+	out := drive(t, "1\nb\nq\n")
+	if !strings.Contains(out, "Lookups") {
+		t.Errorf("lookup menu not shown:\n%s", out)
 	}
 }

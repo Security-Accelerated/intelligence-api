@@ -15,6 +15,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/billing"
 	"github.com/security-accelerated/intelligence-api/internal/config"
 	"github.com/security-accelerated/intelligence-api/internal/database"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 // errQuit unwinds the menu stack when the operator asks to leave.
@@ -224,14 +225,19 @@ func (s *shell) runShell(ctx context.Context) error {
 	s.printf("  db:  %s\n", database.Describe(s.db.viperFor()))
 	s.printf("  api: %s\n", s.api.host)
 
+	if !allowWrites {
+		s.printf("  read-only — start with %s to enable changes\n", writeFlagName)
+	}
+
 	err := s.menu(ctx, "Main menu", []menuItem{
-		{"1", "Customers", s.customersMenu},
-		{"2", "API keys", s.keysMenu},
-		{"3", "Deployment status", func(ctx context.Context) error { return runStatus(ctx, s.api) }},
-		{"4", "Service info", func(ctx context.Context) error { return runInfo(ctx, s.api) }},
-		{"5", "Usage analytics", s.usageAction},
-		{"6", "Run smoke test", s.smokeAction},
-		{"7", "Settings (host, database)", s.settingsMenu},
+		{"1", "Run a lookup", s.lookupMenu},
+		{"2", "Customers", s.customersMenu},
+		{"3", "API keys", s.keysMenu},
+		{"4", "Deployment status", func(ctx context.Context) error { return runStatus(ctx, s.api) }},
+		{"5", "Service info", func(ctx context.Context) error { return runInfo(ctx, s.api) }},
+		{"6", "Usage analytics", s.usageAction},
+		{"7", "Run smoke test", s.smokeAction},
+		{"8", "Settings (host, database)", s.settingsMenu},
 	}, "q) Quit")
 
 	if errors.Is(err, errQuit) {
@@ -239,6 +245,51 @@ func (s *shell) runShell(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+// lookupMenu runs intelligence lookups through the API, exactly as the
+// commands do — the CLI never performs a lookup itself, so what it shows is
+// what a customer would receive.
+func (s *shell) lookupMenu(ctx context.Context) error {
+	return s.menu(ctx, "Lookups", []menuItem{
+		{"1", "Domain", func(ctx context.Context) error {
+			return s.lookupAction(ctx, "domain", "domains", "/v1/domain/lookup",
+				domain.AllLookupNames, defaultDomainLookups)
+		}},
+		{"2", "IP address", func(ctx context.Context) error {
+			return s.lookupAction(ctx, "IP", "ips", "/v1/ip/lookup",
+				domain.AllIPLookupNames, defaultIPLookups)
+		}},
+	}, "b) Back")
+}
+
+func (s *shell) lookupAction(ctx context.Context, label, field, path string, all, defaults []string) error {
+	raw, err := s.askRequired(fmt.Sprintf("  %s(s), comma-separated", label))
+	if err != nil {
+		return err
+	}
+	var targets []string
+	for _, t := range strings.Split(raw, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			targets = append(targets, t)
+		}
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("no %s given", label)
+	}
+
+	s.printf("  available: %s\n", strings.Join(all, ", "))
+	choice, err := s.askDefault("  lookups (comma-separated, or 'all')", strings.Join(defaults, ","))
+	if err != nil {
+		return err
+	}
+	names, err := resolveLookupNames(choice, all, defaults)
+	if err != nil {
+		return err
+	}
+
+	s.printf("\n  running %d lookup(s) against %s...\n\n", len(names), s.api.host)
+	return runLookup(ctx, s.api, path, field, targets, names)
 }
 
 func (s *shell) customersMenu(ctx context.Context) error {
@@ -273,6 +324,9 @@ func (s *shell) customerListAction(ctx context.Context) error {
 }
 
 func (s *shell) customerCreateAction(ctx context.Context) error {
+	if err := requireWrites("create a customer"); err != nil {
+		return err
+	}
 	name, err := s.askRequired("  Name")
 	if err != nil {
 		return err
@@ -313,6 +367,9 @@ func (s *shell) customerCreateAction(ctx context.Context) error {
 }
 
 func (s *shell) customerPlanAction(ctx context.Context) error {
+	if err := requireWrites("change a customer's plan"); err != nil {
+		return err
+	}
 	store, err := s.stores(ctx)
 	if err != nil {
 		return err
@@ -351,6 +408,9 @@ func (s *shell) customerPlanAction(ctx context.Context) error {
 }
 
 func (s *shell) customerActiveAction(ctx context.Context) error {
+	if err := requireWrites("activate or deactivate a customer"); err != nil {
+		return err
+	}
 	store, err := s.stores(ctx)
 	if err != nil {
 		return err
@@ -411,6 +471,9 @@ func (s *shell) keyListAction(ctx context.Context) error {
 }
 
 func (s *shell) keyRotateAction(ctx context.Context) error {
+	if err := requireWrites("rotate a key"); err != nil {
+		return err
+	}
 	if _, err := s.stores(ctx); err != nil {
 		return err
 	}

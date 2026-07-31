@@ -1140,6 +1140,8 @@ scripted and CI use:
 
 ```sh
 sactl                                        # interactive menu
+sactl lookup domain example.com --lookups dns,ssl,risk
+sactl lookup ip 8.8.8.8 --lookups all
 sactl customer list
 sactl customer create --name "Acme" --plan pro --email ops@acme.com
 sactl customer plan --id 12 --plan basic
@@ -1150,6 +1152,23 @@ sactl info --json
 sactl usage --days 7 --customer 12
 sactl smoke --host http://localhost:8080
 ```
+
+Mutating commands additionally require **`--allow-writes`**:
+
+```sh
+sactl customer create --name Acme --plan pro
+# sactl: writes are disabled: refusing to create customer "Acme".
+#        Re-run with --allow-writes to permit changes
+
+sactl --allow-writes customer create --name Acme --plan pro
+```
+
+Read-only inspection is the common case, often against production and often in
+a hurry, and the mutating commands sit one word away from the read-only ones
+(`customer list` vs `customer plan`). The flag makes every change a decision
+taken before the command is composed rather than one confirmed after it is
+typed. It works in any position, including `sactl --allow-writes` on its own to
+start the menu with changes enabled.
 
 Every command reads `./.env` first, so credentials kept there work with no extra
 setup; `--env-file` points elsewhere. **Do not `source` that file** — connection

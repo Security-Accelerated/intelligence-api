@@ -114,6 +114,9 @@ func keyRotate() command {
 			if f.customer == 0 {
 				return errors.New("--customer is required")
 			}
+			if err := requireWrites(fmt.Sprintf("rotate the key for customer %d", f.customer)); err != nil {
+				return err
+			}
 
 			db, target, err := f.db.openDB(ctx)
 			if err != nil {

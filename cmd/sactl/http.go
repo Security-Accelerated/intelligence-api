@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,7 +51,16 @@ func (f *apiFlags) adminKey() (string, error) {
 }
 
 func (f *apiFlags) client() *http.Client {
-	return &http.Client{Timeout: f.timeout}
+	return &http.Client{
+		Timeout: f.timeout,
+		// Redirects are part of the contract, not something to follow past.
+		// The default client follows a 301 and reports the destination's 200,
+		// which made an assertion that GET / redirects pass whether or not the
+		// redirect existed.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 // getJSON performs an authenticated GET and decodes the body into out.
@@ -112,4 +122,46 @@ func (f *apiFlags) probe(ctx context.Context, method, path string) (int, error) 
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxAPIResponse))
 	return resp.StatusCode, nil
+}
+
+// postJSON performs an authenticated POST and returns the raw body.
+func (f *apiFlags) postJSON(ctx context.Context, path string, body any) ([]byte, error) {
+	key, err := f.adminKey()
+	if err != nil {
+		return nil, err
+	}
+
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, trimHost(f.host)+path, bytes.NewReader(encoded))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", key)
+
+	resp, err := f.client().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponse))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(raw, &apiErr) == nil && apiErr.Error != "" {
+			return nil, fmt.Errorf("POST %s: HTTP %d: %s", path, resp.StatusCode, apiErr.Error)
+		}
+		return nil, fmt.Errorf("POST %s: HTTP %d", path, resp.StatusCode)
+	}
+	return raw, nil
 }

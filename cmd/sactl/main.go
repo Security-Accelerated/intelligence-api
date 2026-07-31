@@ -60,6 +60,7 @@ type group struct {
 
 func groups() []group {
 	return []group{
+		lookupGroup(),
 		customerGroup(),
 		keyGroup(),
 	}
@@ -89,6 +90,8 @@ func main() {
 }
 
 func run(args []string) error {
+	args = extractGlobalFlags(args)
+
 	if len(args) == 0 {
 		// Interactive only when a person is actually there to answer. Piped or
 		// redirected input would otherwise hit EOF on the first prompt and quit
@@ -169,7 +172,7 @@ func dispatch(ctx context.Context, name string, c command, args []string) error 
 	if c.flags != nil {
 		cfg = c.flags(fs)
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return err
 	}
 
