@@ -983,11 +983,17 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
   max-width: 1116px;
 }
 
+/* Two groups — identity on the left, links on the right — rather than a fixed
+   column track. The previous rule declared three columns and the markup grew to
+   four children, so the last link wrapped onto a second row and sat under the
+   copyright with a justify-self meant for a column it was no longer in. Flexing
+   two groups means adding or removing a link cannot break the layout. */
 .docs-footer-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 14px 24px;
   padding: 18px 22px;
   border: 1px solid var(--border);
   border-radius: 18px;
@@ -996,8 +1002,14 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
   backdrop-filter: blur(12px);
 }
 
+.docs-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
 .docs-footer-copy {
-  justify-self: start;
   color: var(--ink);
   font-size: 13px;
   font-weight: 700;
@@ -1030,7 +1042,6 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
 }
 
 .docs-footer-link-icon {
-  justify-self: center;
   width: 40px;
   padding: 0;
 }
@@ -1041,24 +1052,19 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
   fill: currentColor;
 }
 
-.docs-footer-support {
-  justify-self: end;
-}
-
 @media (max-width: 860px) {
   .docs-footer {
     padding: 0 18px 24px;
   }
 
   .docs-footer-panel {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     padding: 18px;
-    justify-items: center;
     text-align: center;
   }
 
-  .docs-footer-link {
-    justify-self: center;
+  .docs-footer-links {
+    justify-content: center;
   }
 }
 

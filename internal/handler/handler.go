@@ -155,6 +155,7 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/docs", h.Docs)
 	router.GET("/docs/domain", h.DocsDomain)
 	router.GET("/docs/ip", h.DocsIP)
+	router.GET("/docs/changelog", h.DocsChangelog)
 	router.GET("/docs/styles.css", h.DocsCSS)
 	router.GET("/docs/theme.js", h.DocsThemeJS)
 	router.GET("/docs/docs.js", h.DocsJS)

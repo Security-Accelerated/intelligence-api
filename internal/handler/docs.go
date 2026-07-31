@@ -48,9 +48,13 @@ var docsDomainHTML string
 //go:embed docs_ip.html
 var docsIPHTML string
 
+//go:embed docs_changelog.html
+var docsChangelogHTML string
+
 var docsTmpl = template.Must(template.New("docs").Parse(docsHTML))
 var docsDomainTmpl = template.Must(template.New("docs_domain").Parse(docsDomainHTML))
 var docsIPTmpl = template.Must(template.New("docs_ip").Parse(docsIPHTML))
+var docsChangelogTmpl = template.Must(template.New("docs_changelog").Parse(docsChangelogHTML))
 
 type docsData struct {
 	BasicPaymentLink string
@@ -131,4 +135,12 @@ func (h *Handler) DocsDomain(c *gin.Context) {
 
 func (h *Handler) DocsIP(c *gin.Context) {
 	h.renderDocs(c, docsIPTmpl)
+}
+
+// DocsChangelog serves the release notes as their own page. They used to sit at
+// the bottom of the overview and the domain reference, which pushed the
+// changelog's length onto pages people open to look something up, and meant two
+// copies of the same list to keep in sync.
+func (h *Handler) DocsChangelog(c *gin.Context) {
+	h.renderDocs(c, docsChangelogTmpl)
 }

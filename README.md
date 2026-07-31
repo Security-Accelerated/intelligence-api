@@ -7,7 +7,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header,
 
 ## Authentication
 
-Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
+Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/changelog`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
 
 ### Customer Plans
 
@@ -49,6 +49,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/docs` | None | API documentation landing page |
 | GET | `/docs/domain` | None | Domain Intelligence API docs |
 | GET | `/docs/ip` | None | IP Intelligence API docs |
+| GET | `/docs/changelog` | None | Public release notes |
 | GET | `/docs/openapi.yaml` | None | OpenAPI specification for the public API |
 | GET | `/v1/hello` | None | Health check, returns `{"message": "hello world"}` |
 | GET | `/v1/health` | None | Dependency health (Postgres, Redis, GeoIP) for ops monitoring |
@@ -765,7 +766,7 @@ Returns application configuration, service status, and live runtime metrics. The
 
 ### `GET /v1/admin/changelog` — Changelog (Admin Only)
 
-Returns the full changelog with audience tags. Each entry includes `version`, `date`, and `changes` (array of `{text, audience}`). The public docs pages at `/docs`, `/docs/domain`, and `/docs/ip` automatically show only `public` entries in a "What's New" section.
+Returns the full changelog with audience tags. Each entry includes `version`, `date`, and `changes` (array of `{text, audience}`). The public changelog page at `/docs/changelog` renders only `public` entries; the other docs pages link to it rather than duplicating the list.
 
 The changelog is maintained in `changelog.yaml` at the project root (symlink to `internal/handler/changelog.yaml`). Update it with every release.
 

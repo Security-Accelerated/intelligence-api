@@ -152,10 +152,19 @@ func TestDocs_JSEndpoints(t *testing.T) {
 	}
 }
 
+// docsPagePaths is every public HTML docs page. Tests that assert a
+// page-wide invariant iterate this rather than listing paths inline, so adding
+// a page cannot quietly opt out of them.
+var docsPagePaths = []string{"/docs", "/docs/domain", "/docs/ip", "/docs/changelog"}
+
+// docsReferencePagePaths is the subset with the sidebar reference layout — the
+// overview uses a different shell.
+var docsReferencePagePaths = []string{"/docs/domain", "/docs/ip", "/docs/changelog"}
+
 func TestDocs_PagesSetCSPAndNoInlineScripts(t *testing.T) {
 	r := docsRouter()
 
-	for _, path := range []string{"/docs", "/docs/domain", "/docs/ip"} {
+	for _, path := range docsPagePaths {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -213,7 +222,7 @@ func TestDocs_ChangelogFiltersInternalEntries(t *testing.T) {
 
 	r := docsRouterWithData(changelog, nil, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/changelog", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -221,10 +230,23 @@ func TestDocs_ChangelogFiltersInternalEntries(t *testing.T) {
 	}
 	body := w.Body.String()
 	if !strings.Contains(body, "Public feature added") {
-		t.Error("expected public changelog entry to appear in docs")
+		t.Error("expected public changelog entry to appear on the changelog page")
 	}
 	if strings.Contains(body, "Internal refactor") {
 		t.Error("internal changelog entry must not appear in public docs")
+	}
+
+	// The audience filter is the only thing keeping internal notes off a public
+	// page, so assert it on every page rather than just the one that renders the
+	// list. A page that starts rendering the changelog unfiltered would
+	// otherwise leak silently.
+	for _, path := range docsPagePaths {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		r.ServeHTTP(w, req)
+		if strings.Contains(w.Body.String(), "Internal refactor") {
+			t.Errorf("%s leaks an internal changelog entry", path)
+		}
 	}
 }
 
@@ -249,7 +271,7 @@ func TestDocs_ChangelogExcludesAllInternalVersions(t *testing.T) {
 
 	r := docsRouterWithData(changelog, nil, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/changelog", nil)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -339,7 +361,7 @@ func TestDocs_OverviewRendersFooter(t *testing.T) {
 func TestDocs_DetailPagesFooter(t *testing.T) {
 	r := docsRouter()
 
-	for _, path := range []string{"/docs/domain", "/docs/ip"} {
+	for _, path := range docsReferencePagePaths {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -370,7 +392,7 @@ func TestDocs_DetailPagesFooter(t *testing.T) {
 func TestDocs_PagesLinkToOpenAPISpec(t *testing.T) {
 	r := docsRouter()
 
-	for _, path := range []string{"/docs", "/docs/domain", "/docs/ip"} {
+	for _, path := range docsPagePaths {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -581,4 +603,59 @@ func extractPanel(t *testing.T, html, lang string) string {
 		t.Fatalf("unterminated panel for %q", lang)
 	}
 	return html[start : start+end]
+}
+
+// TestDocs_SidebarMatchesDocumentOrder keeps each sidebar honest about the page
+// it navigates.
+//
+// Two failure modes, both of which have happened. A link can point at an anchor
+// that does not exist, which silently does nothing when clicked — easy to
+// introduce by renaming a heading. And the sidebar can list sections in an order
+// the page does not follow, so working down the nav jumps backwards through the
+// document; the IP page listed Example before Validation while the page had them
+// the other way round. Moving a section is exactly when both happen, and neither
+// is visible from the rendered page unless you happen to click the wrong link.
+func TestDocs_SidebarMatchesDocumentOrder(t *testing.T) {
+	sidebarRe := regexp.MustCompile(`(?s)<nav class="sidebar">.*?</nav>`)
+	anchorRe := regexp.MustCompile(`href="#([^"]+)"`)
+	headingRe := regexp.MustCompile(`<h[234] id="([^"]+)"`)
+
+	r := docsRouter()
+
+	for _, path := range docsReferencePagePaths {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+			}
+			body := w.Body.String()
+
+			sidebar := sidebarRe.FindString(body)
+			if sidebar == "" {
+				t.Fatal("no sidebar found")
+			}
+
+			position := map[string]int{}
+			for i, m := range headingRe.FindAllStringSubmatch(body, -1) {
+				position[m[1]] = i
+			}
+
+			var prev string
+			prevPos := -1
+			for _, m := range anchorRe.FindAllStringSubmatch(sidebar, -1) {
+				id := m[1]
+				pos, ok := position[id]
+				if !ok {
+					t.Errorf("sidebar links to #%s, which no heading on the page defines", id)
+					continue
+				}
+				if pos < prevPos {
+					t.Errorf("sidebar lists %q before %q, but the page has them the other way round", prev, id)
+				}
+				prev, prevPos = id, pos
+			}
+		})
+	}
 }
