@@ -15,9 +15,21 @@
       audience: public
     - text: "Chromium bypasses the configured proxy for loopback and link-local addresses by default, so chromedp.ProxyServer alone never contained it — safenet saw none of that traffic. Added --proxy-bypass-list=<-loopback>, which removes the implicit bypass"
       audience: internal
-    - text: "Reproduced before fixing: a Chrome capture aimed at a loopback HTTP server delivered 2 requests to it. After the fix, zero. The regression test asserts on whether the origin server was contacted rather than on the returned image, because a blocked navigation still yields a valid screenshot of Chrome's own error page"
+    - text: "Reproduced before fixing: a Chrome capture aimed at a loopback HTTP server delivered 2 requests to it. After the fix, zero. The regression test asserts the capture ran to completion before asserting containment, so a browser that fails to launch fails the test rather than passing it"
       audience: internal
-    - text: "captureScreenshot had no test coverage at all; it now has a real headless-Chrome regression test that skips when no browser is on PATH"
+    - text: "captureScreenshot had no test coverage at all; it now has a real headless-Chrome regression test"
+      audience: internal
+    - text: "CI now runs the full test suite before publishing an image or deploying. docker.yml and fly-deploy.yml built and shipped without running anything, so a failing test could reach production unnoticed"
+      audience: internal
+    - text: "test.yml is a reusable workflow (workflow_call) invoked by both pipelines through needs:, and runs directly on pull requests. It checks gofmt, go mod tidy -diff, go vet, build, unit tests with -race, and the tagged integration suite"
+      audience: internal
+    - text: "No push trigger on test.yml: pushes to main run docker.yml and pushes to release run fly-deploy.yml, both of which call it, so a push trigger would run the whole suite twice"
+      audience: internal
+    - text: "actionlint runs as the first CI step, since a typo in needs: would leave the gate silently not gating. Verified it catches exactly that"
+      audience: internal
+    - text: "The CI gate provisions Chrome and sets REQUIRE_CHROME so the screenshot SSRF regression test cannot silently skip — a skipped test looks identical to a passing one in the run summary. A shell step is used rather than a third-party setup action, since this job holds a repository token"
+      audience: internal
+    - text: "Checkouts no longer persist GITHUB_TOKEN, jobs declare contents: read, and actionlint is pinned to a commit SHA verified through the GitHub API"
       audience: internal
 
 - version: v0.59.0

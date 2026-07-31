@@ -10,7 +10,15 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Publishing an image that fails its own tests helps nobody. This gate is why
+  # test.yml is reusable rather than a standalone workflow.
+  test:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -18,6 +26,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The build reads files from the working tree; GHCR auth is handled
+          # by docker/login-action below, so the git token is not needed after
+          # checkout and should not be left in .git/config.
+          persist-credentials: false
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3

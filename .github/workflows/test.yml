@@ -1,0 +1,91 @@
+name: Tests
+
+# Runs directly on pull requests, and as a reusable workflow called by the
+# publish and deploy pipelines — those two used to build and ship without
+# running anything, so a red test could reach production unnoticed.
+#
+# Deliberately no `push` trigger: pushes to main run docker.yml and pushes to
+# release run fly-deploy.yml, both of which call this workflow. Adding one here
+# would run the whole suite twice for every push.
+on:
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    name: Build, vet and test
+    runs-on: ubuntu-latest
+    # Nothing here writes anything: it reads the repo and runs tests.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # checkout leaves GITHUB_TOKEN in .git/config by default, where any
+          # later step — including third-party actions — can read it. Nothing
+          # in this job talks to the remote, so it is not needed.
+          persist-credentials: false
+
+      # Workflow files are only executed by GitHub, so a typo in `needs:` or a
+      # broken reusable-workflow reference would otherwise be discovered by the
+      # gate silently not gating. actionlint also runs shellcheck over `run:`
+      # blocks and validates ${{ }} expressions.
+      #
+      # Pinned to a commit rather than the floating v2 tag: a tag can be moved,
+      # and this action runs with access to the workflow token. SHA verified
+      # against the v2.2.0 release via the GitHub API.
+      - name: actionlint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go mod tidy is clean
+        run: go mod tidy -diff
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      # The screenshot SSRF regression test drives a real browser, and a
+      # skipped test is indistinguishable from a passing one in the run
+      # summary — the gate could go green having never launched Chrome.
+      # ubuntu-latest ships Chrome, but install it if that ever changes rather
+      # than depending on the runner image. A plain shell step is used in
+      # preference to a third-party setup action: this job holds a repository
+      # token, and the fewer external actions that run inside it the better.
+      - name: Ensure Chrome is available
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            google-chrome --version
+          elif command -v chromium >/dev/null 2>&1; then
+            chromium --version
+          else
+            echo "No Chrome on the runner; installing chromium-browser."
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends chromium-browser
+            chromium --version || chromium-browser --version
+          fi
+
+      # REQUIRE_CHROME turns the test's no-browser skip into a failure, so the
+      # SSRF regression cannot silently stop running.
+      - name: Unit tests (race detector)
+        env:
+          REQUIRE_CHROME: "1"
+        run: go test -race -count=1 ./...
+
+      - name: Integration tests (race detector)
+        run: go test -tags integration -race -count=1 .

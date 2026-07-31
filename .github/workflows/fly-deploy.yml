@@ -6,14 +6,25 @@ on:
     branches:
       - release
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+
   deploy:
     name: Deploy app
+    needs: test
     runs-on: ubuntu-latest
     concurrency: deploy-group
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
+          # Full history so `git describe` can find the release tag. No remote
+          # access is needed after checkout, so the token is not persisted.
           fetch-depth: 0
+          persist-credentials: false
       - name: Get version from git
         id: version
         run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null || git describe --tags --always)" >> "$GITHUB_OUTPUT"
