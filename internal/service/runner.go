@@ -203,7 +203,15 @@ func runLookups(ctx context.Context, d runnerDeps, st *runState, runners []looku
 				res := r.fetch(fetchCtx)
 				// Only the goroutine that actually ran the fetch writes it
 				// back; coalesced callers would rewrite the identical value.
-				if res.payload != nil && !r.uncached {
+				//
+				// A partial result is never cached. The fan-out lookups
+				// (reputation, threat_intel) return data alongside per-provider
+				// errors, and only the payload is stored — so caching one would
+				// serve it to every later caller as a complete, error-free
+				// success, with no retry until the TTL expired. For threat
+				// intelligence that means freezing in a verdict derived from
+				// providers that never answered.
+				if res.payload != nil && len(res.errs) == 0 && !r.uncached {
 					if err := d.cache.Set(fetchCtx, key, res.payload, d.ttlFor(r.name)); err != nil {
 						// Fail-open: callers still get the fetched result.
 						st.logger.Warn("cache set failed", zap.String("lookup", r.name), st.logTarget(), zap.Error(err))

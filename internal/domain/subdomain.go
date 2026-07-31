@@ -61,7 +61,15 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 		return nil, fmt.Errorf("read crt.sh response: %w", err)
 	}
 
-	subdomains := parseCrtShResponse(body, domainName)
+	subdomains, err := parseCrtShResponse(body, domainName)
+	if err != nil {
+		// Distinguish "crt.sh knows of no subdomains" from "we could not read
+		// the answer". Both used to produce an empty list cached for 24 hours.
+		if int64(len(body)) >= MaxResponseBody {
+			return nil, fmt.Errorf("crt.sh response exceeded the %d byte limit and was truncated: %w", MaxResponseBody, err)
+		}
+		return nil, fmt.Errorf("parse crt.sh response: %w", err)
+	}
 
 	capped := false
 	if opts.MaxResults > 0 && len(subdomains) > opts.MaxResults {
@@ -86,10 +94,10 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 
 // parseCrtShResponse extracts unique subdomain names from crt.sh JSON output.
 // It filters wildcards, the base domain itself, and sorts alphabetically.
-func parseCrtShResponse(data []byte, baseDomain string) []string {
+func parseCrtShResponse(data []byte, baseDomain string) ([]string, error) {
 	var entries []crtShEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return nil
+		return nil, err
 	}
 
 	seen := make(map[string]struct{})
@@ -123,5 +131,5 @@ func parseCrtShResponse(data []byte, baseDomain string) []string {
 		result = append(result, name)
 	}
 	sort.Strings(result)
-	return result
+	return result, nil
 }

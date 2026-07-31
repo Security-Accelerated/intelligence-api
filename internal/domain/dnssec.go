@@ -143,9 +143,23 @@ func queryDNS(ctx context.Context, domainName string, qtype uint16) ([]dns.RR, e
 		if resp.Truncated {
 			// Retry this server over TCP for large DNSKEY responses.
 			tcpClient := &dns.Client{Net: "tcp", Timeout: dnsSecurityQueryTimeout}
-			if tcpResp, _, tcpErr := tcpClient.ExchangeContext(ctx, msg, server); tcpErr == nil {
-				resp = tcpResp
+			tcpResp, _, tcpErr := tcpClient.ExchangeContext(ctx, msg, server)
+			if tcpErr != nil {
+				// Fall through to the next server rather than using the
+				// truncated UDP answer. Its records are incomplete by
+				// definition, so trusting it would report DNSKEYs or CAA
+				// records as missing when they exist — a false "no DNSSEC"
+				// on a domain that has it.
+				lastErr = fmt.Errorf("dns query %s/%s: truncated over UDP and TCP retry failed: %w",
+					domainName, dns.TypeToString[qtype], tcpErr)
+				continue
 			}
+			if tcpResp.Truncated {
+				lastErr = fmt.Errorf("dns query %s/%s: response still truncated over TCP",
+					domainName, dns.TypeToString[qtype])
+				continue
+			}
+			resp = tcpResp
 		}
 		if resp.Rcode != dns.RcodeSuccess && resp.Rcode != dns.RcodeNameError {
 			lastErr = fmt.Errorf("dns query %s/%s: %s", domainName, dns.TypeToString[qtype], dns.RcodeToString[resp.Rcode])

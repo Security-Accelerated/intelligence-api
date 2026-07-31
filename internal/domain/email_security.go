@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
@@ -30,6 +32,8 @@ func LookupEmailSecurity(ctx context.Context, domainName string) (*EmailSecurity
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var hasData bool
+	var failures int
+	var lastErr error
 
 	setData := func(apply func()) {
 		mu.Lock()
@@ -38,14 +42,34 @@ func LookupEmailSecurity(ctx context.Context, domainName string) (*EmailSecurity
 		hasData = true
 	}
 
+	// record separates "this domain publishes no such record" from "we could
+	// not find out". NXDOMAIN and NODATA are authoritative answers — plenty of
+	// domains have no DMARC or BIMI — but a timeout or SERVFAIL means the
+	// question went unanswered, and reporting that as an absent record would
+	// tell a caller the domain's email security is unconfigured when we simply
+	// do not know.
+	record := func(err error) {
+		if err == nil || isDNSAbsence(err) {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		failures++
+		lastErr = err
+	}
+
 	wg.Go(func() {
-		if spf, err := lookupSPF(ctx, resolver, domainName); err == nil && spf != nil {
+		spf, err := lookupSPF(ctx, resolver, domainName)
+		record(err)
+		if err == nil && spf != nil {
 			setData(func() { info.SPF = spf })
 		}
 	})
 
 	wg.Go(func() {
-		if dmarc, err := lookupDMARC(ctx, resolver, domainName); err == nil && dmarc != nil {
+		dmarc, err := lookupDMARC(ctx, resolver, domainName)
+		record(err)
+		if err == nil && dmarc != nil {
 			setData(func() { info.DMARC = dmarc })
 		}
 	})
@@ -65,19 +89,25 @@ func LookupEmailSecurity(ctx context.Context, domainName string) (*EmailSecurity
 	})
 
 	wg.Go(func() {
-		if mtasts, err := lookupMTASTS(ctx, resolver, domainName); err == nil && mtasts != nil {
+		mtasts, err := lookupMTASTS(ctx, resolver, domainName)
+		record(err)
+		if err == nil && mtasts != nil {
 			setData(func() { info.MTASTS = mtasts })
 		}
 	})
 
 	wg.Go(func() {
-		if tlsrpt, err := lookupTLSRPT(ctx, resolver, domainName); err == nil && tlsrpt != nil {
+		tlsrpt, err := lookupTLSRPT(ctx, resolver, domainName)
+		record(err)
+		if err == nil && tlsrpt != nil {
 			setData(func() { info.TLSRPT = tlsrpt })
 		}
 	})
 
 	wg.Go(func() {
-		if bimi, err := lookupBIMI(ctx, resolver, domainName); err == nil && bimi != nil {
+		bimi, err := lookupBIMI(ctx, resolver, domainName)
+		record(err)
+		if err == nil && bimi != nil {
 			setData(func() { info.BIMI = bimi })
 		}
 	})
@@ -85,9 +115,25 @@ func LookupEmailSecurity(ctx context.Context, domainName string) (*EmailSecurity
 	wg.Wait()
 
 	if !hasData {
+		// Nothing resolved. If that is because the queries failed rather than
+		// because the records are absent, say so: an empty result is cached
+		// for four hours and reads as "this domain has no email security".
+		if failures > 0 {
+			return nil, fmt.Errorf("email security: %d of 6 lookups could not complete, last error: %w", failures, lastErr)
+		}
 		return nil, nil
 	}
 	return info, nil
+}
+
+// isDNSAbsence reports whether err means the record does not exist, as opposed
+// to the lookup having failed to reach an answer.
+func isDNSAbsence(err error) bool {
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return dnsErr.IsNotFound
+	}
+	return false
 }
 
 // lookupSPF retrieves and parses the SPF TXT record for a domain.

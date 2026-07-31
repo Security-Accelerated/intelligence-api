@@ -32,11 +32,15 @@ func LookupBGP(ctx context.Context, domainName string) (*BGPInfo, error) {
 
 	seenASN := make(map[int]struct{})
 	var records []ASNRecord
+	var lastErr error
 
 	for _, ip := range ipv4s {
 		record, err := lookupCymruOrigin(ctx, ip)
 		if err != nil {
-			continue // partial failure: skip this IP
+			// Partial failure: skip this IP but remember why, so that a total
+			// failure is not reported as "this domain has no ASN".
+			lastErr = err
+			continue
 		}
 
 		// Deduplicate by ASN — multiple IPs often share an ASN.
@@ -52,6 +56,13 @@ func LookupBGP(ctx context.Context, domainName string) (*BGPInfo, error) {
 		}
 
 		records = append(records, *record)
+	}
+
+	// Every query failed. An empty result here would be cached for 24 hours and
+	// is indistinguishable from "this domain genuinely has no ASN", so report
+	// the failure instead.
+	if len(records) == 0 && lastErr != nil {
+		return nil, fmt.Errorf("bgp: all %d origin lookups failed, last error: %w", len(ipv4s), lastErr)
 	}
 
 	if records == nil {

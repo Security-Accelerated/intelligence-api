@@ -8,6 +8,28 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.61.0
+  date: 2026-07-31
+  changes:
+    - text: "Lookups no longer report an upstream failure as an absent record. A threat intelligence provider that could not be reached, a BGP lookup whose queries all failed, an unreadable certificate transparency response, or email security records that could not be resolved are now reported as errors rather than as clean, empty results"
+      audience: public
+    - text: "This matters most for threat intelligence: a rate-limited VirusTotal used to return \"not detected\", which scoring counted at its full 0.50 weight, so a domain nobody checked scored the same as a domain checked and found clean"
+      audience: public
+    - text: "VirusTotal and the three IP adapters used limiter.Allow() and returned a synthetic clean result; they now use limiter.Wait(ctx) and return an error, matching URLhaus and AlienVault. The coordinator already excludes errored providers from scoring"
+      audience: internal
+    - text: "Partial results are no longer cached. multiErrRunner returns data alongside per-provider errors and only the payload was stored, so a cache hit replayed a partial result as a complete, error-free success with no retry until the TTL expired"
+      audience: internal
+    - text: "LookupBGP returns an error when every Cymru origin lookup fails instead of an empty record set cached for 24 hours"
+      audience: internal
+    - text: "LookupEmailSecurity distinguishes NXDOMAIN/NODATA from timeouts and SERVFAIL via isDNSAbsence. A domain that publishes no SPF or DMARC is still a successful empty answer; a domain whose lookups could not complete is an error"
+      audience: internal
+    - text: "parseCrtShResponse returns an error on malformed JSON rather than nil. Because the body is read through io.LimitReader, an oversized response arrives truncated mid-structure and took the same silent path"
+      audience: internal
+    - text: "DNSSEC no longer uses a truncated UDP response when the TCP retry fails — it moves to the next resolver, since incomplete answers would report DNSKEY or CAA records as missing when they exist"
+      audience: internal
+    - text: "Two service tests asserted the old caching behaviour and were rewritten; the external review noted they blessed the defect"
+      audience: internal
+
 - version: v0.60.0
   date: 2026-07-30
   changes:
