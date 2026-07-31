@@ -4,15 +4,21 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// chromeAvailable reports whether a Chrome/Chromium binary chromedp can drive
-// is on PATH. The browser is present in the Docker image and on dev machines,
-// but not necessarily in every CI runner.
+// chromeAvailable ensures a Chrome/Chromium binary chromedp can drive is on
+// PATH. It skips locally when there is none, so contributors without a browser
+// can still run the suite.
+//
+// REQUIRE_CHROME=1 turns the skip into a failure. CI sets it, because a skipped
+// SSRF regression test is indistinguishable from a passing one in the summary:
+// the gate would go green having never launched a browser. Provisioning Chrome
+// on the runner and demanding it be there are two halves of the same guarantee.
 func chromeAvailable(t *testing.T) {
 	t.Helper()
 	for _, bin := range []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "headless_shell"} {
@@ -20,7 +26,11 @@ func chromeAvailable(t *testing.T) {
 			return
 		}
 	}
-	t.Skip("no Chrome/Chromium binary on PATH")
+	if os.Getenv("REQUIRE_CHROME") != "" {
+		t.Fatal("REQUIRE_CHROME is set but no Chrome/Chromium binary is on PATH — " +
+			"the screenshot SSRF regression test cannot run, and silently skipping it would leave the gate green")
+	}
+	t.Skip("no Chrome/Chromium binary on PATH (set REQUIRE_CHROME=1 to make this fatal)")
 }
 
 // TestCaptureScreenshot_CannotReachLoopback is the SSRF regression test for the
@@ -69,10 +79,23 @@ func TestCaptureScreenshot_CannotReachLoopback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	// The capture itself may succeed (Chrome screenshots its error page) or
-	// fail; either is acceptable. What must not happen is the loopback service
-	// being contacted.
-	_, _ = captureScreenshot(ctx, target)
+	png, err := captureScreenshot(ctx, target)
+
+	// Positive control, asserted before containment. hits == 0 is only
+	// meaningful if Chrome actually launched and navigated: had the browser
+	// failed to start, or the proxy failed to bind, the origin would also see
+	// nothing and the containment check would pass while proving nothing.
+	//
+	// A blocked navigation still completes — Chrome renders its own error page
+	// and screenshots that — so a nil error and a non-empty PNG together show
+	// the whole path ran. That keeps the control offline; a public origin would
+	// need network access, and a loopback one is blocked by SafeDialer.
+	if err != nil {
+		t.Fatalf("capture did not run to completion, so containment is unproven: %v", err)
+	}
+	if len(png) == 0 {
+		t.Fatal("capture returned no image, so containment is unproven")
+	}
 
 	if n := hits.Load(); n != 0 {
 		t.Errorf("loopback service received %d request(s) from Chrome — the SSRF proxy was bypassed; "+
