@@ -69,8 +69,8 @@ func TestFetchCrtSh_DoubleNotFoundMeansNoCertificates(t *testing.T) {
 	srv, calls := crtShStub(t, respondStatus(404), respondStatus(404))
 
 	_, err := fetchCrtSh(context.Background(), srv.Client(), srv.URL, "IntelligenceAPI/1.0", 1<<20)
-	if !errors.Is(err, crtShNoResults) {
-		t.Fatalf("err = %v, want crtShNoResults", err)
+	if !errors.Is(err, errCrtShNoResults) {
+		t.Fatalf("err = %v, want errCrtShNoResults", err)
 	}
 	if calls.Load() != 2 {
 		t.Errorf("made %d requests, want 2 — one 404 is not evidence of absence", calls.Load())
@@ -113,7 +113,7 @@ func TestFetchCrtSh_ServerErrorIsRetriedOnce(t *testing.T) {
 	t.Run("stays down", func(t *testing.T) {
 		srv, calls := crtShStub(t, respondStatus(502), respondStatus(503))
 		_, err := fetchCrtSh(context.Background(), srv.Client(), srv.URL, "x", 1<<20)
-		if err == nil || errors.Is(err, crtShNoResults) {
+		if err == nil || errors.Is(err, errCrtShNoResults) {
 			t.Fatalf("err = %v, want a status error", err)
 		}
 		if !strings.Contains(err.Error(), "503") {
@@ -133,7 +133,7 @@ func TestFetchCrtSh_OtherStatusesAreNotRetried(t *testing.T) {
 	srv, calls := crtShStub(t, respondStatus(429))
 
 	_, err := fetchCrtSh(context.Background(), srv.Client(), srv.URL, "x", 1<<20)
-	if err == nil || errors.Is(err, crtShNoResults) {
+	if err == nil || errors.Is(err, errCrtShNoResults) {
 		t.Fatalf("err = %v, want a status error", err)
 	}
 	if calls.Load() != 1 {
@@ -149,11 +149,31 @@ func TestFetchCrtSh_MixedNotFoundThenServerError(t *testing.T) {
 	srv, _ := crtShStub(t, respondStatus(404), respondStatus(502))
 
 	_, err := fetchCrtSh(context.Background(), srv.Client(), srv.URL, "x", 1<<20)
-	if errors.Is(err, crtShNoResults) {
+	if errors.Is(err, errCrtShNoResults) {
 		t.Fatal("a 404 followed by a 502 was reported as no-certificates")
 	}
 	if err == nil || !strings.Contains(err.Error(), "502") {
 		t.Errorf("err = %v, want the 502 reported", err)
+	}
+}
+
+// TestFetchCrtSh_ServerErrorThenNotFoundIsNotAbsence is the regression test for
+// a bug the review caught: checking only the *final* status let a 502 followed
+// by a 404 report "no certificates" on the strength of a single 404 — exactly
+// the single-404 conclusion the two-attempt rule exists to rule out.
+func TestFetchCrtSh_ServerErrorThenNotFoundIsNotAbsence(t *testing.T) {
+	fastCrtShRetries(t)
+	srv, calls := crtShStub(t, respondStatus(502), respondStatus(404))
+
+	_, err := fetchCrtSh(context.Background(), srv.Client(), srv.URL, "x", 1<<20)
+	if errors.Is(err, errCrtShNoResults) {
+		t.Fatal("a 502 followed by a 404 was reported as no-certificates")
+	}
+	if err == nil || !strings.Contains(err.Error(), "404") {
+		t.Errorf("err = %v, want the final 404 reported as a status error", err)
+	}
+	if calls.Load() != 2 {
+		t.Errorf("made %d requests, want 2", calls.Load())
 	}
 }
 

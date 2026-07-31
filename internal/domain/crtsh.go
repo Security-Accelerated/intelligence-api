@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +17,7 @@ import (
 // domain has no certificates yet, so the domains a customer is most likely to
 // be triaging returned an error instead of the correct and useful answer, "no
 // certificates found".
-var crtShNoResults = fmt.Errorf("crt.sh has no certificates for this name")
+var errCrtShNoResults = errors.New("crt.sh has no certificates for this name")
 
 // crtShRetryDelay separates the two attempts made before concluding a 404 means
 // "no results".
@@ -43,7 +44,7 @@ var crtShRetryDelay = time.Second
 // Timeouts are deliberately not retried. They are the expensive failure, and a
 // second full timeout would consume the rest of the request's budget.
 func fetchCrtSh(ctx context.Context, client *http.Client, url, userAgent string, maxBytes int64) ([]byte, error) {
-	var lastStatus int
+	var lastStatus, notFound int
 
 	for attempt := range 2 {
 		if attempt > 0 {
@@ -74,9 +75,16 @@ func fetchCrtSh(ctx context.Context, client *http.Client, url, userAgent string,
 			return body, nil
 		}
 
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxBytes))
+		// Drained in full, not merely to maxBytes: an unread remainder stops
+		// the connection returning to the keep-alive pool, and the retry a
+		// moment later is to the same host. The client's Timeout bounds the
+		// drain, so a pathological error body cannot hold this open forever.
+		_, _ = io.Copy(io.Discard, resp.Body)
 		resp.Body.Close()
 		lastStatus = resp.StatusCode
+		if resp.StatusCode == http.StatusNotFound {
+			notFound++
+		}
 
 		// Retry a 404 or a 5xx once; anything else (429, 4xx) is a real
 		// answer that repeating will not change.
@@ -86,8 +94,12 @@ func fetchCrtSh(ctx context.Context, client *http.Client, url, userAgent string,
 		}
 	}
 
-	if lastStatus == http.StatusNotFound {
-		return nil, crtShNoResults
+	// Absence requires BOTH attempts to have answered 404. Checking only the
+	// final status let a 502 followed by a 404 report "no certificates" on the
+	// strength of a single 404 — precisely the single-404 conclusion the retry
+	// exists to rule out.
+	if notFound == 2 {
+		return nil, errCrtShNoResults
 	}
 	return nil, fmt.Errorf("crt.sh returned status %d", lastStatus)
 }

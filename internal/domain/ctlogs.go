@@ -49,7 +49,7 @@ func LookupCTLogs(ctx context.Context, domainName string, maxEntries int) (*CTLo
 	body, err := fetchCrtSh(ctx, client, url, "IntelligenceAPI/1.0", MaxResponseBody)
 	if err != nil {
 		// No certificates is an empty result, not a failure — see subdomain.go.
-		if errors.Is(err, crtShNoResults) {
+		if errors.Is(err, errCrtShNoResults) {
 			return &CTLogsInfo{Count: 0, Entries: []CTLogEntry{}}, nil
 		}
 		return nil, fmt.Errorf("ct_logs: %w", err)

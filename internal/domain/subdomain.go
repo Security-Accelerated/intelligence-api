@@ -45,7 +45,7 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 		// A name with no certificates is a successful empty answer, not a
 		// failure. That is the common case when triaging a freshly registered
 		// typosquat domain — exactly when the answer matters most.
-		if errors.Is(err, crtShNoResults) {
+		if errors.Is(err, errCrtShNoResults) {
 			return &SubdomainInfo{Count: 0, Subdomains: []SubdomainEntry{}}, nil
 		}
 		return nil, err
