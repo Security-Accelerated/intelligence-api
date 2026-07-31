@@ -76,7 +76,12 @@ func TestCaptureScreenshot_CannotReachLoopback(t *testing.T) {
 
 	target := "http://" + ln.Addr().String() + "/"
 
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	// Generous on purpose. This budget is not measuring performance — it only
+	// has to outlast a cold Chrome launch on a contended CI runner, which has
+	// been observed taking over 20s while the rest of the suite saturates the
+	// box. Failing here proves nothing about containment and only costs a red
+	// build, so the deadline is set well clear of the slowest plausible start.
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	png, err := captureScreenshot(ctx, target)

@@ -82,6 +82,27 @@ func probeURL(ctx context.Context, domain string) (string, int, error) {
 	return "", 0, fmt.Errorf("domain unreachable via HTTPS and HTTP")
 }
 
+// wsURLReadTimeout decides how long to wait for Chrome to announce its DevTools
+// URL on startup, returning false to leave chromedp's own default in place.
+//
+// chromedp caps that wait at a fixed 20s and watches only its own timer, never
+// the context (see its allocate.go). The cap is therefore a wall the caller
+// cannot move in either direction, and both directions are wrong for us. Our
+// screenshot timeout defaults to 15s, so a slow launch overruns the configured
+// budget by 20s while holding one of only screenshot.max_concurrent Chromium
+// slots; conversely a generous budget cannot buy a cold or CPU-starved machine
+// the extra seconds it needs. Handing chromedp whatever remains of the deadline
+// makes the screenshot timeout the single authority over how long a capture may
+// take. A deadline already passed yields a non-positive duration, which fires
+// immediately — the correct answer for a budget that is already spent.
+func wsURLReadTimeout(ctx context.Context) (time.Duration, bool) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return 0, false
+	}
+	return time.Until(deadline), true
+}
+
 // captureScreenshot launches headless Chrome behind a local SSRF-safe proxy
 // and takes a full-page screenshot. All Chrome network traffic is routed through
 // the proxy, which blocks connections to private/reserved IP ranges.
@@ -110,6 +131,10 @@ func captureScreenshot(ctx context.Context, url string) ([]byte, error) {
 		// See https://chromium.googlesource.com/chromium/src/+/main/net/docs/proxy.md
 		chromedp.Flag("proxy-bypass-list", "<-loopback>"),
 	)
+
+	if d, ok := wsURLReadTimeout(ctx); ok {
+		opts = append(opts, chromedp.WSURLReadTimeout(d))
+	}
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer allocCancel()

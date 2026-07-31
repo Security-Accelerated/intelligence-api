@@ -8,6 +8,18 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.62.0
+  date: 2026-07-31
+  changes:
+    - text: "Screenshot lookups now honour their configured timeout when the browser is slow to start, instead of overrunning it. On a loaded host a capture could hold a browser slot well past its deadline, delaying other screenshot requests queued behind it"
+      audience: public
+    - text: "chromedp caps the wait for Chrome to announce its DevTools URL at a fixed 20s and watches only its own timer, never the context. With screenshot.timeout defaulting to 15s that wall sat outside our budget entirely: a slow launch overran the deadline by up to 20s while holding one of screenshot.max_concurrent slots, and a longer budget could not buy a cold machine more startup time"
+      audience: internal
+    - text: "captureScreenshot now passes chromedp.WSURLReadTimeout derived from whatever remains of the caller's deadline, making the screenshot timeout the single authority over a capture's length. An already-spent budget yields a non-positive duration, which fails immediately rather than waiting 20s to report a certainty"
+      audience: internal
+    - text: "Found via a CI flake: the headless-Chrome SSRF regression test failed at exactly 20.04s on a cold runner. Chrome had not crashed — chromedp reports that case differently — it was simply slower to launch than the fixed wall allowed. The test's own budget is now well clear of the slowest plausible start, since a browser that fails to launch proves nothing about containment and only costs a red build"
+      audience: internal
+
 - version: v0.61.0
   date: 2026-07-31
   changes:
