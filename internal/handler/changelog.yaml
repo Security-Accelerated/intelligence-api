@@ -11,6 +11,14 @@
 - version: v0.60.0
   date: 2026-07-30
   changes:
+    - text: "SECURITY: fixed an SSRF weakness in the screenshot lookup. Headless Chrome could reach loopback and link-local addresses directly, so a page that passed the pre-flight safety check could redirect the browser to an internal service or cloud metadata endpoint and have it captured"
+      audience: public
+    - text: "Chromium bypasses the configured proxy for loopback and link-local addresses by default, so chromedp.ProxyServer alone never contained it — safenet saw none of that traffic. Added --proxy-bypass-list=<-loopback>, which removes the implicit bypass"
+      audience: internal
+    - text: "Reproduced before fixing: a Chrome capture aimed at a loopback HTTP server delivered 2 requests to it. After the fix, zero. The regression test asserts the capture ran to completion before asserting containment, so a browser that fails to launch fails the test rather than passing it"
+      audience: internal
+    - text: "captureScreenshot had no test coverage at all; it now has a real headless-Chrome regression test"
+      audience: internal
     - text: "CI now runs the full test suite before publishing an image or deploying. docker.yml and fly-deploy.yml built and shipped without running anything, so a failing test could reach production unnoticed"
       audience: internal
     - text: "test.yml is a reusable workflow (workflow_call) invoked by both pipelines through needs:, and runs directly on pull requests. It checks gofmt, go mod tidy -diff, go vet, build, unit tests with -race, and the tagged integration suite"
