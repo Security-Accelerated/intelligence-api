@@ -48,101 +48,7 @@ func init() {
 	}
 
 	// defaults (overridden by config file, then env vars)
-	config.SetDefault("application.port", 8080)
-	// Cache TTLs: one entry per lookup, with default_ttl covering anything
-	// unlisted. Each key is read individually so env overrides (CACHE_TTL_WHOIS)
-	// work per Viper convention.
-	config.SetDefault("cache.default_ttl", "60m")
-	config.SetDefault("cache.ttl.whois", "24h")
-	config.SetDefault("cache.ttl.ct_logs", "24h")
-	config.SetDefault("cache.ttl.subdomains", "24h")
-	config.SetDefault("cache.ttl.bgp", "24h")
-	config.SetDefault("cache.ttl.ssl", "4h")
-	config.SetDefault("cache.ttl.email_security", "4h")
-	config.SetDefault("cache.ttl.dns", "30m")
-	config.SetDefault("cache.ttl.headers", "30m")
-	config.SetDefault("cache.ttl.reputation", "30m")
-	config.SetDefault("cache.ttl.threat_intel", "30m")
-	config.SetDefault("cache.ttl.screenshot", "60m")
-	// IP lookups. geo and asn are absent deliberately: they read a local
-	// MaxMind mmap and are never cached, so a TTL would be meaningless.
-	config.SetDefault("cache.ttl.reverse_dns", "6h")
-	config.SetDefault("cache.ttl.abuse_contact", "24h")
-	config.SetDefault("auth.cache_ttl", "5m")
-	config.SetDefault("auth.rotation_grace", "24h")
-	// One capture at a time by default. Each in-process Chromium wants roughly
-	// half a gigabyte, so the previous default of 4 could exhaust a machine
-	// sized for the API and take the whole process down with it. Raise it only
-	// alongside memory, or when a hosted provider removes the local cost.
-	config.SetDefault("screenshot.max_concurrent", 1)
-	config.SetDefault("screenshot.provider", "chromium")
-	config.SetDefault("subdomain.http_timeout", "15s")
-	config.SetDefault("ct_logs.http_timeout", "15s")
-	config.SetDefault("billing.cleanup_interval", "10m")
-	config.SetDefault("auth.last_used_buffer_size", 256)
-	config.SetDefault("auth.last_used_flush_interval", "10s")
-	// A cold Chromium on a small shared-CPU machine regularly needs more than
-	// 15s just to reach the point of announcing its DevTools endpoint, so the
-	// old default failed captures that would otherwise have succeeded.
-	config.SetDefault("screenshot.timeout", "45s")
-	config.SetDefault("domain.max_domains.free", 1)
-	config.SetDefault("domain.max_domains.basic", 5)
-	config.SetDefault("domain.max_domains.pro", 20)
-	config.SetDefault("subdomain.max_results", 500)
-	config.SetDefault("ct_logs.max_entries", 100)
-	config.SetDefault("subdomain.max_domains.free", 1)
-	config.SetDefault("subdomain.max_domains.basic", 3)
-	config.SetDefault("subdomain.max_domains.pro", 5)
-	config.SetDefault("rate_limit.free", 5)
-	config.SetDefault("rate_limit.basic", 30)
-	config.SetDefault("rate_limit.pro", 120)
-	config.SetDefault("postgres.sslmode", "require")
-	config.SetDefault("postgres.max_open_conns", 25)
-	config.SetDefault("postgres.max_idle_conns", 5)
-	config.SetDefault("postgres.conn_max_lifetime", "5m")
-	config.SetDefault("postgres.conn_max_idle_time", "2m")
-	config.SetDefault("pushover.api_token", "")
-	config.SetDefault("pushover.user_key", "")
-	config.SetDefault("alerts.throttle_threshold", 5)
-	config.SetDefault("alerts.throttle_window", "5m")
-	config.SetDefault("alerts.spike_threshold", 15)
-	config.SetDefault("alerts.spike_window", "5m")
-	config.SetDefault("alerts.cooldown", "15m")
-	config.SetDefault("stripe.secret_key", "")
-	config.SetDefault("stripe.webhook_secret", "")
-	config.SetDefault("stripe.prices.basic_monthly", "")
-	config.SetDefault("stripe.prices.pro_monthly", "")
-	config.SetDefault("stripe.payment_link.basic", "")
-	config.SetDefault("stripe.payment_link.pro", "")
-	config.SetDefault("stripe.portal_link", "")
-	config.SetDefault("billing.stale_key_days", 365)
-	config.SetDefault("usage.buffer_size", 256)
-	config.SetDefault("usage.flush_interval", "5s")
-	config.SetDefault("threat_intel.virustotal_api_key", "")
-	config.SetDefault("threat_intel.alienvault_api_key", "")
-	config.SetDefault("server.read_timeout", "10s")
-	config.SetDefault("server.write_timeout", "45s")
-	config.SetDefault("server.idle_timeout", "60s")
-	config.SetDefault("server.shutdown_timeout", "15s")
-	config.SetDefault("server.body_limit", 1048576) // 1 MB
-	config.SetDefault("domain.lookup_timeout", "30s")
-	config.SetDefault("screenshot.max_png_bytes", 5242880)      // 5 MB
-	config.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
-	config.SetDefault("alerts.max_concurrent_sends", 5)
-	config.SetDefault("alerts.max_window_size", 1000)
-	config.SetDefault("maxmind.license_key", "")
-	config.SetDefault("maxmind.db_path", "/data/maxmind")
-	config.SetDefault("maxmind.city_db", "GeoLite2-City.mmdb")
-	config.SetDefault("maxmind.asn_db", "GeoLite2-ASN.mmdb")
-	// MaxMind publishes GeoLite2 updates twice a week. Refresh anything older
-	// than this at startup; 0 disables the check and pins whatever is on disk.
-	config.SetDefault("maxmind.max_age", "168h")
-	config.SetDefault("ip.lookup_timeout", "30s")
-	config.SetDefault("ip.max_ips.free", 1)
-	config.SetDefault("ip.max_ips.basic", 5)
-	config.SetDefault("ip.max_ips.pro", 20)
-	config.SetDefault("dns.servers", []string{})
-	config.SetDefault("dns.timeout", "30s")
+	setDefaults(config)
 
 	// allow env vars to override config: POSTGRES_HOST → postgres.host
 	config.SetEnvKeyReplacer(envKeyReplacer())
@@ -156,6 +62,111 @@ func init() {
 			log.Fatalf("error reading config file %s.yaml: %s", appName, err)
 		}
 	}
+}
+
+// setDefaults populates v with every built-in default.
+//
+// Separate from init so the defaults can be asserted against a fresh Viper.
+// Testing them through Config() tested whatever configuration the machine
+// happened to have instead: this host carries
+// /etc/security-accelerated/intelligence-api.yaml, so a changed default read
+// back as its old value locally and only failed in CI, where no file exists.
+func setDefaults(v *viper.Viper) {
+	v.SetDefault("application.port", 8080)
+	// Cache TTLs: one entry per lookup, with default_ttl covering anything
+	// unlisted. Each key is read individually so env overrides (CACHE_TTL_WHOIS)
+	// work per Viper convention.
+	v.SetDefault("cache.default_ttl", "60m")
+	v.SetDefault("cache.ttl.whois", "24h")
+	v.SetDefault("cache.ttl.ct_logs", "24h")
+	v.SetDefault("cache.ttl.subdomains", "24h")
+	v.SetDefault("cache.ttl.bgp", "24h")
+	v.SetDefault("cache.ttl.ssl", "4h")
+	v.SetDefault("cache.ttl.email_security", "4h")
+	v.SetDefault("cache.ttl.dns", "30m")
+	v.SetDefault("cache.ttl.headers", "30m")
+	v.SetDefault("cache.ttl.reputation", "30m")
+	v.SetDefault("cache.ttl.threat_intel", "30m")
+	v.SetDefault("cache.ttl.screenshot", "60m")
+	// IP lookups. geo and asn are absent deliberately: they read a local
+	// MaxMind mmap and are never cached, so a TTL would be meaningless.
+	v.SetDefault("cache.ttl.reverse_dns", "6h")
+	v.SetDefault("cache.ttl.abuse_contact", "24h")
+	v.SetDefault("auth.cache_ttl", "5m")
+	v.SetDefault("auth.rotation_grace", "24h")
+	// One capture at a time by default. Each in-process Chromium wants roughly
+	// half a gigabyte, so the previous default of 4 could exhaust a machine
+	// sized for the API and take the whole process down with it. Raise it only
+	// alongside memory, or when a hosted provider removes the local cost.
+	v.SetDefault("screenshot.max_concurrent", 1)
+	v.SetDefault("screenshot.provider", "chromium")
+	v.SetDefault("subdomain.http_timeout", "15s")
+	v.SetDefault("ct_logs.http_timeout", "15s")
+	v.SetDefault("billing.cleanup_interval", "10m")
+	v.SetDefault("auth.last_used_buffer_size", 256)
+	v.SetDefault("auth.last_used_flush_interval", "10s")
+	// A cold Chromium on a small shared-CPU machine regularly needs more than
+	// 15s just to reach the point of announcing its DevTools endpoint, so the
+	// old default failed captures that would otherwise have succeeded.
+	v.SetDefault("screenshot.timeout", "45s")
+	v.SetDefault("domain.max_domains.free", 1)
+	v.SetDefault("domain.max_domains.basic", 5)
+	v.SetDefault("domain.max_domains.pro", 20)
+	v.SetDefault("subdomain.max_results", 500)
+	v.SetDefault("ct_logs.max_entries", 100)
+	v.SetDefault("subdomain.max_domains.free", 1)
+	v.SetDefault("subdomain.max_domains.basic", 3)
+	v.SetDefault("subdomain.max_domains.pro", 5)
+	v.SetDefault("rate_limit.free", 5)
+	v.SetDefault("rate_limit.basic", 30)
+	v.SetDefault("rate_limit.pro", 120)
+	v.SetDefault("postgres.sslmode", "require")
+	v.SetDefault("postgres.max_open_conns", 25)
+	v.SetDefault("postgres.max_idle_conns", 5)
+	v.SetDefault("postgres.conn_max_lifetime", "5m")
+	v.SetDefault("postgres.conn_max_idle_time", "2m")
+	v.SetDefault("pushover.api_token", "")
+	v.SetDefault("pushover.user_key", "")
+	v.SetDefault("alerts.throttle_threshold", 5)
+	v.SetDefault("alerts.throttle_window", "5m")
+	v.SetDefault("alerts.spike_threshold", 15)
+	v.SetDefault("alerts.spike_window", "5m")
+	v.SetDefault("alerts.cooldown", "15m")
+	v.SetDefault("stripe.secret_key", "")
+	v.SetDefault("stripe.webhook_secret", "")
+	v.SetDefault("stripe.prices.basic_monthly", "")
+	v.SetDefault("stripe.prices.pro_monthly", "")
+	v.SetDefault("stripe.payment_link.basic", "")
+	v.SetDefault("stripe.payment_link.pro", "")
+	v.SetDefault("stripe.portal_link", "")
+	v.SetDefault("billing.stale_key_days", 365)
+	v.SetDefault("usage.buffer_size", 256)
+	v.SetDefault("usage.flush_interval", "5s")
+	v.SetDefault("threat_intel.virustotal_api_key", "")
+	v.SetDefault("threat_intel.alienvault_api_key", "")
+	v.SetDefault("server.read_timeout", "10s")
+	v.SetDefault("server.write_timeout", "45s")
+	v.SetDefault("server.idle_timeout", "60s")
+	v.SetDefault("server.shutdown_timeout", "15s")
+	v.SetDefault("server.body_limit", 1048576) // 1 MB
+	v.SetDefault("domain.lookup_timeout", "30s")
+	v.SetDefault("screenshot.max_png_bytes", 5242880)      // 5 MB
+	v.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
+	v.SetDefault("alerts.max_concurrent_sends", 5)
+	v.SetDefault("alerts.max_window_size", 1000)
+	v.SetDefault("maxmind.license_key", "")
+	v.SetDefault("maxmind.db_path", "/data/maxmind")
+	v.SetDefault("maxmind.city_db", "GeoLite2-City.mmdb")
+	v.SetDefault("maxmind.asn_db", "GeoLite2-ASN.mmdb")
+	// MaxMind publishes GeoLite2 updates twice a week. Refresh anything older
+	// than this at startup; 0 disables the check and pins whatever is on disk.
+	v.SetDefault("maxmind.max_age", "168h")
+	v.SetDefault("ip.lookup_timeout", "30s")
+	v.SetDefault("ip.max_ips.free", 1)
+	v.SetDefault("ip.max_ips.basic", 5)
+	v.SetDefault("ip.max_ips.pro", 20)
+	v.SetDefault("dns.servers", []string{})
+	v.SetDefault("dns.timeout", "30s")
 }
 
 // Config returns the process-wide Viper instance, populated at init with

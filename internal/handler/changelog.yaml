@@ -8,6 +8,22 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.65.0
+  date: 2026-07-31
+  changes:
+    - text: "Screenshots should start working again on small deployments. Captures were failing with a browser startup timeout, and because a failed lookup returns 200 with the reason in the errors array rather than an HTTP error, the failure was easy to miss entirely"
+      audience: public
+    - text: "screenshot.timeout default raised from 15s to 45s. A cold Chromium on a small shared-CPU machine regularly needs longer than 15s just to announce its DevTools endpoint, so captures were failing before the browser had finished starting"
+      audience: public
+    - text: "screenshot.max_concurrent default lowered from 4 to 1. Each in-process browser wants roughly half a gigabyte, so four could exhaust a machine sized for the API and take the whole process down. That was masked only because captures were dying during startup; raising the timeout without this would have turned a broken feature into an outage"
+      audience: internal
+    - text: "Chromium now runs with --disable-dev-shm-usage and a set of flags trimming work a one-shot capture never benefits from. Containers get a 64MB /dev/shm by default and Chromium assumes far more, which surfaces as a startup timeout rather than as anything mentioning shared memory"
+      audience: internal
+    - text: "Screenshot capture moved behind domain.ScreenshotProvider (Name, Capture), selected by screenshot.provider and defaulting to chromium. An unrecognized name fails startup rather than silently falling back, since that would start a browser on a machine provisioned on the assumption it would not. Screenshots are the only lookup needing a browser, and in-process capture caps concurrency at about one browser per 500MB — bulk capture is not reachable by buying a larger instance, so a hosted provider needs to be a wiring change"
+      audience: internal
+    - text: "TestConfig_Defaults asserted against the process-wide Viper, which merges in any config file on the search path. On a host carrying /etc/security-accelerated/intelligence-api.yaml it therefore tested the machine's configuration rather than the defaults, and a changed default read back as its old value locally while failing in CI. Defaults are now built into a fresh Viper by setDefaults"
+      audience: internal
+
 - version: v0.64.0
   date: 2026-07-31
   changes:

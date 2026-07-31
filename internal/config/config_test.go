@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/spf13/viper"
 	"testing"
 	"time"
 )
@@ -13,7 +14,12 @@ func TestConfig_ReturnsNonNil(t *testing.T) {
 }
 
 func TestConfig_Defaults(t *testing.T) {
-	cfg := Config()
+	// A fresh Viper, not Config(): the process-wide instance merges in any
+	// config file on the search path, so asserting against it tested the
+	// machine's configuration rather than the defaults. That is how a changed
+	// default passed locally and failed in CI.
+	cfg := viper.New()
+	setDefaults(cfg)
 
 	tests := []struct {
 		key  string
@@ -24,7 +30,7 @@ func TestConfig_Defaults(t *testing.T) {
 		{"cache.ttl.whois", "24h"},
 		{"cache.ttl.dns", "30m"},
 		{"auth.cache_ttl", "5m"},
-		{"screenshot.timeout", "15s"},
+		{"screenshot.timeout", "45s"},
 		{"domain.max_domains.basic", 5},
 		{"domain.max_domains.pro", 20},
 		{"subdomain.max_results", 500},
@@ -42,7 +48,8 @@ func TestConfig_Defaults(t *testing.T) {
 		{"maxmind.db_path", "/data/maxmind"},
 		{"maxmind.city_db", "GeoLite2-City.mmdb"},
 		{"maxmind.asn_db", "GeoLite2-ASN.mmdb"},
-		// postgres.sslmode default is "require" but local config files may override it
+		{"postgres.sslmode", "require"},
+		{"screenshot.provider", "chromium"},
 	}
 
 	for _, tt := range tests {
