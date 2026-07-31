@@ -8,6 +8,18 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.66.0
+  date: 2026-07-31
+  changes:
+    - text: "Domains with no certificates now return an empty subdomains and ct_logs result instead of an error. crt.sh answers 404 for a name it holds no certificates for, and that was being reported as a lookup failure. A freshly registered typosquat domain usually has no certificates yet, so the domains a customer is most likely to be triaging returned an error instead of the correct answer: none found"
+      audience: public
+    - text: "Transient crt.sh failures are retried once before being reported, so a single 404 or 5xx from an unhealthy crt.sh no longer fails the lookup outright"
+      audience: public
+    - text: "Retry semantics, shared by both lookups via fetchCrtSh: a 404 or 5xx is retried once after a short pause; two 404s are treated as genuine absence, because crt.sh 404s names it does hold certificates for when unhealthy, and concluding no-certificates from a single 404 would hand a security tool a wrong answer that looks authoritative. A 404 followed by a 5xx stays an error. 429 is never retried — repeating a rate-limited request makes it worse — and timeouts are not retried because a second full timeout would consume the rest of the request budget"
+      audience: internal
+    - text: "Observed while diagnosing: three consecutive uncached crt.sh fetches returned a 502 and two timeouts. Successes cache for 24h and failures are never cached, so this surfaced as smoke runs that fail on a cold cache and pass on the retry — reading as flaky tooling rather than a flaky upstream"
+      audience: internal
+
 - version: v0.65.0
   date: 2026-07-31
   changes:
