@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -92,7 +94,7 @@ func TestShell_ActionErrorDoesNotExit(t *testing.T) {
 }
 
 func TestShell_SettingsChangeHost(t *testing.T) {
-	out := drive(t, "8\n1\nhttp://localhost:8080\nb\nq\n")
+	out := drive(t, "0\n1\nhttp://localhost:8080\nb\nq\n")
 	if !strings.Contains(out, "API host is now http://localhost:8080") {
 		t.Errorf("host change not applied:\n%s", out)
 	}
@@ -177,5 +179,130 @@ func TestShell_LookupMenuReachable(t *testing.T) {
 	out := drive(t, "1\nb\nq\n")
 	if !strings.Contains(out, "Lookups") {
 		t.Errorf("lookup menu not shown:\n%s", out)
+	}
+}
+
+// TestShell_MenuKeysAreUnique guards a real hazard in the dispatcher: it runs
+// every item whose key matches, so two options sharing a key would both fire
+// from one keystroke. With destructive actions in these menus that is worse
+// than an unreachable option.
+func TestShell_MenuKeysAreUnique(t *testing.T) {
+
+	// Drive each menu and collect the keys it renders, so the assertion covers
+	// what a user actually sees rather than a restated list.
+	for _, script := range []struct{ name, input string }{
+		{"main", "q\n"},
+		{"customers", "2\nb\nq\n"},
+		{"keys", "3\nb\nq\n"},
+		{"lookups", "1\nb\nq\n"},
+		{"dev", "8\nb\nq\n"},
+		{"environments", "9\nb\nq\n"},
+		{"settings", "0\nb\nq\n"},
+	} {
+		t.Run(script.name, func(t *testing.T) {
+			rendered := drive(t, script.input)
+			for _, block := range strings.Split(rendered, "\n\n") {
+				seen := map[string]bool{}
+				for _, line := range strings.Split(block, "\n") {
+					line = strings.TrimSpace(line)
+					key, _, ok := strings.Cut(line, ") ")
+					if !ok || len(key) != 1 {
+						continue
+					}
+					if seen[key] {
+						t.Errorf("menu option key %q appears twice; both actions would run:\n%s", key, block)
+					}
+					seen[key] = true
+				}
+			}
+		})
+	}
+}
+
+// TestShell_DefaultsToProduction keeps the safe-looking option from being the
+// dangerous one: a session that says nothing about its target must be the one
+// an operator assumes, and they assume production.
+func TestShell_DefaultsToProduction(t *testing.T) {
+	out := drive(t, "q\n")
+	if !strings.Contains(out, "target: PRODUCTION") {
+		t.Errorf("session did not start on production:\n%s", out)
+	}
+}
+
+// TestShell_SwitchToLocalMovesEverything is the property the environment
+// mechanism exists for. Pointing only the host at localhost while credentials
+// still came from .env produced 401s that read as a broken deployment, so host,
+// database and keys must move together.
+func TestShell_SwitchToLocalMovesEverything(t *testing.T) {
+	var out strings.Builder
+	sh := newShell(strings.NewReader("9\n2\nb\nq\n"), &out)
+	defer sh.close()
+	if err := sh.runShell(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "Switched to LOCAL") {
+		t.Fatalf("switch did not happen:\n%s", got)
+	}
+	if sh.api.host != "http://localhost:8080" {
+		t.Errorf("api host = %q, want the local stack", sh.api.host)
+	}
+	if !strings.Contains(sh.db.databaseURL, "localhost:5432") {
+		t.Errorf("database = %q, want the local container", sh.db.databaseURL)
+	}
+	keys := sh.env.resolveKeys(&smokeFlags{})
+	if keys.forPlan("admin") != "test-admin-key" {
+		t.Errorf("admin key = %q, want the seeded dev key", keys.forPlan("admin"))
+	}
+	if keys.rateLimit == "" {
+		t.Error("local environment has no reserved rate limit key")
+	}
+}
+
+// TestShell_SwitchBackToProductionClearsLocalURL guards the direction that
+// fails silently: a stale local URL would leave a session labelled production
+// while still reading the container.
+func TestShell_SwitchBackToProductionClearsLocalURL(t *testing.T) {
+	var out strings.Builder
+	sh := newShell(strings.NewReader("9\n2\nb\n9\n1\nb\nq\n"), &out)
+	defer sh.close()
+	if err := sh.runShell(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if sh.db.databaseURL != "" {
+		t.Errorf("database URL = %q, want it cleared so the production lookup resumes", sh.db.databaseURL)
+	}
+	if sh.api.host != defaultHost {
+		t.Errorf("api host = %q, want %q", sh.api.host, defaultHost)
+	}
+}
+
+// TestLocalEnvironmentKeysMatchSeed pins the dev keys to migrations/seed.sql.
+// They are only usable against a container seeded from that file, so a change
+// on either side leaves `sactl` unable to talk to a freshly reset stack.
+func TestLocalEnvironmentKeysMatchSeed(t *testing.T) {
+	seed, err := os.ReadFile(filepath.Join("..", "..", "migrations", "seed.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := environmentNamed(envLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var all []string
+	for _, plan := range plans {
+		if p, ok := env.keys.pools[plan]; ok {
+			all = append(all, p.keys...)
+		}
+	}
+	all = append(all, env.keys.rateLimit)
+
+	for _, key := range all {
+		if !strings.Contains(string(seed), "'"+key+"'") {
+			t.Errorf("key %q is not created by migrations/seed.sql", key)
+		}
 	}
 }

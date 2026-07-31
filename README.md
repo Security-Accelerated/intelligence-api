@@ -1059,7 +1059,7 @@ make run    # builds and starts the server
 | `make clean` | Remove build artifacts |
 | `make release V=v0.1.0` | Tag and push a release |
 | `make deploy` | Deploy to Fly.io with git version baked in |
-| `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
+| `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup. Equivalent to `sactl dev reset`, which additionally bounds the readiness wait |
 | `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080` |
 | `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
 | `./scripts/info.sh [host]` | Pretty-print the `/v1/info` admin endpoint. Defaults to production |
@@ -1152,9 +1152,10 @@ sactl status
 sactl info --json
 sactl usage --days 7 --customer 12
 sactl smoke --host http://localhost:8080
+sactl dev reset                           # wipe and rebuild the LOCAL docker stack
 ```
 
-Mutating commands additionally require **`--allow-writes`**:
+Commands that change **deployed** state additionally require **`--allow-writes`**:
 
 ```sh
 sactl customer create --name Acme --plan pro
@@ -1170,6 +1171,13 @@ a hurry, and the mutating commands sit one word away from the read-only ones
 taken before the command is composed rather than one confirmed after it is
 typed. It works in any position, including `sactl --allow-writes` on its own to
 start the menu with changes enabled.
+
+The line is drawn at *reachable from here*, not at destructiveness. `dev reset`
+wipes volumes and is deliberately ungated — it drives `docker compose` against
+the local checkout and cannot touch Neon or Upstash, so its blast radius is a
+rebuild. Gating it would train the habit of passing `--allow-writes` routinely,
+which is exactly what makes the flag useless on the commands that matter. It
+still confirms before running.
 
 ### Smoke suite keys
 

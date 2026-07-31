@@ -63,6 +63,7 @@ func groups() []group {
 		lookupGroup(),
 		customerGroup(),
 		keyGroup(),
+		devGroup(),
 	}
 }
 

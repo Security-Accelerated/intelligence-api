@@ -9,6 +9,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/adminops"
 	"github.com/security-accelerated/intelligence-api/internal/auth"
@@ -31,6 +32,11 @@ type shell struct {
 	db  *dbFlags
 	api *apiFlags
 
+	// env is the currently selected target. Switching it moves the API host,
+	// the database and the credentials together, so a session is never pointed
+	// half at one environment and half at another.
+	env environment
+
 	// conn is opened on first use and reused for the session. Connecting
 	// eagerly would make the menu unusable whenever the database is
 	// unreachable, including for the API-only actions that do not need it.
@@ -40,14 +46,27 @@ type shell struct {
 }
 
 func newShell(in io.Reader, out io.Writer) *shell {
-	return &shell{
+	s := &shell{
 		in:  bufio.NewReader(in),
 		out: out,
 		// The interactive flow confirms in its own prompts, so the flag-level
 		// confirmation is disabled to avoid asking twice.
 		db:  &dbFlags{yes: true},
-		api: &apiFlags{host: defaultHost, timeout: defaultTimeout},
+		api: &apiFlags{timeout: defaultTimeout},
 	}
+	// Production by default: it is what an operator opening this tool almost
+	// always wants, and defaulting to local would make a session that looks
+	// live actually be inspecting a container.
+	s.setEnvironment(environments()[0])
+	return s
+}
+
+// setEnvironment repoints the session and drops any open database connection,
+// so the next action reconnects to the new target rather than reusing the old.
+func (s *shell) setEnvironment(e environment) {
+	s.close()
+	s.env = e
+	e.apply(s.api, s.db)
 }
 
 func (s *shell) close() {
@@ -224,9 +243,7 @@ func (s *shell) menu(ctx context.Context, title string, items []menuItem, backLa
 
 // runShell is the interactive entry point.
 func (s *shell) runShell(ctx context.Context) error {
-	s.printf("\n  Intelligence API — admin (%s)\n", version)
-	s.printf("  db:  %s\n", database.Describe(s.db.viperFor()))
-	s.printf("  api: %s\n", s.api.host)
+	s.printBanner()
 
 	if !allowWrites {
 		s.printf("  read-only — start with %s to enable changes\n", writeFlagName)
@@ -240,7 +257,9 @@ func (s *shell) runShell(ctx context.Context) error {
 		{"5", "Service info", func(ctx context.Context) error { return runInfo(ctx, s.api) }},
 		{"6", "Usage analytics", s.usageAction},
 		{"7", "Run smoke test", s.smokeAction},
-		{"8", "Settings (host, database)", s.settingsMenu},
+		{"8", "Local dev stack", s.devMenu},
+		{"9", "Switch environment (local / production)", s.environmentMenu},
+		{"0", "Settings (host, database)", s.settingsMenu},
 	}, "q) Quit")
 
 	if errors.Is(err, errQuit) {
@@ -248,6 +267,34 @@ func (s *shell) runShell(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+// printBanner shows which environment the session is pointed at. It is redrawn
+// after a switch, because "which database am I about to change" is the single
+// most important thing on screen.
+func (s *shell) printBanner() {
+	s.printf("\n  Intelligence API — admin (%s)\n", version)
+	s.printf("  target: %s — %s\n", strings.ToUpper(s.env.name), s.env.description)
+	s.printf("  api:    %s\n", s.api.host)
+	s.printf("  db:     %s\n", database.Describe(s.db.viperFor()))
+}
+
+// environmentMenu switches the session target.
+func (s *shell) environmentMenu(ctx context.Context) error {
+	items := make([]menuItem, 0, len(environments()))
+	for i, e := range environments() {
+		items = append(items, menuItem{
+			key:   fmt.Sprint(i + 1),
+			label: fmt.Sprintf("%s — %s", e.name, e.description),
+			run: func(context.Context) error {
+				s.setEnvironment(e)
+				s.printf("\n  Switched to %s.\n", strings.ToUpper(e.name))
+				s.printBanner()
+				return nil
+			},
+		})
+	}
+	return s.menu(ctx, "Switch environment", items, "b) Back")
 }
 
 // lookupMenu runs intelligence lookups through the API, exactly as the
@@ -300,8 +347,8 @@ func (s *shell) customersMenu(ctx context.Context) error {
 		{"1", "List", s.customerListAction},
 		{"2", "Create", s.customerCreateAction},
 		{"3", "Change plan", s.customerPlanAction},
-		{"5", "Rename", s.customerRenameAction},
-		{"4", "Activate / deactivate", s.customerActiveAction},
+		{"4", "Rename", s.customerRenameAction},
+		{"5", "Activate / deactivate", s.customerActiveAction},
 	}, "b) Back")
 }
 
@@ -582,12 +629,55 @@ func (s *shell) usageAction(ctx context.Context) error {
 func (s *shell) smokeAction(ctx context.Context) error {
 	// The suite makes well over a hundred requests against whatever --host
 	// points at, which is production by default. Worth one confirmation.
-	ok, err := s.askYesNo(fmt.Sprintf("  Run the full smoke suite against %s?", s.api.host))
+	ok, err := s.askYesNo(fmt.Sprintf("  Run the full smoke suite against %s (%s)?",
+		s.api.host, s.env.name))
 	if err != nil || !ok {
 		s.printf("  Cancelled.\n")
 		return err
 	}
-	return runSmoke(ctx, &smokeFlags{api: s.api})
+
+	// Credentials come from the selected environment, not from whatever .env
+	// holds. Running the local suite with production keys is the mistake this
+	// whole mechanism exists to prevent — every check would 401 and read as a
+	// broken deployment.
+	f := &smokeFlags{api: s.api}
+	f.keys = s.env.resolveKeys(f)
+	f.keysResolved = true
+	return runSmoke(ctx, f)
+}
+
+// devMenu exposes the local-stack commands. Kept separate from the customer
+// and key menus, which normally act on production.
+func (s *shell) devMenu(ctx context.Context) error {
+	return s.menu(ctx, "Local dev stack", []menuItem{
+		{"1", "Reset (wipe volumes and rebuild)", s.devResetAction},
+	}, "b) Back")
+}
+
+func (s *shell) devResetAction(ctx context.Context) error {
+	// No write gate: --allow-writes protects deployed state, and this reaches
+	// only local Docker. The confirmation below still applies.
+	root, err := repoRoot()
+	if err != nil {
+		return err
+	}
+
+	s.printf("\n  This wipes the LOCAL Docker stack in %s:\n", root)
+	s.printf("    - stops all containers\n")
+	s.printf("    - deletes the postgres and redis volumes (all local data)\n")
+	// The prune clears Docker's build cache for the whole machine, not just
+	// this project, so it affects unrelated builds. The flag interface says so;
+	// this prompt used to summarise it away.
+	s.printf("    - prunes the Docker build cache (machine-wide, affects other projects)\n")
+	s.printf("    - rebuilds and restarts\n")
+	s.printf("  Deployed environments are unaffected.\n\n")
+
+	ok, err := s.askYesNo("  Proceed?")
+	if err != nil || !ok {
+		s.printf("  Cancelled.\n")
+		return err
+	}
+	return runDevReset(ctx, root, &devResetFlags{yes: true, timeout: 5 * time.Minute})
 }
 
 func (s *shell) settingsMenu(ctx context.Context) error {

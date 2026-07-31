@@ -6,14 +6,21 @@ import (
 	"slices"
 )
 
-// allowWritesFlag is the global opt-in for anything that changes state.
+// allowWritesFlag is the global opt-in for changing *deployed* state.
 //
 // Read-only inspection is the common case and is what an operator reaches for
 // when something looks wrong — often against production, often in a hurry. The
 // mutating commands sit in the same binary one word away (`customer list` vs
 // `customer plan`), so a typo or a recalled shell line can change data when the
-// intent was to look at it. Requiring the flag makes every mutation a decision
-// taken before the command is composed, not one confirmed after it is typed.
+// intent was to look at it. Requiring the flag makes every such mutation a
+// decision taken before the command is composed, not one confirmed after it is
+// typed.
+//
+// The line is drawn at reachable-from-here, not at destructiveness. `dev reset`
+// wipes volumes and is deliberately ungated: it drives docker compose against
+// the local checkout and cannot touch Neon or Upstash, so the blast radius is a
+// rebuild. Gating it would train an operator to pass --allow-writes routinely,
+// which is precisely what makes it useless on the commands that matter.
 //
 // It is deliberately a process-wide switch set once during argument parsing
 // rather than a field threaded through every command: a mutation path that
@@ -59,7 +66,8 @@ func extractGlobalFlags(args []string) []string {
 	return rest
 }
 
-// mutatingCommands names every subcommand that changes state, as "group sub"
+// mutatingCommands names every subcommand that changes deployed state, as
+// "group sub"
 // or a bare command name. Used only to describe the gate in help output; the
 // enforcement is requireWrites at each call site, so a command missing from
 // this list is still gated.
