@@ -37,11 +37,19 @@ func chromeAvailable(t *testing.T) {
 // produces a perfectly valid screenshot — of Chrome's own error page — so
 // asserting on the PNG would pass whether or not the request escaped. Only the
 // server's own view proves containment.
+//
+// Loopback stands in for link-local (169.254.169.254, the cloud metadata
+// address) too: both are in Chromium's implicit bypass list and both are
+// governed by the same flag, so this test fails the moment it is removed. A
+// separate link-local test was tried and deleted — with nothing listening on
+// that address and no way to observe the internal proxy, it passed whether
+// Chrome was contained, blocked, or simply had no route, which is worse than
+// no test at all.
 func TestCaptureScreenshot_CannotReachLoopback(t *testing.T) {
 	chromeAvailable(t)
 
 	var hits atomic.Int32
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -69,25 +77,5 @@ func TestCaptureScreenshot_CannotReachLoopback(t *testing.T) {
 	if n := hits.Load(); n != 0 {
 		t.Errorf("loopback service received %d request(s) from Chrome — the SSRF proxy was bypassed; "+
 			"a redirect to localhost or a cloud metadata endpoint would be screenshotted and returned", n)
-	}
-}
-
-// TestCaptureScreenshot_CannotReachLinkLocal covers the other implicitly
-// bypassed range, which is where cloud metadata services live
-// (169.254.169.254). No listener is bound: the assertion is that Chrome routes
-// the attempt through the proxy rather than dialling the address itself, so a
-// direct connection is what we are ruling out.
-func TestCaptureScreenshot_CannotReachLinkLocal(t *testing.T) {
-	chromeAvailable(t)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-
-	// 169.254.169.254 is the EC2/GCP/Azure metadata address. safenet classifies
-	// link-local as blocked, so with the bypass list set this never leaves the
-	// proxy.
-	if _, err := captureScreenshot(ctx, "http://169.254.169.254/latest/meta-data/"); err == nil {
-		t.Log("capture returned no error (Chrome screenshotted an error page); " +
-			"containment is asserted by the loopback test, which can observe the connection")
 	}
 }
