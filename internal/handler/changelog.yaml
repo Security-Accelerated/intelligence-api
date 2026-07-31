@@ -19,6 +19,10 @@
       audience: internal
     - text: "actionlint runs as the first CI step, since a typo in needs: would leave the gate silently not gating. Verified it catches exactly that"
       audience: internal
+    - text: "The CI gate provisions Chrome and sets REQUIRE_CHROME so the screenshot SSRF regression test cannot silently skip — a skipped test looks identical to a passing one in the run summary. A shell step is used rather than a third-party setup action, since this job holds a repository token"
+      audience: internal
+    - text: "Checkouts no longer persist GITHUB_TOKEN, jobs declare contents: read, and actionlint is pinned to a commit SHA verified through the GitHub API"
+      audience: internal
 
 - version: v0.59.0
   date: 2026-07-30

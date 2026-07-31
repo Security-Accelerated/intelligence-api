@@ -60,10 +60,31 @@ jobs:
       - name: Build
         run: go build ./...
 
-      # Chrome is preinstalled on ubuntu-latest, so the screenshot SSRF
-      # regression test actually runs here. It skips when no browser is found
-      # rather than passing silently, so a runner without one is visible.
+      # The screenshot SSRF regression test drives a real browser, and a
+      # skipped test is indistinguishable from a passing one in the run
+      # summary — the gate could go green having never launched Chrome.
+      # ubuntu-latest ships Chrome, but install it if that ever changes rather
+      # than depending on the runner image. A plain shell step is used in
+      # preference to a third-party setup action: this job holds a repository
+      # token, and the fewer external actions that run inside it the better.
+      - name: Ensure Chrome is available
+        run: |
+          if command -v google-chrome >/dev/null 2>&1; then
+            google-chrome --version
+          elif command -v chromium >/dev/null 2>&1; then
+            chromium --version
+          else
+            echo "No Chrome on the runner; installing chromium-browser."
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends chromium-browser
+            chromium --version || chromium-browser --version
+          fi
+
+      # REQUIRE_CHROME turns the test's no-browser skip into a failure, so the
+      # SSRF regression cannot silently stop running.
       - name: Unit tests (race detector)
+        env:
+          REQUIRE_CHROME: "1"
         run: go test -race -count=1 ./...
 
       - name: Integration tests (race detector)
