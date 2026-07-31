@@ -25,6 +25,8 @@
       audience: internal
     - text: "The internal-audience filter is now asserted on every docs page rather than only the one rendering the list, since that filter is the only thing keeping internal notes off a public page"
       audience: internal
+    - text: "POSTGRES_URL is now accepted as a complete connection string and takes precedence over the individual POSTGRES_* settings. Managed providers issue one URL, and splitting it into host/user/password/dbname to reassemble it drops any parameters carried in the query string — endpoint IDs, channel binding, pooler options — which surfaces as an authentication failure rather than as missing configuration"
+      audience: internal
 
 - version: v0.63.0
   date: 2026-07-31

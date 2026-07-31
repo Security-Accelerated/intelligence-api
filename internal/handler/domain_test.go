@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/spf13/viper"
 )
@@ -761,5 +762,31 @@ func TestDomainLookup_RecordsDemandOnRejectedRequests(t *testing.T) {
 				t.Errorf("domain_count = %d, want 1", domainCount)
 			}
 		})
+	}
+}
+
+// TestPlanRankCoversEveryPlan keeps the gating table aligned with the plan
+// vocabulary in the auth package.
+//
+// planRank drives every plan comparison in the handler, and a missing entry
+// reads as rank 0 — the least privileged plan — rather than as an error. So a
+// plan added to auth.Plans but not here would silently deny its holders every
+// gated lookup, which looks like a billing bug rather than a missing map entry.
+func TestPlanRankCoversEveryPlan(t *testing.T) {
+	for _, plan := range auth.Plans {
+		if _, ok := planRank[plan]; !ok {
+			t.Errorf("planRank has no entry for %q, so its holders rank as the least privileged plan", plan)
+		}
+	}
+	if len(planRank) != len(auth.Plans) {
+		t.Errorf("planRank has %d entries, auth.Plans has %d — the tables have diverged", len(planRank), len(auth.Plans))
+	}
+
+	// Ranks must follow auth.Plans' documented least-privileged-first order.
+	for i := 1; i < len(auth.Plans); i++ {
+		prev, cur := auth.Plans[i-1], auth.Plans[i]
+		if planRank[prev] >= planRank[cur] {
+			t.Errorf("%s ranks >= %s, but auth.Plans orders them the other way", prev, cur)
+		}
 	}
 }

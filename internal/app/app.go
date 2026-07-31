@@ -11,6 +11,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/billing"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/database"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/httpapi"
@@ -46,7 +47,7 @@ func Run(logger *zap.Logger, version string) error {
 	defer cancel()
 
 	// Database
-	db, err := openDB(ctx, cfg)
+	db, err := database.Open(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("connect to postgres: %w", err)
 	}

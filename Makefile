@@ -1,13 +1,24 @@
 APP_NAME := intelligence-api
+CLI_NAME := sactl
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty)
 
-.PHONY: all build clean deps test test-integration test-all run release deploy docker-reset
+.PHONY: all build build-cli install-cli clean deps test test-integration test-all run release deploy docker-reset
 
-all: test build
+all: test build build-cli
 
 build:
 	go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(APP_NAME) ./cmd/api/
+
+# The operator CLI. Built into bin/ alongside the server.
+build-cli:
+	go build -ldflags "-X main.version=$(VERSION)" -o $(BUILD_DIR)/$(CLI_NAME) ./cmd/sactl/
+
+# Installs sactl onto PATH (GOBIN, or GOPATH/bin), so it can be run from the
+# directory holding .env rather than from the repo.
+install-cli:
+	go install -ldflags "-X main.version=$(VERSION)" ./cmd/sactl/
+	@echo "installed $(CLI_NAME) $(VERSION) to $$(go env GOBIN 2>/dev/null || echo $$(go env GOPATH)/bin)"
 
 clean:
 	rm -rf $(BUILD_DIR)

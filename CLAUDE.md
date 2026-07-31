@@ -10,6 +10,7 @@ Domain and IP intelligence REST API built in Go with Gin. Performs concurrent WH
 
 ```
 cmd/api/main.go              → Entry point, version via ldflags
+cmd/sactl/                   → Operator CLI: interactive menu with no args, flags otherwise
 internal/app/app.go           → Dependency wiring, bootstrap, shutdown
 internal/handler/             → HTTP handlers, route registration, request validation
 internal/service/             → Business logic, lookup orchestration, caching
@@ -17,7 +18,9 @@ internal/domain/              → Lookup implementations + domain types (model.g
 internal/middleware/           → Auth, rate limiting, logging, security headers, body limit, client request ID
 internal/httpapi/             → Gin router assembly, middleware chain, server lifecycle
 internal/cache/               → Cache interface + Redis implementation
-internal/auth/                → Customer model, PostgreSQL repository, in-memory cached repository, key hashing
+internal/auth/                → Customer model, plan vocabulary, PostgreSQL repository, in-memory cached repository, key hashing
+internal/adminops/            → Customer and key operations behind the CLI (create, list, plan, activate, keys)
+internal/database/            → Shared PostgreSQL connection, used by both binaries
 internal/billing/              → Stripe billing (webhook handling, key provisioning, noop fallback)
 internal/usage/                → Usage tracking (buffered async INSERT, admin query endpoint, noop fallback)
 internal/notifications/        → Pushover alerting (upstream throttle + error spike detection)
@@ -138,6 +141,13 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 ### IP intelligence
 `internal/domain/geoip.go` provides `GeoIPReader` — holds MaxMind GeoLite2 City and ASN databases behind `sync.RWMutex` for concurrent reads with atomic hot-reload via `Reload()`. `DownloadAndReload()` fetches latest databases from MaxMind using a license key, validates them, and swaps atomically. `internal/domain/ip_rdns.go` does PTR lookups via `domain.Resolver()`. `internal/domain/ip_rdap.go` queries RDAP bootstrap (`rdap.org/ip/`) for abuse contacts — returns structured JSON, no WHOIS parsing needed. `internal/domain/ip_threatintel.go` defines `IPThreatIntelProvider` interface and adapter types (`VTIPProvider`, `URLhausIPProvider`, `OTXIPProvider`) that wrap existing domain providers, sharing their HTTP clients and rate limiters but hitting IP-specific API endpoints. `internal/service/ip.go` follows the same concurrent fan-out pattern as `service/domain.go` with function-based DI and `ip:` prefixed cache keys. `internal/handler/ip.go` validates IPs via `netip.ParseAddr`, rejects non-globally-routable addresses, and gates `threat_intel` to pro/admin. `internal/handler/geoip_admin.go` provides a bodyless admin endpoint for app-managed database refresh. `internal/app/geoip.go` opens the databases at startup and downloads them in a background goroutine when they are missing, unreadable, or older than `maxmind.max_age` (default 168h) — the download is ~80MB, so blocking startup on it would hold the listener past Fly's health checks on every cold start. `planGeoIP` isolates the load/download decision so it is testable without network. A stale database is loaded first and refreshed behind it. Config: `MAXMIND_LICENSE_KEY`, `MAXMIND_DB_PATH`, `IP_LOOKUP_TIMEOUT`, `IP_MAX_IPS_FREE/BASIC/PRO`.
 
+### Operator CLI
+`cmd/sactl` administers customers and keys and inspects a running deployment. Run with no arguments it presents an interactive menu; with a command it takes flags, so CI and scripts are unaffected. Both front ends call the same `run*` functions, so they cannot drift in behaviour — only in how arguments are gathered.
+
+It deliberately reuses the server's own packages: `billing.GenerateAPIKey`, `auth.HashKey`, `auth.Plans`, and `billing.KeyRotationService`. Administering by hand in `psql` is where the silent failures live — a key stored unhashed simply never authenticates, and nothing reports why. `internal/adminops` holds the SQL rather than reusing `billing.ProvisionCustomer`, which is Stripe-shaped: it writes a `provisioned_keys` row for one-time retrieval from the checkout success page, and the CLI prints the key directly, so a second stored copy would be a retrievable secret nobody collects.
+
+Credentials come from `./.env`, parsed by the CLI rather than sourced — connection strings contain `&`, which a shell treats as a background operator, truncating the value at the first query parameter. `scripts/status.sh` works around this by grepping individual keys out of the file. Mutating commands print the target database (credentials stripped) and prompt; `--yes` skips it, and a non-interactive stdin without `--yes` is refused rather than assumed. Interactive mode is entered only when stdin is a terminal, since piped input would hit EOF on the first prompt and exit instantly.
+
 ## Middleware Chain (order matters)
 
 1. `gin.Recovery()` — catches panics, returns 500
@@ -158,6 +168,7 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 - `make docker-reset` — **dev only**, wipes volumes and rebuilds everything
 - `./scripts/smoke-test.sh` — **dev only**, hits every endpoint with every key/plan combo
 - `./scripts/info.sh` — **dev only**, pretty-prints `/v1/info` admin endpoint (reads `SMOKE_ADMIN_KEY` from `.env`)
+- `make build-cli` / `make install-cli` — build or install `sactl`, the operator CLI
 - `make deploy` — deploys to Fly.io with git version baked in
 - `make release V=v0.X.Y` — tags and pushes a release
 - `make deps` — runs `go get -u ./...` and `go mod tidy` (run explicitly to upgrade dependencies)
