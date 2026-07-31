@@ -9,16 +9,18 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 )
 
 // Plan names, ordered by capability. Anything unrecognized is treated as the
-// least privileged plan.
+// least privileged plan. The vocabulary itself lives in the auth package, which
+// owns the customer record these are stored on.
 const (
-	planFree  = "free"
-	planBasic = "basic"
-	planPro   = "pro"
-	planAdmin = "admin"
+	planFree  = auth.PlanFree
+	planBasic = auth.PlanBasic
+	planPro   = auth.PlanPro
+	planAdmin = auth.PlanAdmin
 )
 
 var planRank = map[string]int{

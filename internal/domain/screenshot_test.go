@@ -84,7 +84,7 @@ func TestCaptureScreenshot_CannotReachLoopback(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	png, err := captureScreenshot(ctx, target)
+	png, err := captureScreenshot(ctx, target, ScreenshotOptions{})
 
 	// Positive control, asserted before containment. hits == 0 is only
 	// meaningful if Chrome actually launched and navigated: had the browser

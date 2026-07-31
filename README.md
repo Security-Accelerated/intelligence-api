@@ -1048,7 +1048,9 @@ make run    # builds and starts the server
 | Target | Description |
 |--------|-------------|
 | `make` | Run unit tests, then build |
-| `make build` | Compile the binary to `bin/` |
+| `make build` | Compile the server binary to `bin/` |
+| `make build-cli` | Compile the `sactl` admin CLI to `bin/` |
+| `make install-cli` | Install `sactl` onto `PATH` (`GOBIN`, or `GOPATH/bin`) |
 | `make deps` | Update all dependencies (`go get -u`) and tidy go.mod |
 | `make test` | Run unit tests with race detector |
 | `make test-integration` | Run integration tests |
@@ -1085,6 +1087,7 @@ git push origin main:release      # trigger Fly deploy
 
 | Variable | Description |
 |----------|-------------|
+| `POSTGRES_URL` | Complete PostgreSQL connection string. Takes precedence over the individual `POSTGRES_*` settings below. Prefer it with managed providers: their URLs carry parameters in the query string (endpoint IDs, channel binding, pooler options) that are lost when the URL is split into parts and reassembled, which then fails as an authentication error rather than as missing configuration |
 | `POSTGRES_HOST` | Neon PostgreSQL host |
 | `POSTGRES_PORT` | PostgreSQL port (5432) |
 | `POSTGRES_USER` | PostgreSQL user |
@@ -1118,31 +1121,108 @@ git push origin main:release      # trigger Fly deploy
 | `IP_MAX_IPS_BASIC` | Max IPs per request for basic plan (default: 5) |
 | `IP_MAX_IPS_PRO` | Max IPs per request for pro plan (default: 20) |
 
-### Scripts
+### Admin CLI (`sactl`)
 
-The scripts `smoke-test.sh`, `status.sh`, and `info.sh` load API keys from a `.env` file in the project root (gitignored). Copy `.env.example` to `.env` and fill in your keys:
+`sactl` is the operator CLI. It goes through the same packages the server does,
+so it cannot disagree with the running service about key format, hashing, plan
+names, or key-rotation grace semantics — the failure mode of doing this by hand
+in `psql` is a key stored unhashed, which simply never authenticates and reports
+no error explaining why.
+
+```sh
+make build-cli          # bin/sactl
+make install-cli        # onto PATH
+go run ./cmd/sactl      # or just run it from source
+```
+
+Run it with **no arguments for an interactive menu**, or pass a command for
+scripted and CI use:
+
+```sh
+sactl                                        # interactive menu
+sactl lookup domain example.com --lookups dns,ssl,risk
+sactl lookup ip 8.8.8.8 --lookups all
+sactl customer list
+sactl customer create --name "Acme" --plan pro --email ops@acme.com
+sactl customer plan --id 12 --plan basic
+sactl customer rename --id 12 --name "Acme Corp"
+sactl key list --customer 12
+sactl key rotate --customer 12
+sactl status
+sactl info --json
+sactl usage --days 7 --customer 12
+sactl smoke --host http://localhost:8080
+```
+
+Mutating commands additionally require **`--allow-writes`**:
+
+```sh
+sactl customer create --name Acme --plan pro
+# sactl: writes are disabled: refusing to create customer "Acme".
+#        Re-run with --allow-writes to permit changes
+
+sactl --allow-writes customer create --name Acme --plan pro
+```
+
+Read-only inspection is the common case, often against production and often in
+a hurry, and the mutating commands sit one word away from the read-only ones
+(`customer list` vs `customer plan`). The flag makes every change a decision
+taken before the command is composed rather than one confirmed after it is
+typed. It works in any position, including `sactl --allow-writes` on its own to
+start the menu with changes enabled.
+
+### Smoke suite keys
+
+The suite runs every lookup against every plan, so it needs one key per plan.
+The rate limiter is **per key per minute** and free allows 5, so free-plan keys
+are **pooled and rotated** — one key alone makes a full run spend minutes
+waiting out windows. Numbered siblings are picked up automatically:
+
+| Variable | Purpose |
+|---|---|
+| `SMOKE_ADMIN_KEY` / `SMOKE_BASIC_KEY` / `SMOKE_PRO_KEY` / `SMOKE_FREE_KEY` | One per plan |
+| `SMOKE_FREE_KEY_2`, `_3`, … | Extra free keys, pooled round-robin |
+| `SMOKE_FREE_KEYS` | Comma-separated alternative to the numbered form |
+| `SMOKE_RATELIMIT_KEY` | A free key **reserved** for the rate limit check and held out of the pool |
+
+`SMOKE_RATELIMIT_KEY` is separate because that check has to exhaust one key's
+window, which is the opposite of what the pool is for: rotating would spread the
+load and never reach the limit, and reusing a pooled key would stall whichever
+later check drew it. Without it, the check is skipped rather than run wrongly.
+
+Mint more with the CLI itself:
+
+```sh
+sactl --allow-writes customer create --name "Smoke Free 4" --plan free
+```
+
+Every command reads `./.env` first, so credentials kept there work with no extra
+setup; `--env-file` points elsewhere. **Do not `source` that file** — connection
+strings contain `&`, which the shell treats as a background operator and
+truncates the value at. `sactl` parses it properly instead.
+
+The database connection is taken from `--database-url`, then `POSTGRES_URL`,
+`DATABASE_URL`, `NEON_CONNECTION_STRING`, then the individual `POSTGRES_*`
+settings. Mutating commands print the target database and prompt before acting;
+`--yes` skips the prompt, and a non-interactive stdin without `--yes` is refused
+rather than assumed to mean yes.
+
+Copy `.env.example` to `.env` and fill in your keys:
 
 ```sh
 cp .env.example .env
 ```
 
-Run the smoke test against production:
+### Scripts
+
+The shell scripts predate `sactl` and remain for now. They load API keys from
+`.env` the same way.
 
 ```sh
-./scripts/smoke-test.sh https://api.securityaccelerated.com
-```
-
-Check deployment health:
-
-```sh
-./scripts/status.sh
-```
-
-Pretty-print the admin info endpoint:
-
-```sh
-./scripts/info.sh
-./scripts/info.sh http://localhost:8080  # local
+./scripts/smoke-test.sh https://api.securityaccelerated.com   # or: sactl smoke
+./scripts/status.sh                                           # or: sactl status
+./scripts/info.sh                                             # or: sactl info
+./scripts/usage.sh 30                                         # or: sactl usage --days 30
 ```
 
 ## Alerting

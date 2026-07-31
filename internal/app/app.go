@@ -11,6 +11,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/billing"
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/database"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/httpapi"
@@ -46,12 +47,12 @@ func Run(logger *zap.Logger, version string) error {
 	defer cancel()
 
 	// Database
-	db, err := openDB(ctx, cfg)
+	db, closeDB, err := database.Open(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("connect to postgres: %w", err)
 	}
 	defer func() {
-		if err := db.Close(); err != nil {
+		if err := closeDB(); err != nil {
 			logger.Error("postgres close failed", zap.Error(err))
 		}
 	}()
@@ -192,7 +193,13 @@ func Run(logger *zap.Logger, version string) error {
 		domain.CTLogsHTTPTimeout = v
 	}
 
+	screenshotProvider, err := domain.NewScreenshotProvider(cfg.GetString("screenshot.provider"))
+	if err != nil {
+		return err
+	}
+
 	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("screenshot.max_concurrent"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
+	domainService.SetScreenshotProvider(screenshotProvider)
 
 	// Billing
 	billingRepo := billing.NewRepository(db)
