@@ -63,15 +63,22 @@ func Describe(cfg *viper.Viper) string {
 
 // Open connects to PostgreSQL using the postgres.* configuration keys, applies
 // the pool limits, and verifies the connection with a ping before returning.
-func Open(ctx context.Context, cfg *viper.Viper) (*sql.DB, error) {
+//
+// The returned close function must be used instead of db.Close(): each Open
+// registers a pgx connection configuration that Close does not remove, so a
+// process that opens repeatedly — the interactive CLI retrying after a bad
+// connection string, most obviously — would accumulate one entry per attempt.
+func Open(ctx context.Context, cfg *viper.Viper) (*sql.DB, func() error, error) {
 	connStr, err := connString(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	unregister := func() { stdlib.UnregisterConnConfig(connStr) }
 
 	db, err := sql.Open("pgx", connStr)
 	if err != nil {
-		return nil, err
+		unregister()
+		return nil, nil, err
 	}
 
 	db.SetMaxOpenConns(cfg.GetInt("postgres.max_open_conns"))
@@ -80,10 +87,16 @@ func Open(ctx context.Context, cfg *viper.Viper) (*sql.DB, error) {
 	db.SetConnMaxIdleTime(cfg.GetDuration("postgres.conn_max_idle_time"))
 
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, err
+		_ = db.Close()
+		unregister()
+		return nil, nil, err
 	}
-	return db, nil
+
+	return db, func() error {
+		err := db.Close()
+		unregister()
+		return err
+	}, nil
 }
 
 // connString builds the DSN and registers it with pgx/stdlib, returning the

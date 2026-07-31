@@ -9,6 +9,9 @@ import (
 // captureStdout runs fn with os.Stdout redirected and returns what it wrote.
 // The render helpers print directly rather than taking a writer, which keeps
 // their call sites short; this keeps them testable anyway.
+//
+// It replaces a process-global, so tests using it must not call t.Parallel():
+// two running at once would each capture part of the other's output.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
@@ -16,6 +19,10 @@ func captureStdout(t *testing.T, fn func()) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Both ends close even if fn panics, so a failing test does not leak a
+	// descriptor and leave the reader goroutine blocked forever.
+	defer r.Close()
+
 	orig := os.Stdout
 	os.Stdout = w
 	defer func() { os.Stdout = orig }()
@@ -26,7 +33,9 @@ func captureStdout(t *testing.T, fn func()) string {
 		done <- string(b)
 	}()
 
-	fn()
-	w.Close()
+	func() {
+		defer w.Close()
+		fn()
+	}()
 	return <-done
 }

@@ -96,6 +96,7 @@ func relativeFuture(t time.Time) string {
 
 type keyRotateFlags struct {
 	db       *dbFlags
+	api      *apiFlags
 	customer int
 }
 
@@ -105,7 +106,7 @@ func keyRotate() command {
 		summary: "issue a new key and grace-expire the customer's previous keys",
 		usage:   "--customer N",
 		flags: func(fs *flag.FlagSet) any {
-			f := &keyRotateFlags{db: registerDBFlags(fs)}
+			f := &keyRotateFlags{db: registerDBFlags(fs), api: registerAPIFlags(fs)}
 			fs.IntVar(&f.customer, "customer", 0, "customer ID (required)")
 			return f
 		},
@@ -118,11 +119,11 @@ func keyRotate() command {
 				return err
 			}
 
-			db, target, err := f.db.openDB(ctx)
+			db, closeDB, target, err := f.db.openDB(ctx)
 			if err != nil {
 				return err
 			}
-			defer func() { _ = db.Close() }()
+			defer func() { _ = closeDB() }()
 
 			grace := config.Config().GetDuration("auth.rotation_grace")
 			if err := confirm(f.db, target, fmt.Sprintf(
@@ -150,7 +151,7 @@ func keyRotate() command {
 			fmt.Printf("  API key: %s\n\n", rawKey)
 			fmt.Println("This key is shown once and cannot be recovered — only its hash is stored.")
 			fmt.Printf("Previous keys stop working at %s.\n", oldExpiry.Format(time.RFC3339))
-			fmt.Println(planCacheNote)
+			invalidateAuthCache(ctx, f.api)
 			return nil
 		},
 	}

@@ -62,24 +62,24 @@ func (f *dbFlags) openStore(ctx context.Context) (store *adminops.Store, target 
 	cfg := f.viperFor()
 	target = database.Describe(cfg)
 
-	db, err := database.Open(ctx, cfg)
+	db, closeDB, err := database.Open(ctx, cfg)
 	if err != nil {
 		return nil, target, nil, fmt.Errorf("connect to postgres (%s): %w", target, err)
 	}
-	return adminops.NewStore(db), target, func() { _ = db.Close() }, nil
+	return adminops.NewStore(db), target, func() { _ = closeDB() }, nil
 }
 
 // openDB is openStore for the commands that need the raw handle, currently key
 // rotation, which reuses the server's own rotation service.
-func (f *dbFlags) openDB(ctx context.Context) (db *sql.DB, target string, err error) {
+func (f *dbFlags) openDB(ctx context.Context) (db *sql.DB, closeDB func() error, target string, err error) {
 	cfg := f.viperFor()
 	target = database.Describe(cfg)
 
-	db, err = database.Open(ctx, cfg)
+	db, closeDB, err = database.Open(ctx, cfg)
 	if err != nil {
-		return nil, target, fmt.Errorf("connect to postgres (%s): %w", target, err)
+		return nil, nil, target, fmt.Errorf("connect to postgres (%s): %w", target, err)
 	}
-	return db, target, nil
+	return db, closeDB, target, nil
 }
 
 // confirm asks before a mutating operation, naming the database it will change.

@@ -58,6 +58,15 @@ func runUsage(ctx context.Context, f *usageFlags) error {
 	if f.days < 1 || f.days > 365 {
 		return fmt.Errorf("days must be between 1 and 365, got %d", f.days)
 	}
+	// Negative IDs were previously ignored by the `> 0` guards below, so a
+	// typo produced unfiltered totals for every customer while appearing to
+	// answer a question about one.
+	if f.customer < 0 {
+		return fmt.Errorf("customer must be a positive ID, got %d", f.customer)
+	}
+	if f.apiKey < 0 {
+		return fmt.Errorf("api-key must be a positive ID, got %d", f.apiKey)
+	}
 
 	query := "/v1/admin/usage?days=" + strconv.Itoa(f.days)
 	if f.customer > 0 {

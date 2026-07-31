@@ -73,11 +73,17 @@ func (r *smokeRunner) billingSurface(ctx context.Context) {
 
 	// The webhook must reject anything it cannot verify. A deployment that
 	// accepted unsigned webhooks would let anyone provision themselves a key.
+	payload := map[string]any{"type": "checkout.session.completed"}
 	r.expect(ctx, "POST /billing/webhook without a signature -> 400",
-		request{method: http.MethodPost, path: "/billing/webhook", body: map[string]any{"type": "checkout.session.completed"}},
+		request{method: http.MethodPost, path: "/billing/webhook", body: payload},
 		http.StatusBadRequest)
+	// A present-but-wrong signature is a different code path from an absent
+	// one: it reaches signature verification rather than being rejected for a
+	// missing header. Sending no header for both, as this did, left the
+	// verification path untested while appearing to cover it.
 	r.expect(ctx, "POST /billing/webhook with a bad signature -> 400",
-		request{method: http.MethodPost, path: "/billing/webhook", body: map[string]any{"type": "checkout.session.completed"}},
+		request{method: http.MethodPost, path: "/billing/webhook", body: payload,
+			headers: map[string]string{"Stripe-Signature": "t=1,v1=" + strings.Repeat("0", 64)}},
 		http.StatusBadRequest)
 }
 
@@ -156,6 +162,9 @@ func (r *smokeRunner) planMatrix(
 				continue
 			}
 			if r.f.quick && slowLookups[name] {
+				// Recorded, not silently dropped: a run that quietly covers
+				// less reads identically to one that covers everything.
+				r.skip(fmt.Sprintf("%s (%s)", name, plan), "quick mode")
 				continue
 			}
 			if ok {
@@ -337,7 +346,7 @@ func (r *smokeRunner) adminMatrix(ctx context.Context) {
 				want = http.StatusOK
 			}
 			r.expect(ctx, fmt.Sprintf("%s (%s) -> %d", label, plan, want),
-				request{method: e.method, path: e.path, plan: plan, body: e.body, timeout: 30 * lookupTimeout("") / 30}, want)
+				request{method: e.method, path: e.path, plan: plan, body: e.body}, want)
 		}
 	}
 
@@ -384,7 +393,7 @@ func (r *smokeRunner) responseContract(ctx context.Context) {
 	resp := r.expect(ctx, "multi-lookup request",
 		request{method: http.MethodPost, path: "/v1/domain/lookup", plan: "admin",
 			body:    domainBody([]string{"example.com", "EXAMPLE.com", "example.net"}, lookups...),
-			timeout: 60 * lookupTimeout("") / 60}, http.StatusOK)
+			timeout: 60 * time.Second}, http.StatusOK)
 	if resp == nil {
 		return
 	}
@@ -495,7 +504,7 @@ func (r *smokeRunner) ipResponseContract(ctx context.Context) {
 	resp := r.expect(ctx, "multi-lookup request",
 		request{method: http.MethodPost, path: "/v1/ip/lookup", plan: "admin",
 			body: ipBody([]string{"8.8.8.8", "8.8.8.8", "2001:4860:4860:0:0:0:0:8888"},
-				"geo", "asn", "reverse_dns", "abuse_contact"), timeout: 60 * lookupTimeout("") / 60},
+				"geo", "asn", "reverse_dns", "abuse_contact"), timeout: 60 * time.Second},
 		http.StatusOK)
 	if resp == nil {
 		return
@@ -514,6 +523,9 @@ func (r *smokeRunner) ipResponseContract(ctx context.Context) {
 	r.assert(len(envelope.Results) == 2, "duplicate IPs collapse into one result",
 		fmt.Sprintf("got %d results, want 2", len(envelope.Results)))
 
+	// Tracked so a result set that never contains the expected IP records a
+	// failure rather than skipping the assertions and reporting nothing.
+	checkedIPv4 := false
 	for _, res := range envelope.Results {
 		if res.IP != "8.8.8.8" {
 			// The IPv6 address must come back canonicalized, not as sent.
@@ -521,6 +533,7 @@ func (r *smokeRunner) ipResponseContract(ctx context.Context) {
 				"got "+res.IP)
 			continue
 		}
+		checkedIPv4 = true
 		r.assert(len(res.Inputs) == 2, "inputs report every original entry verbatim",
 			fmt.Sprintf("got %v", res.Inputs))
 		for _, f := range []struct {
@@ -537,6 +550,8 @@ func (r *smokeRunner) ipResponseContract(ctx context.Context) {
 		r.assert(res.ThreatIntel == nil, "unrequested IP lookups are omitted",
 			"threat_intel was returned without being requested")
 	}
+	r.assert(checkedIPv4, "the requested IPv4 appears in the results",
+		"8.8.8.8 was absent, so its field assertions never ran")
 
 	// geo and asn read a local database and are never cached, so their flag is
 	// always false. A true here means something started caching them.
@@ -560,13 +575,15 @@ func (r *smokeRunner) ipResponseContract(ctx context.Context) {
 func (r *smokeRunner) headerMatrix(ctx context.Context) {
 	r.group("Response headers")
 
+	// Values, not just presence. A header set to a permissive value is worse
+	// than one that is missing, because it looks covered.
 	securityHeaders := map[string]string{
 		"X-Content-Type-Options":    "nosniff",
 		"X-Frame-Options":           "DENY",
 		"Cache-Control":             "no-store",
-		"Strict-Transport-Security": "",
-		"Referrer-Policy":           "",
-		"Content-Security-Policy":   "",
+		"Referrer-Policy":           "no-referrer",
+		"Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+		"Content-Security-Policy":   "default-src 'none'; frame-ancestors 'none'",
 	}
 
 	// Unauthenticated: security headers and a request ID must already be set,
@@ -577,8 +594,8 @@ func (r *smokeRunner) headerMatrix(ctx context.Context) {
 		for _, name := range sortedKeys(securityHeaders) {
 			got := resp.headers.Get(name)
 			want := securityHeaders[name]
-			r.assert(got != "" && (want == "" || got == want),
-				"security header "+name, fmt.Sprintf("got %q, want %q", got, want))
+			r.assert(got == want, "security header "+name,
+				fmt.Sprintf("got %q, want %q", got, want))
 		}
 	}
 
@@ -660,11 +677,18 @@ func (r *smokeRunner) limits(ctx context.Context) {
 	// Deliberately exceed the free tier's 5/minute. Everything else in the run
 	// waits rate limits out; this one asserts the limiter actually engages,
 	// which nothing else would catch if it silently stopped working.
+	//
+	// pinKey is essential here. Requests normally rotate across the plan's key
+	// pool to spread load, which is the opposite of what this needs: with three
+	// free keys, ten rotating requests are three or four per key and never
+	// reach the limit, so the check would quietly stop testing anything the
+	// moment a second key was added.
 	r.group("Rate limiting")
 	var limited *response
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 12; i++ {
 		resp, err := r.do(ctx, request{
-			method: http.MethodGet, path: "/v1/usage?days=1", plan: "free", noRetry: true,
+			method: http.MethodGet, path: "/v1/usage?days=1", plan: "free",
+			pinKey: 1, noRetry: true,
 		})
 		if err != nil {
 			r.bad("rate limiter engages on the free tier", err.Error())
@@ -678,7 +702,7 @@ func (r *smokeRunner) limits(ctx context.Context) {
 
 	if limited == nil {
 		r.bad("rate limiter engages on the free tier",
-			"10 rapid requests on a 5/minute plan were all accepted")
+			"12 rapid requests on one key of a 5/minute plan were all accepted")
 		return
 	}
 	r.ok("rate limiter engages on the free tier")

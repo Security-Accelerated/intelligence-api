@@ -165,3 +165,31 @@ func (f *apiFlags) postJSON(ctx context.Context, path string, body any) ([]byte,
 	}
 	return raw, nil
 }
+
+// postNoBody performs an authenticated POST with no request body, for admin
+// actions that take none.
+func (f *apiFlags) postNoBody(ctx context.Context, path string) error {
+	key, err := f.adminKey()
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, trimHost(f.host)+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-API-Key", key)
+
+	resp, err := f.client().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxAPIResponse))
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("POST %s: HTTP %d: %s", path, resp.StatusCode,
+			truncate(strings.TrimSpace(string(raw)), 120))
+	}
+	return nil
+}

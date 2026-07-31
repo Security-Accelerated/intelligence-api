@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/auth"
@@ -65,6 +66,10 @@ func (k Key) Expired(now time.Time) bool {
 // it is not logged and not persisted, so an operator who loses it must rotate
 // rather than look it up.
 func (s *Store) CreateCustomer(ctx context.Context, name, email, plan string) (customerID int, rawKey string, err error) {
+	// Trim first: a whitespace-only name passes an equality check against "" and
+	// is stored verbatim, leaving a customer whose name renders as blank in
+	// every listing and which nothing downstream corrects.
+	name = strings.TrimSpace(name)
 	if name == "" {
 		return 0, "", errors.New("name is required")
 	}

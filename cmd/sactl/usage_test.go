@@ -1,9 +1,20 @@
 package main
 
 import (
+	"sort"
 	"strings"
 	"testing"
 )
+
+// rowOrder returns the position of each label in out, so an ordering assertion
+// reads as "these appear in this order" rather than a chain of comparisons.
+func rowOrder(out string, labels ...string) []int {
+	positions := make([]int, len(labels))
+	for i, l := range labels {
+		positions[i] = strings.Index(out, l)
+	}
+	return positions
+}
 
 // TestRenderUsage_HitRateIsNotRescaled guards a defect this output actually
 // had: cache_hit_rate arrives from the API already expressed as a percentage
@@ -48,9 +59,8 @@ func TestPrintCounts_StableOrderAndShares(t *testing.T) {
 	})
 
 	// Highest first; equal counts break ties by name so repeated runs match.
-	i200, i400, i500 := strings.Index(out, "200"), strings.Index(out, "400"), strings.Index(out, "500")
-	if !(i200 < i400 && i400 < i500) {
-		t.Errorf("rows are not ordered by count then name:\n%s", out)
+	if got := rowOrder(out, "200", "400", "500"); !sort.IntsAreSorted(got) {
+		t.Errorf("rows are not ordered by count then name (positions %v):\n%s", got, out)
 	}
 	if !strings.Contains(out, "80.0%") {
 		t.Errorf("expected a share column:\n%s", out)

@@ -52,7 +52,8 @@ type DomainService struct {
 	sf                  singleflight.Group
 	lookupTimeout       time.Duration
 	screenshotTimeout   time.Duration
-	screenshotSem       chan struct{} // caps concurrent Chromium across ALL in-flight requests
+	screenshotSem       chan struct{} // caps concurrent captures across ALL in-flight requests
+	screenshotProvider  domain.ScreenshotProvider
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
 	fingerprintEngine   *domain.FingerprintEngine
@@ -110,9 +111,7 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 		lookupDNS:           domain.LookupDNS,
 		lookupSSL:           domain.LookupSSL,
 		lookupHeaders:       domain.LookupHeaders,
-		lookupScreenshot: func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error) {
-			return domain.LookupScreenshot(ctx, d, timeout, domain.DefaultMaxPNGBytes)
-		},
+		screenshotProvider:  domain.NewChromiumProvider(),
 		lookupReputation:    domain.LookupReputation,
 		lookupEmailSecurity: domain.LookupEmailSecurity,
 		lookupSubdomains:    domain.LookupSubdomains,
@@ -123,6 +122,39 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 		},
 		lookupDNSSecurity: domain.LookupDNSSecurity,
 	}
+}
+
+// SetScreenshotProvider swaps the capture backend. Screenshots are the only
+// lookup needing a browser, so this is the seam a hosted provider replaces
+// without the service, the cache, the plan gating or the response shape
+// changing.
+func (s *DomainService) SetScreenshotProvider(p domain.ScreenshotProvider) {
+	if p != nil {
+		s.screenshotProvider = p
+	}
+}
+
+// ScreenshotProviderName reports the active capture backend, for /v1/info.
+func (s *DomainService) ScreenshotProviderName() string {
+	if s.screenshotProvider == nil {
+		return "none"
+	}
+	return s.screenshotProvider.Name()
+}
+
+// captureScreenshot dispatches to the test override when one is set, and to the
+// provider otherwise. Tests replace a function; production supplies a provider.
+func (s *DomainService) captureScreenshot(ctx context.Context, target string) (*domain.ScreenshotInfo, error) {
+	if s.lookupScreenshot != nil {
+		return s.lookupScreenshot(ctx, target, s.screenshotTimeout)
+	}
+	if s.screenshotProvider == nil {
+		return nil, errors.New("no screenshot provider configured")
+	}
+	return s.screenshotProvider.Capture(ctx, target, domain.ScreenshotOptions{
+		Timeout:     s.screenshotTimeout,
+		MaxPNGBytes: domain.DefaultMaxPNGBytes,
+	})
 }
 
 // SetLookups replaces the base lookup functions. Test-only: production wiring
@@ -261,7 +293,7 @@ func (s *DomainService) buildRunners(st *runState, d *lookupData, opts domain.Lo
 						return nil, errors.New("screenshot queue timed out, please retry")
 					}
 				}
-				return s.lookupScreenshot(ctx, st.target, s.screenshotTimeout)
+				return s.captureScreenshot(ctx, st.target)
 			}))
 	}
 	if opts.Has(domain.LookupReputationName) {

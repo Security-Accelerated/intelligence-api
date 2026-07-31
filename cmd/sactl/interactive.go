@@ -34,8 +34,9 @@ type shell struct {
 	// conn is opened on first use and reused for the session. Connecting
 	// eagerly would make the menu unusable whenever the database is
 	// unreachable, including for the API-only actions that do not need it.
-	conn  *sql.DB
-	store *adminops.Store
+	conn      *sql.DB
+	closeConn func() error
+	store     *adminops.Store
 }
 
 func newShell(in io.Reader, out io.Writer) *shell {
@@ -50,9 +51,11 @@ func newShell(in io.Reader, out io.Writer) *shell {
 }
 
 func (s *shell) close() {
-	if s.conn != nil {
-		_ = s.conn.Close()
+	if s.closeConn != nil {
+		_ = s.closeConn()
+		s.closeConn = nil
 	}
+	s.conn, s.store = nil, nil
 }
 
 // stores returns the admin store, connecting on first use.
@@ -60,11 +63,11 @@ func (s *shell) stores(ctx context.Context) (*adminops.Store, error) {
 	if s.store != nil {
 		return s.store, nil
 	}
-	db, _, err := s.db.openDB(ctx)
+	db, closeDB, _, err := s.db.openDB(ctx)
 	if err != nil {
 		return nil, err
 	}
-	s.conn = db
+	s.conn, s.closeConn = db, closeDB
 	s.store = adminops.NewStore(db)
 	return s.store, nil
 }
@@ -391,7 +394,8 @@ func (s *shell) customerPlanAction(ctx context.Context) error {
 		return err
 	}
 
-	ok, err := s.askYesNo(fmt.Sprintf("  Move customer %d to %s?", id, plan))
+	ok, err := s.askYesNo(fmt.Sprintf("  Move customer %d to %s, in %s?",
+		id, plan, database.Describe(s.db.viperFor())))
 	if err != nil || !ok {
 		s.printf("  Cancelled.\n")
 		return err
@@ -403,7 +407,8 @@ func (s *shell) customerPlanAction(ctx context.Context) error {
 		}
 		return err
 	}
-	s.printf("  Customer %d is now on the %s plan.\n  %s\n", id, plan, planCacheNote)
+	s.printf("  Customer %d is now on the %s plan.\n", id, plan)
+	invalidateAuthCache(ctx, s.api)
 	return nil
 }
 
@@ -431,7 +436,8 @@ func (s *shell) customerActiveAction(ctx context.Context) error {
 	}
 	active := state == "active"
 
-	ok, err := s.askYesNo(fmt.Sprintf("  Set customer %d to %s?", id, state))
+	ok, err := s.askYesNo(fmt.Sprintf("  Set customer %d to %s, in %s?",
+		id, state, database.Describe(s.db.viperFor())))
 	if err != nil || !ok {
 		s.printf("  Cancelled.\n")
 		return err
@@ -443,7 +449,8 @@ func (s *shell) customerActiveAction(ctx context.Context) error {
 		}
 		return err
 	}
-	s.printf("  Customer %d is now %s.\n  %s\n", id, state, planCacheNote)
+	s.printf("  Customer %d is now %s.\n", id, state)
+	invalidateAuthCache(ctx, s.api)
 	return nil
 }
 
@@ -484,7 +491,8 @@ func (s *shell) keyRotateAction(ctx context.Context) error {
 
 	grace := config.Config().GetDuration("auth.rotation_grace")
 	ok, err := s.askYesNo(fmt.Sprintf(
-		"  Rotate customer %d's key? Existing keys stop working after %s.", id, grace))
+		"  Rotate customer %d's key in %s? Existing keys stop working after %s.",
+		id, database.Describe(s.db.viperFor()), grace))
 	if err != nil || !ok {
 		s.printf("  Cancelled.\n")
 		return err
@@ -500,6 +508,7 @@ func (s *shell) keyRotateAction(ctx context.Context) error {
 	s.printf("    API key: %s\n\n", rawKey)
 	s.printf("  Shown once and not recoverable — only its hash is stored.\n")
 	s.printf("  Previous keys stop working at %s.\n", oldExpiry.Format("2006-01-02 15:04:05 MST"))
+	invalidateAuthCache(ctx, s.api)
 	return nil
 }
 
@@ -563,7 +572,6 @@ func (s *shell) settingsMenu(ctx context.Context) error {
 			// Drop any open connection so the next action reconnects to the
 			// new target rather than silently reusing the old one.
 			s.close()
-			s.conn, s.store = nil, nil
 			s.db.databaseURL = url
 			s.printf("  Database is now %s\n", database.Describe(s.db.viperFor()))
 			return nil

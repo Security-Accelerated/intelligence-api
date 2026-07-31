@@ -70,13 +70,21 @@ func init() {
 	config.SetDefault("cache.ttl.abuse_contact", "24h")
 	config.SetDefault("auth.cache_ttl", "5m")
 	config.SetDefault("auth.rotation_grace", "24h")
-	config.SetDefault("screenshot.max_concurrent", 4)
+	// One capture at a time by default. Each in-process Chromium wants roughly
+	// half a gigabyte, so the previous default of 4 could exhaust a machine
+	// sized for the API and take the whole process down with it. Raise it only
+	// alongside memory, or when a hosted provider removes the local cost.
+	config.SetDefault("screenshot.max_concurrent", 1)
+	config.SetDefault("screenshot.provider", "chromium")
 	config.SetDefault("subdomain.http_timeout", "15s")
 	config.SetDefault("ct_logs.http_timeout", "15s")
 	config.SetDefault("billing.cleanup_interval", "10m")
 	config.SetDefault("auth.last_used_buffer_size", 256)
 	config.SetDefault("auth.last_used_flush_interval", "10s")
-	config.SetDefault("screenshot.timeout", "15s")
+	// A cold Chromium on a small shared-CPU machine regularly needs more than
+	// 15s just to reach the point of announcing its DevTools endpoint, so the
+	// old default failed captures that would otherwise have succeeded.
+	config.SetDefault("screenshot.timeout", "45s")
 	config.SetDefault("domain.max_domains.free", 1)
 	config.SetDefault("domain.max_domains.basic", 5)
 	config.SetDefault("domain.max_domains.pro", 20)

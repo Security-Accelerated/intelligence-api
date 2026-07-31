@@ -130,6 +130,7 @@ func customerList() command {
 
 type customerPlanFlags struct {
 	db   *dbFlags
+	api  *apiFlags
 	id   int
 	plan string
 }
@@ -140,7 +141,7 @@ func customerPlan() command {
 		summary: "change a customer's plan",
 		usage:   "--id N --plan PLAN",
 		flags: func(fs *flag.FlagSet) any {
-			f := &customerPlanFlags{db: registerDBFlags(fs)}
+			f := &customerPlanFlags{db: registerDBFlags(fs), api: registerAPIFlags(fs)}
 			fs.IntVar(&f.id, "id", 0, "customer ID (required)")
 			fs.StringVar(&f.plan, "plan", "", fmt.Sprintf("new plan: %s", strings.Join(auth.Plans, ", ")))
 			return f
@@ -175,23 +176,22 @@ func customerPlan() command {
 			}
 
 			fmt.Printf("Customer %d is now on the %s plan.\n", f.id, f.plan)
-			// The auth layer caches customer lookups by key hash, so the change
-			// is not visible to the running service until that entry expires.
-			fmt.Println(planCacheNote)
+			invalidateAuthCache(ctx, f.api)
 			return nil
 		},
 	}
 }
 
-// planCacheNote explains the delay between a plan change and the running
-// service honouring it. Without it, an operator watching for the new limits
-// concludes the command silently failed.
+// planCacheNote explains the delay when the cache could not be invalidated
+// automatically. Without it, an operator watching for the new limits concludes
+// the command silently failed.
 const planCacheNote = "The API caches customer lookups, so this takes effect within auth.cache_ttl " +
-	"(default 5m). Use the admin cache-invalidation endpoint to apply it immediately."
+	"(default 5m)."
 
 type customerActiveFlags struct {
-	db *dbFlags
-	id int
+	db  *dbFlags
+	api *apiFlags
+	id  int
 }
 
 func customerActive(name string, active bool) command {
@@ -204,7 +204,7 @@ func customerActive(name string, active bool) command {
 		summary: strings.ToLower(verb) + " a customer without deleting anything",
 		usage:   "--id N",
 		flags: func(fs *flag.FlagSet) any {
-			f := &customerActiveFlags{db: registerDBFlags(fs)}
+			f := &customerActiveFlags{db: registerDBFlags(fs), api: registerAPIFlags(fs)}
 			fs.IntVar(&f.id, "id", 0, "customer ID (required)")
 			return f
 		},
@@ -235,7 +235,7 @@ func customerActive(name string, active bool) command {
 			}
 
 			fmt.Printf("Customer %d is now %s.\n", f.id, map[bool]string{true: "active", false: "inactive"}[active])
-			fmt.Println(planCacheNote)
+			invalidateAuthCache(ctx, f.api)
 			return nil
 		},
 	}

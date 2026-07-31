@@ -65,6 +65,16 @@ func (k smokeKeys) forPlan(plan string) string {
 	return ""
 }
 
+// pinned returns one specific key from the plan's pool, so a caller can send
+// repeated requests on the same key rather than spreading them.
+func (k smokeKeys) pinned(plan string, i int) string {
+	p, ok := k.pools[plan]
+	if !ok || len(p.keys) == 0 {
+		return ""
+	}
+	return p.keys[i%len(p.keys)]
+}
+
 func (k smokeKeys) have(plan string) bool {
 	p, ok := k.pools[plan]
 	return ok && p.size() > 0
@@ -270,6 +280,14 @@ type request struct {
 	rawKey  string // overrides plan, for the deliberately-invalid-key cases
 	body    any
 	timeout time.Duration
+	// headers are set verbatim on the request, for cases that need to exercise
+	// a specific header value rather than a body or a key.
+	headers map[string]string
+	// pinKey selects one specific key from the plan's pool instead of taking
+	// the next in rotation. Needed by the rate limit check: rotating across a
+	// pool spreads the load, which is exactly what must not happen when the
+	// point is to exhaust one key's window.
+	pinKey int
 	// noRetry suppresses rate limit retrying, for the check that deliberately
 	// provokes a 429.
 	noRetry bool
@@ -351,6 +369,9 @@ func (r *smokeRunner) call(ctx context.Context, req request) (*response, error) 
 	if key := r.keyFor(req); key != "" {
 		httpReq.Header.Set("X-API-Key", key)
 	}
+	for name, value := range req.headers {
+		httpReq.Header.Set(name, value)
+	}
 
 	client := r.f.api.client()
 	if req.timeout > client.Timeout {
@@ -376,6 +397,9 @@ func (r *smokeRunner) keyFor(req request) string {
 	}
 	if req.plan == "" {
 		return ""
+	}
+	if req.pinKey > 0 {
+		return r.f.keys.pinned(req.plan, req.pinKey-1)
 	}
 	return r.f.keys.forPlan(req.plan)
 }
