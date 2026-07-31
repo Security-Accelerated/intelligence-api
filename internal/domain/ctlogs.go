@@ -3,8 +3,8 @@ package domain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"time"
@@ -38,12 +38,6 @@ type crtShCTEntry struct {
 func LookupCTLogs(ctx context.Context, domainName string, maxEntries int) (*CTLogsInfo, error) {
 	url := fmt.Sprintf(crtShCTURL, domainName)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("ct_logs: create request: %w", err)
-	}
-	req.Header.Set("User-Agent", "IntelligenceAPI/1.0")
-
 	client := &http.Client{
 		Transport: trustedTransport,
 		// End-to-end cap: the transport's dial timeout doesn't bound a
@@ -52,19 +46,13 @@ func LookupCTLogs(ctx context.Context, domainName string, maxEntries int) (*CTLo
 		Timeout: CTLogsHTTPTimeout,
 	}
 
-	resp, err := client.Do(req)
+	body, err := fetchCrtSh(ctx, client, url, "IntelligenceAPI/1.0", MaxResponseBody)
 	if err != nil {
-		return nil, fmt.Errorf("ct_logs: crt.sh request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ct_logs: crt.sh returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBody))
-	if err != nil {
-		return nil, fmt.Errorf("ct_logs: read response: %w", err)
+		// No certificates is an empty result, not a failure — see subdomain.go.
+		if errors.Is(err, errCrtShNoResults) {
+			return &CTLogsInfo{Count: 0, Entries: []CTLogEntry{}}, nil
+		}
+		return nil, fmt.Errorf("ct_logs: %w", err)
 	}
 
 	var raw []crtShCTEntry

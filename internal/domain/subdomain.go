@@ -3,8 +3,8 @@ package domain
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -32,12 +32,6 @@ type crtShEntry struct {
 func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOptions) (*SubdomainInfo, error) {
 	url := fmt.Sprintf(crtShURL, domainName)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("User-Agent", "IntelligenceAPI/1.0")
-
 	client := &http.Client{
 		Transport: trustedTransport,
 		// End-to-end cap: the transport's dial timeout doesn't bound a
@@ -46,19 +40,15 @@ func LookupSubdomains(ctx context.Context, domainName string, opts SubdomainOpti
 		Timeout: SubdomainHTTPTimeout,
 	}
 
-	resp, err := client.Do(req)
+	body, err := fetchCrtSh(ctx, client, url, "IntelligenceAPI/1.0", MaxResponseBody)
 	if err != nil {
-		return nil, fmt.Errorf("crt.sh request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("crt.sh returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBody))
-	if err != nil {
-		return nil, fmt.Errorf("read crt.sh response: %w", err)
+		// A name with no certificates is a successful empty answer, not a
+		// failure. That is the common case when triaging a freshly registered
+		// typosquat domain — exactly when the answer matters most.
+		if errors.Is(err, errCrtShNoResults) {
+			return &SubdomainInfo{Count: 0, Subdomains: []SubdomainEntry{}}, nil
+		}
+		return nil, err
 	}
 
 	subdomains, err := parseCrtShResponse(body, domainName)
