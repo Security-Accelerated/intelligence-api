@@ -663,7 +663,13 @@ func (s *shell) devResetAction(ctx context.Context) error {
 	}
 
 	s.printf("\n  This wipes the LOCAL Docker stack in %s:\n", root)
-	s.printf("    containers stopped, postgres and redis volumes deleted, image rebuilt.\n")
+	s.printf("    - stops all containers\n")
+	s.printf("    - deletes the postgres and redis volumes (all local data)\n")
+	// The prune clears Docker's build cache for the whole machine, not just
+	// this project, so it affects unrelated builds. The flag interface says so;
+	// this prompt used to summarise it away.
+	s.printf("    - prunes the Docker build cache (machine-wide, affects other projects)\n")
+	s.printf("    - rebuilds and restarts\n")
 	s.printf("  Deployed environments are unaffected.\n\n")
 
 	ok, err := s.askYesNo("  Proceed?")

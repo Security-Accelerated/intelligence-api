@@ -79,12 +79,8 @@ func environmentNamed(name string) (environment, error) {
 			return e, nil
 		}
 	}
-	var names []string
-	for _, e := range environments() {
-		names = append(names, e.name)
-	}
 	return environment{}, fmt.Errorf("unknown environment %q; choose one of: %s",
-		name, strings.Join(names, ", "))
+		name, strings.Join(environmentNames(), ", "))
 }
 
 func environmentNames() []string {

@@ -74,7 +74,7 @@ func devReset() command {
 			fmt.Println("  - stops all containers")
 			fmt.Println("  - deletes the postgres and redis volumes (all local data)")
 			if !f.noPrune {
-				fmt.Println("  - prunes the Docker build cache")
+				fmt.Println("  - prunes the Docker build cache (machine-wide, affects other projects)")
 			}
 			fmt.Println("  - rebuilds and restarts")
 			fmt.Println("\nDeployed environments are unaffected; only local Docker is touched.")

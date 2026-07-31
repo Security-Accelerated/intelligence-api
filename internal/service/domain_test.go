@@ -29,6 +29,63 @@ type mockCache struct {
 	setCalls  int
 	mgetCalls int
 	mgetKeys  [][]string
+
+	// Barrier state. MGet is the one point every caller passes through inside
+	// Lookup, immediately before the singleflight fetch phase, which makes it
+	// the only place a test can synchronize callers on something observable
+	// rather than on elapsed time.
+	barrier        chan struct{}
+	barrierN       int
+	barrierArrived int
+}
+
+// blockUntilCallers makes MGet hold every caller until n of them have arrived,
+// then release them together.
+func (m *mockCache) blockUntilCallers(n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.barrier = make(chan struct{})
+	m.barrierN = n
+}
+
+// waitForCallers blocks until every caller has reached the cache and been
+// released together, then settles.
+//
+// Two mechanisms, because neither suffices alone. The barrier is real
+// synchronization on an observable point inside Lookup, and it fails with the
+// observed count rather than continuing — the earlier helper returned silently
+// on timeout, so a caller that never arrived produced a confusing assertion
+// failure instead of naming the cause.
+//
+// The settle covers what the barrier cannot: the few instructions between MGet
+// returning and a caller parking inside singleflight, which is not observable
+// from outside. Without it the test releases the blocked fetch while callers
+// are still in flight, and the coalescing it is meant to prove never happens —
+// measured, not assumed: barrier alone failed within ten runs.
+//
+// Because the barrier releases every caller at the same instant, that window is
+// instructions wide rather than scheduling wide, which is what makes a settle
+// this short sufficient.
+func (m *mockCache) waitForCallers(t *testing.T) {
+	t.Helper()
+
+	m.mu.Lock()
+	barrier := m.barrier
+	m.mu.Unlock()
+	if barrier == nil {
+		t.Fatal("waitForCallers called without blockUntilCallers")
+	}
+
+	select {
+	case <-barrier:
+	case <-time.After(10 * time.Second):
+		m.mu.Lock()
+		got, want := m.barrierArrived, m.barrierN
+		m.mu.Unlock()
+		t.Fatalf("only %d of %d callers reached the cache", got, want)
+	}
+
+	time.Sleep(50 * time.Millisecond)
 }
 
 func newMockCache() *mockCache {
@@ -49,15 +106,33 @@ func (m *mockCache) Get(_ context.Context, key string) ([]byte, error) {
 
 func (m *mockCache) MGet(_ context.Context, keys []string) ([][]byte, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.mgetCalls++
 	m.mgetKeys = append(m.mgetKeys, slices.Clone(keys))
 	if m.mgetErr != nil {
-		return nil, m.mgetErr
+		err := m.mgetErr
+		m.mu.Unlock()
+		return nil, err
 	}
 	out := make([][]byte, len(keys))
 	for i, k := range keys {
 		out[i] = m.store[k]
+	}
+
+	// Register at the barrier, if one is set, and release everyone once the
+	// last caller arrives.
+	barrier := m.barrier
+	if barrier != nil {
+		m.barrierArrived++
+		if m.barrierArrived == m.barrierN {
+			close(barrier)
+		}
+	}
+	// Unlocked before waiting: holding the mutex here would deadlock every
+	// caller behind the first.
+	m.mu.Unlock()
+
+	if barrier != nil {
+		<-barrier
 	}
 	return out, nil
 }
@@ -1097,7 +1172,8 @@ func TestLookup_DetachedFromParentCancellation(t *testing.T) {
 }
 
 func TestLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
-	svc := newTestService(newMockCache())
+	mc := newMockCache()
+	svc := newTestService(mc)
 
 	var calls atomic.Int32
 	release := make(chan struct{})
@@ -1108,21 +1184,22 @@ func TestLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
 	}
 
 	const callers = 8
-	var arrived atomic.Int32
+	mc.blockUntilCallers(callers)
+
 	var wg sync.WaitGroup
 	results := make([]*domain.DomainResponse, callers)
 	for i := range callers {
 		wg.Go(func() {
-			arrived.Add(1)
 			results[i], _ = svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
 		})
 	}
 
-	// Wait for every caller to enter Lookup, not merely for the first fetch to
-	// begin. Releasing on the first fetch let it complete and its singleflight
-	// entry be deleted before the stragglers arrived, so they each started a
-	// fetch of their own — a flake whose count varied with scheduling.
-	waitForArrivals(&arrived, callers)
+	// Every caller is now inside Lookup and past the cache, released together
+	// and heading into singleflight. Releasing on the first *fetch* instead —
+	// as this used to — proved only that one caller had arrived, let that fetch
+	// finish, and had its entry deleted before the stragglers reached it, so
+	// they each started a fetch of their own.
+	mc.waitForCallers(t)
 	close(release)
 	wg.Wait()
 
@@ -1143,7 +1220,8 @@ func TestLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
 }
 
 func TestLookup_SingleflightSharesAcrossDifferentLookupSets(t *testing.T) {
-	svc := newTestService(newMockCache())
+	mc := newMockCache()
+	svc := newTestService(mc)
 
 	var dnsCalls atomic.Int32
 	release := make(chan struct{})
@@ -1155,18 +1233,17 @@ func TestLookup_SingleflightSharesAcrossDifferentLookupSets(t *testing.T) {
 
 	// Per-lookup keying means overlapping-but-different requests still share
 	// the overlap — something per-response keying could not do.
-	var arrived atomic.Int32
+	mc.blockUntilCallers(2)
+
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		arrived.Add(1)
 		svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupSSLName))
 	})
 	wg.Go(func() {
-		arrived.Add(1)
 		svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName, domain.LookupWhoisName))
 	})
 
-	waitForArrivals(&arrived, 2)
+	mc.waitForCallers(t)
 	close(release)
 	wg.Wait()
 
@@ -1465,25 +1542,4 @@ func TestCacheStats_AttributesFingerprintToHeaders(t *testing.T) {
 	if stats.Hits != 0 || stats.Misses != 1 {
 		t.Errorf("stats = %+v, want 0 hits 1 miss", stats)
 	}
-}
-
-// waitForArrivals blocks until n callers have entered a lookup, then settles.
-//
-// Singleflight tests need every caller parked on the same in-flight call before
-// that call is allowed to finish. Waiting for the first *fetch* to start is not
-// enough — that only proves one caller arrived — and releasing then lets the
-// entry be deleted before the rest show up, so they start fetches of their own.
-//
-// The settle covers the gap between a caller incrementing the counter and
-// actually parking inside singleflight, which cannot be observed directly. The
-// fetch stays blocked throughout, so a caller arriving during the settle still
-// joins the existing call rather than starting one.
-func waitForArrivals(arrived *atomic.Int32, n int32) {
-	for range 1000 {
-		if arrived.Load() == n {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	time.Sleep(50 * time.Millisecond)
 }

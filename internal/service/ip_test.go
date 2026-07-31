@@ -364,7 +364,8 @@ func TestIPLookup_EachLookupPopulatesItsField(t *testing.T) {
 // --- Concurrency ---
 
 func TestIPLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
-	svc := newTestIPService(newMockCache())
+	mc := newMockCache()
+	svc := newTestIPService(mc)
 
 	var calls atomic.Int32
 	release := make(chan struct{})
@@ -375,19 +376,19 @@ func TestIPLookup_SingleflightCoalescesConcurrentFetches(t *testing.T) {
 	}
 
 	const callers = 6
-	var arrived atomic.Int32
+	mc.blockUntilCallers(callers)
+
 	var wg sync.WaitGroup
 	results := make([]*domain.IPResponse, callers)
 	for i := range callers {
 		wg.Go(func() {
-			arrived.Add(1)
 			results[i], _ = svc.Lookup(context.Background(), testIP, ipOpts(domain.LookupAbuseContactName))
 		})
 	}
 
-	// Wait for every caller to enter Lookup, not merely for the first fetch to
-	// begin — see waitForArrivals.
-	waitForArrivals(&arrived, callers)
+	// Every caller is past the cache and heading into singleflight — see the
+	// barrier on mockCache.
+	mc.waitForCallers(t)
 	close(release)
 	wg.Wait()
 
