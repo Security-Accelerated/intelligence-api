@@ -163,7 +163,8 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 - `make deps` — runs `go get -u ./...` and `go mod tidy` (run explicitly to upgrade dependencies)
 
 ### Commit conventions
-- Commit directly to main or short-lived branches that merge immediately
+- All changes go through a feature branch and a PR into `main` — no direct pushes to `main`
+- Merges are gated on review; open the PR but do not merge it yourself
 - Only push to `main` — push to `release` only when explicitly asked
 - No Co-Authored-By lines
 - Keep README.md in sync when changes affect endpoints, config, make targets, or structure
@@ -209,28 +210,8 @@ Tables: `customers` (plan, email, stripe_customer_id), `api_keys` (key_hash, las
 - Deploy workflow: push to main → `make release V=v0.X.Y` → `git push origin main:release`
 - `.env` file (gitignored) holds API keys for `smoke-test.sh` and `status.sh` against production
 
-## Adding a New Lookup Type
+## Adding a new lookup type or endpoint
 
-1. Create `internal/domain/newlookup.go` with a function matching the pattern: `func LookupThing(ctx context.Context, domain string) (*ThingInfo, error)`
-2. Add the payload type (`ThingInfo`) and its response wrapper (`ThingResult` — embeds `*ThingInfo`, adds `cache_hit`) to `internal/domain/model.go`, plus a `LookupThingName` constant and an entry in `AllLookupNames`
-3. Add the field to `DomainResponse`
-4. Add a function field to `DomainService` in `internal/service/domain.go` and wire it in `NewDomainService()`
-5. Add a runner in `buildRunners()` (one `simpleRunner`/`multiErrRunner` line) and an assembly branch in `assemble()`
-6. Add a row to `lookupMinPlan` in `internal/handler/domain.go` — that alone makes the name valid and sets its plan gate. There is no bool to thread through the request, options, or cache key
-7. Add a TTL default: `cache.ttl.<name>` in `internal/config/config.go` and `sample-config.yml`
-8. Add the column to `usage.LookupColumns` and a migration for `request_log` (the drift test will fail until you do)
-9. Add a setter method for tests (`SetThingLookup`)
-10. Update all test files that call `New()` or `SetLookups()`
-11. Update README, docs HTML (request table, valid-lookups table, response field section with its `cache_hit` row, caching TTL table), api.http, smoke test, integration tests, changelog.yaml
-
-## Adding a New Endpoint
-
-1. Define request/response types in `internal/domain/model.go`
-2. Create a service in `internal/service/`
-3. Add a handler method in `internal/handler/`
-4. Define a service interface in `internal/handler/handler.go`
-5. Register the route in `RegisterProtectedRoutes()` with `RequireAdmin()` if admin-only
-6. Wire the service in `internal/app/app.go`
-7. Add a field to `handler.Deps` and set it in `app.go` — existing test call sites need no change, since they name only the dependencies they use
-8. Add context keys to `middleware/request_logger.go` if needed
-9. Update README, api.http, smoke test, integration tests, changelog.yaml
+Both are multi-file changes with checklists kept in the `adding-features` skill
+(`.claude/skills/adding-features/SKILL.md`) rather than here, since they are only
+relevant when actually adding one. Invoke it before starting either change.
