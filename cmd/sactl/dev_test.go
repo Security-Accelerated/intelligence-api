@@ -86,15 +86,19 @@ func TestWaitFor_HonoursContext(t *testing.T) {
 	}
 }
 
-// TestDevReset_RequiresWrites keeps a destructive local command behind the same
-// gate as the production-facing ones.
-func TestDevReset_RequiresWrites(t *testing.T) {
-	allowWrites = false
-	if err := requireWrites("wipe and rebuild the local stack"); err == nil {
-		t.Fatal("dev reset must be gated by --allow-writes")
+// TestDevReset_NotWriteGated pins the distinction --allow-writes draws: it
+// protects deployed state, not anything destructive. dev reset only drives
+// local docker, so gating it would train an operator to pass the flag out of
+// habit — which is exactly what makes it useless on the commands that reach
+// production.
+func TestDevReset_NotWriteGated(t *testing.T) {
+	if isMutating("dev reset") {
+		t.Error("dev reset is listed as a deployed-state mutation; it only touches local docker")
 	}
-	if !isMutating("dev reset") {
-		t.Error("dev reset is not listed as mutating")
+	for _, name := range []string{"customer create", "customer plan", "customer rename", "key rotate"} {
+		if !isMutating(name) {
+			t.Errorf("%q reaches deployed state and must stay gated", name)
+		}
 	}
 }
 

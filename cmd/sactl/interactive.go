@@ -601,9 +601,8 @@ func (s *shell) devMenu(ctx context.Context) error {
 }
 
 func (s *shell) devResetAction(ctx context.Context) error {
-	if err := requireWrites("wipe and rebuild the local stack"); err != nil {
-		return err
-	}
+	// No write gate: --allow-writes protects deployed state, and this reaches
+	// only local Docker. The confirmation below still applies.
 	root, err := repoRoot()
 	if err != nil {
 		return err

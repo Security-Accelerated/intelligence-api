@@ -52,10 +52,11 @@ func devReset() command {
 		run: func(ctx context.Context, cfg any, _ []string) error {
 			f := cfg.(*devResetFlags)
 
-			if err := requireWrites("wipe and rebuild the local stack"); err != nil {
-				return err
-			}
-
+			// Deliberately not behind --allow-writes. That flag exists to
+			// protect deployed state, and this command cannot reach any: it
+			// drives docker compose against the local checkout and never opens
+			// a connection to Neon or Upstash. Gating it would add friction to
+			// the one destructive operation that is safe to get wrong.
 			root, err := repoRoot()
 			if err != nil {
 				return err
