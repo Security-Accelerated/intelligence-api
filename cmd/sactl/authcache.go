@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 )
 
@@ -29,8 +28,7 @@ func invalidateAuthCache(ctx context.Context, api *apiFlags) {
 		return
 	}
 
-	req := request{method: http.MethodPost, path: "/v1/admin/auth/cache/invalidate"}
-	if err := api.postNoBody(ctx, req.path); err != nil {
+	if err := api.postNoBody(ctx, "/v1/admin/auth/cache/invalidate"); err != nil {
 		fmt.Fprintf(os.Stderr,
 			"sactl: change applied, but the auth cache was not invalidated (%v).\n       It clears on its own within auth.cache_ttl.\n", err)
 		return

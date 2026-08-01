@@ -22,12 +22,26 @@ docker builder prune -f
 echo "==> Rebuilding and starting containers..."
 docker compose up --build -d
 
+# The wait is bounded so a container that never becomes healthy fails with the
+# name of the stuck dependency instead of hanging the terminal forever.
+TIMEOUT="${RESET_TIMEOUT:-300}"
+
+wait_for() {
+    local name="$1"
+    shift
+    local deadline=$((SECONDS + TIMEOUT))
+    until "$@" >/dev/null 2>&1; do
+        if [ "$SECONDS" -ge "$deadline" ]; then
+            echo "error: $name did not become ready within ${TIMEOUT}s" >&2
+            echo "       check container logs with: docker compose logs $name" >&2
+            exit 1
+        fi
+        sleep 1
+    done
+}
+
 echo "==> Waiting for postgres to be ready..."
-until docker compose exec -T postgres pg_isready -U intelligence -d intelligence_api >/dev/null 2>&1; do
-    sleep 1
-done
+wait_for postgres docker compose exec -T postgres pg_isready -U intelligence -d intelligence_api
 
 echo "==> Waiting for API to be ready..."
-until curl -sf http://localhost:8080/v1/hello >/dev/null 2>&1; do
-    sleep 1
-done
+wait_for api curl -sf http://localhost:8080/v1/hello

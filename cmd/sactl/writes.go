@@ -16,12 +16,6 @@ import (
 // decision taken before the command is composed, not one confirmed after it is
 // typed.
 //
-// The line is drawn at reachable-from-here, not at destructiveness. `dev reset`
-// wipes volumes and is deliberately ungated: it drives docker compose against
-// the local checkout and cannot touch Neon or Upstash, so the blast radius is a
-// rebuild. Gating it would train an operator to pass --allow-writes routinely,
-// which is precisely what makes it useless on the commands that matter.
-//
 // It is deliberately a process-wide switch set once during argument parsing
 // rather than a field threaded through every command: a mutation path that
 // forgot to check a field would be silently unguarded, whereas there is exactly

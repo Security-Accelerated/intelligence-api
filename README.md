@@ -1059,7 +1059,7 @@ make run    # builds and starts the server
 | `make clean` | Remove build artifacts |
 | `make release V=v0.1.0` | Tag and push a release |
 | `make deploy` | Deploy to Fly.io with git version baked in |
-| `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup. Equivalent to `sactl dev reset`, which additionally bounds the readiness wait |
+| `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
 | `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080` |
 | `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
 | `./scripts/info.sh [host]` | Pretty-print the `/v1/info` admin endpoint. Defaults to production |
@@ -1151,8 +1151,6 @@ sactl key rotate --customer 12
 sactl status
 sactl info --json
 sactl usage --days 7 --customer 12
-sactl smoke --host http://localhost:8080
-sactl dev reset                           # wipe and rebuild the LOCAL docker stack
 ```
 
 Commands that change **deployed** state additionally require **`--allow-writes`**:
@@ -1172,19 +1170,12 @@ taken before the command is composed rather than one confirmed after it is
 typed. It works in any position, including `sactl --allow-writes` on its own to
 start the menu with changes enabled.
 
-The line is drawn at *reachable from here*, not at destructiveness. `dev reset`
-wipes volumes and is deliberately ungated — it drives `docker compose` against
-the local checkout and cannot touch Neon or Upstash, so its blast radius is a
-rebuild. Gating it would train the habit of passing `--allow-writes` routinely,
-which is exactly what makes the flag useless on the commands that matter. It
-still confirms before running.
+### Smoke test keys
 
-### Smoke suite keys
-
-The suite runs every lookup against every plan, so it needs one key per plan.
-The rate limiter is **per key per minute** and free allows 5, so free-plan keys
-are **pooled and rotated** — one key alone makes a full run spend minutes
-waiting out windows. Numbered siblings are picked up automatically:
+`./scripts/smoke-test.sh` runs every lookup against every plan, so it needs one
+key per plan. The rate limiter is **per key per minute** and free allows 5, so
+free-plan keys are **pooled and rotated** — one key alone makes a full run spend
+minutes waiting out windows. Numbered siblings are picked up automatically:
 
 | Variable | Purpose |
 |---|---|
@@ -1197,6 +1188,8 @@ waiting out windows. Numbered siblings are picked up automatically:
 window, which is the opposite of what the pool is for: rotating would spread the
 load and never reach the limit, and reusing a pooled key would stall whichever
 later check drew it. Without it, the check is skipped rather than run wrongly.
+Against a local stack the seeded dev keys from `migrations/seed.sql` are used
+automatically, including the reserved one.
 
 Mint more with the CLI itself:
 
@@ -1223,11 +1216,13 @@ cp .env.example .env
 
 ### Scripts
 
-The shell scripts predate `sactl` and remain for now. They load API keys from
+The shell scripts are the source of truth for the smoke test and the local
+docker reset; the rest overlap with `sactl` commands. They load API keys from
 `.env` the same way.
 
 ```sh
-./scripts/smoke-test.sh https://api.securityaccelerated.com   # or: sactl smoke
+./scripts/smoke-test.sh https://api.securityaccelerated.com
+./scripts/docker-reset.sh                                     # or: make docker-reset
 ./scripts/status.sh                                           # or: sactl status
 ./scripts/info.sh                                             # or: sactl info
 ./scripts/usage.sh 30                                         # or: sactl usage --days 30

@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -94,7 +92,7 @@ func TestShell_ActionErrorDoesNotExit(t *testing.T) {
 }
 
 func TestShell_SettingsChangeHost(t *testing.T) {
-	out := drive(t, "0\n1\nhttp://localhost:8080\nb\nq\n")
+	out := drive(t, "8\n1\nhttp://localhost:8080\nb\nq\n")
 	if !strings.Contains(out, "API host is now http://localhost:8080") {
 		t.Errorf("host change not applied:\n%s", out)
 	}
@@ -195,9 +193,8 @@ func TestShell_MenuKeysAreUnique(t *testing.T) {
 		{"customers", "2\nb\nq\n"},
 		{"keys", "3\nb\nq\n"},
 		{"lookups", "1\nb\nq\n"},
-		{"dev", "8\nb\nq\n"},
-		{"environments", "9\nb\nq\n"},
-		{"settings", "0\nb\nq\n"},
+		{"environments", "7\nb\nq\n"},
+		{"settings", "8\nb\nq\n"},
 	} {
 		t.Run(script.name, func(t *testing.T) {
 			rendered := drive(t, script.input)
@@ -230,12 +227,12 @@ func TestShell_DefaultsToProduction(t *testing.T) {
 }
 
 // TestShell_SwitchToLocalMovesEverything is the property the environment
-// mechanism exists for. Pointing only the host at localhost while credentials
-// still came from .env produced 401s that read as a broken deployment, so host,
-// database and keys must move together.
+// mechanism exists for. Pointing only the host at localhost while the database
+// flags still pointed at Neon produced a session reading one deployment and
+// writing another, so host and database must move together.
 func TestShell_SwitchToLocalMovesEverything(t *testing.T) {
 	var out strings.Builder
-	sh := newShell(strings.NewReader("9\n2\nb\nq\n"), &out)
+	sh := newShell(strings.NewReader("7\n2\nb\nq\n"), &out)
 	defer sh.close()
 	if err := sh.runShell(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -251,13 +248,6 @@ func TestShell_SwitchToLocalMovesEverything(t *testing.T) {
 	if !strings.Contains(sh.db.databaseURL, "localhost:5432") {
 		t.Errorf("database = %q, want the local container", sh.db.databaseURL)
 	}
-	keys := sh.env.resolveKeys(&smokeFlags{})
-	if keys.forPlan("admin") != "test-admin-key" {
-		t.Errorf("admin key = %q, want the seeded dev key", keys.forPlan("admin"))
-	}
-	if keys.rateLimit == "" {
-		t.Error("local environment has no reserved rate limit key")
-	}
 }
 
 // TestShell_SwitchBackToProductionClearsLocalURL guards the direction that
@@ -265,7 +255,7 @@ func TestShell_SwitchToLocalMovesEverything(t *testing.T) {
 // while still reading the container.
 func TestShell_SwitchBackToProductionClearsLocalURL(t *testing.T) {
 	var out strings.Builder
-	sh := newShell(strings.NewReader("9\n2\nb\n9\n1\nb\nq\n"), &out)
+	sh := newShell(strings.NewReader("7\n2\nb\n7\n1\nb\nq\n"), &out)
 	defer sh.close()
 	if err := sh.runShell(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -276,33 +266,5 @@ func TestShell_SwitchBackToProductionClearsLocalURL(t *testing.T) {
 	}
 	if sh.api.host != defaultHost {
 		t.Errorf("api host = %q, want %q", sh.api.host, defaultHost)
-	}
-}
-
-// TestLocalEnvironmentKeysMatchSeed pins the dev keys to migrations/seed.sql.
-// They are only usable against a container seeded from that file, so a change
-// on either side leaves `sactl` unable to talk to a freshly reset stack.
-func TestLocalEnvironmentKeysMatchSeed(t *testing.T) {
-	seed, err := os.ReadFile(filepath.Join("..", "..", "migrations", "seed.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	env, err := environmentNamed(envLocal)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var all []string
-	for _, plan := range plans {
-		if p, ok := env.keys.pools[plan]; ok {
-			all = append(all, p.keys...)
-		}
-	}
-	all = append(all, env.keys.rateLimit)
-
-	for _, key := range all {
-		if !strings.Contains(string(seed), "'"+key+"'") {
-			t.Errorf("key %q is not created by migrations/seed.sql", key)
-		}
 	}
 }

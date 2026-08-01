@@ -183,12 +183,6 @@ func customerPlan() command {
 	}
 }
 
-// planCacheNote explains the delay when the cache could not be invalidated
-// automatically. Without it, an operator watching for the new limits concludes
-// the command silently failed.
-const planCacheNote = "The API caches customer lookups, so this takes effect within auth.cache_ttl " +
-	"(default 5m)."
-
 type customerRenameFlags struct {
 	db   *dbFlags
 	id   int

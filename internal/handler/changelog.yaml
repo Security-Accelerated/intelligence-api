@@ -8,6 +8,14 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.67.0
+  date: 2026-07-31
+  changes:
+    - text: "The smoke suite and dev reset are out of sactl; scripts/smoke-test.sh and scripts/docker-reset.sh are the single source of truth again. Having both meant two implementations of the same checks that could pass and fail independently, and the CLI version defaulted --host to production — a 'local' run after a docker reset was actually hitting production's warm cache, which made the reset look broken"
+      audience: internal
+    - text: "The good parts of the Go suite were ported into the scripts rather than lost: smoke-test.sh now pools free-plan keys (SMOKE_FREE_KEYS or numbered SMOKE_FREE_KEY_N siblings, rotated round-robin) and gained the rate-limit enforcement check using the reserved SMOKE_RATELIMIT_KEY — skipped, not run wrongly, when no key is reserved. docker-reset.sh bounds its readiness wait (RESET_TIMEOUT, default 300s) and names the dependency that timed out instead of hanging forever"
+      audience: internal
+
 - version: v0.66.0
   date: 2026-07-31
   changes:
