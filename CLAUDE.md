@@ -195,6 +195,13 @@ Credentials come from `./.env`, parsed by the CLI rather than sourced — connec
 - `make release V=v0.X.Y` — tags and pushes a release
 - `make deps` — runs `go get -u ./...` and `go mod tidy` (run explicitly to upgrade dependencies)
 
+### Session start
+`.claude/hooks/session-start.sh` runs at the start of every Claude Code session, registered as a `SessionStart` hook in `.claude/settings.json`. It fetches, fast-forwards when that is unambiguously safe (clean tree, has an upstream, strictly behind), and lists the open PRs.
+
+It exists because #75 and #76 were open at the same time and collided in `changelog.yaml` and in a file one of them deleted. Neither branch was wrong; the second was started without checking what was already in flight, which is the question the hook answers before the first edit.
+
+It never pulls over a dirty or diverged tree — it reports and leaves the decision alone, because picking merge or rebase on someone's behalf is not a hook's call. Network steps are bounded (`SESSION_START_NET_TIMEOUT`, default 15s) and every failure degrades to a line of output: a hook that blocks startup is worse than a stale checkout.
+
 ### Commit conventions
 - All changes go through a feature branch and a PR into `main` — no direct pushes to `main`
 - Merges are gated on review; open the PR but do not merge it yourself
