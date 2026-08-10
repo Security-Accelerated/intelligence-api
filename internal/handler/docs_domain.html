@@ -594,7 +594,7 @@ resp = requests.post(
   <div class="note">Tries HTTPS first, then falls back to HTTP. Captured at 1280x720 with headless Chrome.</div>
 
   <h4 id="screenshot-queue">Screenshots are captured a few at a time</h4>
-  <p>Every other lookup is a network call. A screenshot is a browser, and a browser wants roughly half a gigabyte of memory, so captures run under a small service-wide concurrency cap &mdash; typically one at a time &mdash; rather than in parallel. A request asking for <code>screenshot</code> waits its turn behind any capture already running &mdash; including captures from other customers.</p>
+  <p>The other lookups are a network call at most &mdash; <code>fingerprint</code> and <code>risk</code> are pure computation over results you already asked for. A screenshot is a browser, and a browser wants roughly half a gigabyte of memory, so captures run under a small service-wide concurrency cap &mdash; typically one at a time &mdash; rather than in parallel. A request asking for <code>screenshot</code> waits its turn behind any capture already running &mdash; including captures from other customers.</p>
   <p>If a capture has not started by the time the request deadline arrives, that lookup reports a queue timeout instead of the request piling up another browser:</p>
   <pre><code>{ <span class="str">"lookup"</span>: <span class="str">"screenshot"</span>, <span class="str">"message"</span>: <span class="str">"screenshot queue timed out, please retry"</span> }</code></pre>
   <p>The rest of the response is unaffected &mdash; every other lookup you asked for still returns, and the status is still <code>200</code>.</p>
