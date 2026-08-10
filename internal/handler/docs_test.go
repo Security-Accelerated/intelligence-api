@@ -152,14 +152,30 @@ func TestDocs_JSEndpoints(t *testing.T) {
 	}
 }
 
-// docsPagePaths is every public HTML docs page. Tests that assert a
-// page-wide invariant iterate this rather than listing paths inline, so adding
-// a page cannot quietly opt out of them.
-var docsPagePaths = []string{"/docs", "/docs/domain", "/docs/ip", "/docs/changelog"}
+// docsPagePaths is every public HTML docs page, derived from the docsPages
+// table the routes are registered from. Tests that assert a page-wide invariant
+// iterate this rather than listing paths inline, so adding a page cannot
+// quietly opt out of them.
+var docsPagePaths = func() []string {
+	paths := make([]string, 0, len(docsPages))
+	for _, page := range docsPages {
+		paths = append(paths, page.Path)
+	}
+	return paths
+}()
 
-// docsReferencePagePaths is the subset with the sidebar reference layout — the
-// overview uses a different shell.
-var docsReferencePagePaths = []string{"/docs/domain", "/docs/ip", "/docs/changelog"}
+// docsReferencePagePaths is the subset with the sidebar reference layout. The
+// overview uses a different shell, so it is the one exclusion rather than the
+// list being spelled out again.
+var docsReferencePagePaths = func() []string {
+	paths := make([]string, 0, len(docsPages))
+	for _, page := range docsPages {
+		if page.Path != "/docs" {
+			paths = append(paths, page.Path)
+		}
+	}
+	return paths
+}()
 
 func TestDocs_PagesSetCSPAndNoInlineScripts(t *testing.T) {
 	r := docsRouter()
@@ -462,21 +478,29 @@ func TestDocs_ResponseHeadersDocumented(t *testing.T) {
 	}
 }
 
+// docsPagesWithLanguageTabs returns every page carrying a language-tab block,
+// so a page that gains examples is covered by the tab and compile checks
+// without anyone remembering to add it to a list. A page with no tabs is not a
+// failure; it simply has nothing to check.
+func docsPagesWithLanguageTabs() []docsPage {
+	var pages []docsPage
+	for _, page := range docsPages {
+		if strings.Contains(page.HTML, `class="lang-tabs"`) {
+			pages = append(pages, page)
+		}
+	}
+	return pages
+}
+
 func TestDocs_LanguageTabsHavePanels(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		html string
-	}{
-		{"/docs/domain", docsDomainHTML},
-		{"/docs/ip", docsIPHTML},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, tc := range docsPagesWithLanguageTabs() {
+		t.Run(tc.Path, func(t *testing.T) {
 			tabs := map[string]bool{}
-			for _, m := range regexp.MustCompile(`data-lang="([^"]+)"`).FindAllStringSubmatch(tc.html, -1) {
+			for _, m := range regexp.MustCompile(`data-lang="([^"]+)"`).FindAllStringSubmatch(tc.HTML, -1) {
 				tabs[m[1]] = true
 			}
 			panels := map[string]bool{}
-			for _, m := range regexp.MustCompile(`id="tab-([^"]+)"`).FindAllStringSubmatch(tc.html, -1) {
+			for _, m := range regexp.MustCompile(`id="tab-([^"]+)"`).FindAllStringSubmatch(tc.HTML, -1) {
 				panels[m[1]] = true
 			}
 
@@ -507,24 +531,23 @@ func TestDocs_LanguageTabsHavePanels(t *testing.T) {
 // a `results` envelope; an example that omits either is wrong in a way no other
 // test would notice.
 func TestDocs_ExamplesUseCurrentRequestContract(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		html string
-	}{
-		{"/docs/domain", docsDomainHTML},
-		{"/docs/ip", docsIPHTML},
+	// Scoped to the lookup pages on purpose: these assertions are about the
+	// lookup request contract, which the account examples do not share.
+	for _, tc := range []docsPage{
+		{Path: "/docs/domain", HTML: docsDomainHTML},
+		{Path: "/docs/ip", HTML: docsIPHTML},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.Path, func(t *testing.T) {
 			// Every example sends a request, so all must name lookups.
 			for _, lang := range []string{"curl", "javascript", "python", "go"} {
-				if panel := extractPanel(t, tc.html, lang); !strings.Contains(panel, "lookups") {
+				if panel := extractPanel(t, tc.HTML, lang); !strings.Contains(panel, "lookups") {
 					t.Errorf("%s example does not send a lookups array", lang)
 				}
 			}
 			// Only the ones that parse a response can read the envelope; the
 			// curl example stops at the request.
 			for _, lang := range []string{"javascript", "python", "go"} {
-				if panel := extractPanel(t, tc.html, lang); !strings.Contains(panel, "results") {
+				if panel := extractPanel(t, tc.HTML, lang); !strings.Contains(panel, "results") {
 					t.Errorf("%s example does not read the results envelope", lang)
 				}
 			}
@@ -542,15 +565,9 @@ func TestDocs_GoExamplesCompile(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go toolchain not available")
 	}
-	for _, tc := range []struct {
-		name string
-		html string
-	}{
-		{"/docs/domain", docsDomainHTML},
-		{"/docs/ip", docsIPHTML},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			src := exampleSource(t, tc.html, "go")
+	for _, tc := range docsPagesWithLanguageTabs() {
+		t.Run(tc.Path, func(t *testing.T) {
+			src := exampleSource(t, tc.HTML, "go")
 			if !strings.HasPrefix(src, "package main") {
 				t.Fatalf("example is not a standalone program, got prefix %.20q", src)
 			}

@@ -17,22 +17,21 @@ import (
 //
 // This is asserted here rather than left to review because the failure is
 // invisible on a desktop viewport, where every one of these tables fits.
+// allDocsHTML is every page a reader can land on: the routed pages from the
+// docsPages table, plus the 404, which has no route of its own because it is
+// what NoRoute renders.
+func allDocsHTML() []docsPage {
+	pages := append([]docsPage{}, docsPages...)
+	return append(pages, docsPage{Path: "/docs/404", HTML: docsNotFoundHTML, Tmpl: docsNotFoundTmpl})
+}
+
 func TestDocs_TablesAreScrollWrapped(t *testing.T) {
 	openTag := regexp.MustCompile(`<table\b[^>]*>`)
 
-	for _, tc := range []struct {
-		name string
-		page string
-	}{
-		{"/docs", docsHTML},
-		{"/docs/domain", docsDomainHTML},
-		{"/docs/ip", docsIPHTML},
-		{"/docs/changelog", docsChangelogHTML},
-		{"/docs/404", docsNotFoundHTML},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, loc := range openTag.FindAllStringIndex(tc.page, -1) {
-				before := tc.page[:loc[0]]
+	for _, tc := range allDocsHTML() {
+		t.Run(tc.Path, func(t *testing.T) {
+			for _, loc := range openTag.FindAllStringIndex(tc.HTML, -1) {
+				before := tc.HTML[:loc[0]]
 				opener := strings.LastIndex(before, `<div class="table-scroll">`)
 				if opener == -1 || strings.Contains(before[opener:], "</div>") {
 					t.Errorf("table at offset %d is not wrapped in <div class=\"table-scroll\">; "+
@@ -76,22 +75,13 @@ func TestDocs_MobileNavReachesEveryPage(t *testing.T) {
 		t.Error("topbar nav is hidden on mobile; the overview then has no navigation")
 	}
 
-	for _, tc := range []struct {
-		name string
-		page string
-	}{
-		{"/docs", docsHTML},
-		{"/docs/domain", docsDomainHTML},
-		{"/docs/ip", docsIPHTML},
-		{"/docs/changelog", docsChangelogHTML},
-		{"/docs/404", docsNotFoundHTML},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			nav := regexp.MustCompile(`(?s)<nav class="topbar-nav">.*?</nav>`).FindString(tc.page)
+	for _, tc := range allDocsHTML() {
+		t.Run(tc.Path, func(t *testing.T) {
+			nav := regexp.MustCompile(`(?s)<nav class="topbar-nav">.*?</nav>`).FindString(tc.HTML)
 			if nav == "" {
 				t.Fatal("page has no topbar nav")
 			}
-			for _, href := range []string{"/docs", "/docs/domain", "/docs/ip", "/docs/changelog"} {
+			for _, href := range docsPagePaths {
 				if !strings.Contains(nav, `href="`+href+`"`) {
 					t.Errorf("topbar nav does not link to %s", href)
 				}

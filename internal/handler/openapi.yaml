@@ -414,7 +414,16 @@ components:
         headers:
           $ref: '#/components/schemas/HeadersInfo'
         screenshot:
-          $ref: '#/components/schemas/ScreenshotInfo'
+          allOf:
+            - $ref: '#/components/schemas/ScreenshotInfo'
+          description: >
+            Screenshots are captured one at a time across the whole service,
+            because each capture runs a browser. A request whose capture has
+            not started before the deadline reports
+            `screenshot queue timed out, please retry` in `errors` instead,
+            leaving every other lookup unaffected. Unlike most lookup errors
+            this one is worth retrying — it means the service was busy, not
+            that the answer is unavailable.
         reputation:
           $ref: '#/components/schemas/ReputationResult'
         email_security:
@@ -437,7 +446,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LookupError'
-          description: Per-lookup failures; the rest of the response is still populated.
+          description: >
+            Per-lookup failures; the rest of the response is still populated.
+
+            A lookup listed here has no field of its own in the result — the
+            key is absent rather than null — so requesting n lookups does not
+            guarantee n fields. Failures are never cached, so the next request
+            retries the lookup.
       required:
         - domain
         - inputs

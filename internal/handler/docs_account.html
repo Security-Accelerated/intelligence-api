@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Account API reference. Query your own usage statistics and rotate your API key without contacting support.">
+<meta property="og:title" content="Account - Intelligence API">
+<meta property="og:description" content="Usage statistics and self-service API key rotation.">
+<meta property="og:type" content="website">
+<title>Account - Intelligence API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/styles.css">
+<script src="/docs/theme.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="/docs" class="topbar-brand"><span>Security</span> Accelerated</a>
+  <div class="topbar-actions">
+    <nav class="topbar-nav">
+      <a href="/docs">Overview</a>
+      <a href="/docs/domain">Domain</a>
+      <a href="/docs/ip">IP</a>
+      <a href="/docs/account" class="active">Account</a>
+      <a href="/docs/changelog">Changelog</a>
+    </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Theme toggle" aria-pressed="false" title="Switch theme">
+      <span class="theme-toggle-glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="transparent" stroke="var(--theme-icon-ring)" stroke-width="1.5"></circle>
+          <path d="M12 4.5A7.5 7.5 0 0 0 12 19.5Z" fill="var(--theme-icon-dark)"></path>
+          <path d="M12 4.5A7.5 7.5 0 0 1 12 19.5Z" fill="var(--theme-icon-light)"></path>
+          <path d="M12 4.6v14.8" stroke="var(--theme-icon-divider)" stroke-width="1"></path>
+        </svg>
+      </span>
+      <span class="theme-toggle-label">Dark mode</span>
+    </button>
+  </div>
+</header>
+
+<button class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle navigation">&#9776;</button>
+
+<div class="sidebar-backdrop" data-sidebar-close></div>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h2>Account Docs</h2>
+    <span>Your own usage, and rotating your own key.</span>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Usage</div>
+    <a href="#usage">Usage Statistics</a>
+    <a href="#usage-parameters" class="indent">Parameters</a>
+    <a href="#usage-example" class="indent">Example</a>
+    <a href="#usage-fields" class="indent">Response Fields</a>
+    <a href="#counting" class="indent">How Counting Works</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Keys</div>
+    <a href="#rotate">Key Rotation</a>
+    <a href="#rotate-example" class="indent">Example</a>
+    <a href="#rotate-fields" class="indent">Response Fields</a>
+    <a href="#rotation-sequence" class="indent">Rotating Safely</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Reference</div>
+    <a href="#error-handling">Error Handling</a>
+    <a href="/docs/domain">Domain Intelligence</a>
+    <a href="/docs/ip">IP Intelligence</a>
+    <a href="/docs/openapi.yaml">OpenAPI Spec</a>
+  </div>
+
+</nav>
+
+<main class="main">
+
+  <section class="hero" id="top">
+    <p class="eyebrow">Documentation</p>
+    <h1>Account</h1>
+    <p>Every plan can inspect its own usage and rotate its own API key without contacting support. Both endpoints are scoped to the caller &mdash; the customer is taken from the API key, never from the request, so a key can only ever see and change its own account.</p>
+    <div class="hero-actions">
+      <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span class="version-pill">{{.Version}}</span>{{end}}</div>
+      <a href="mailto:support@securityaccelerated.com" class="support-link">support@securityaccelerated.com</a>
+    </div>
+  </section>
+
+  <!-- Usage -->
+  <h2 id="usage">Usage Statistics</h2>
+
+  <div class="endpoint">
+    <span class="method">GET</span>
+    <span class="path">/v1/usage</span>
+  </div>
+
+  <p>Aggregated usage for the authenticated customer over a rolling window ending now. Useful for tracking spend against your plan's rate limit, spotting which lookups you actually depend on, and confirming that your cache hit rate is what you expect.</p>
+
+  <h3 id="usage-parameters">Parameters</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>days</code></td>
+          <td>Query</td>
+          <td><code>int</code></td>
+          <td>Days of history to aggregate, <code>1</code>&ndash;<code>365</code>. Defaults to <code>30</code>. Anything outside that range returns <code>400</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="usage-example">Example</h3>
+  <div class="lang-tabs">
+    <button class="lang-tab active" data-lang="curl">curl</button>
+    <button class="lang-tab" data-lang="javascript">JavaScript</button>
+    <button class="lang-tab" data-lang="python">Python</button>
+    <button class="lang-tab" data-lang="go">Go</button>
+  </div>
+  <div id="tab-curl" class="lang-panel active">
+  <pre><code>curl <span class="url">'https://api.securityaccelerated.com/v1/usage?days=7'</span> \
+  <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span></code></pre>
+  </div>
+  <div id="tab-javascript" class="lang-panel">
+  <pre><code><span class="kw">const</span> res = <span class="kw">await</span> fetch(
+  <span class="str">'https://api.securityaccelerated.com/v1/usage?days=7'</span>,
+  { headers: { <span class="str">'X-API-Key'</span>: process.env.<span class="hdr">API_KEY</span> } }
+);
+<span class="kw">const</span> usage = <span class="kw">await</span> res.json();
+console.log(usage.total_requests, usage.cache_hit_rate);</code></pre>
+  </div>
+  <div id="tab-python" class="lang-panel">
+  <pre><code><span class="kw">import</span> os, requests
+
+res = requests.get(
+    <span class="str">"https://api.securityaccelerated.com/v1/usage"</span>,
+    params={<span class="str">"days"</span>: <span class="num">7</span>},
+    headers={<span class="str">"X-API-Key"</span>: os.environ[<span class="str">"API_KEY"</span>]},
+)
+usage = res.json()
+<span class="kw">print</span>(usage[<span class="str">"total_requests"</span>], usage[<span class="str">"cache_hit_rate"</span>])</code></pre>
+  </div>
+  <div id="tab-go" class="lang-panel">
+  <pre><code><span class="kw">package</span> main
+
+<span class="kw">import</span> (
+	<span class="str">"encoding/json"</span>
+	<span class="str">"fmt"</span>
+	<span class="str">"net/http"</span>
+	<span class="str">"os"</span>
+)
+
+<span class="kw">func</span> main() {
+	req, _ := http.NewRequest(<span class="str">"GET"</span>,
+		<span class="str">"https://api.securityaccelerated.com/v1/usage?days=7"</span>, <span class="kw">nil</span>)
+	req.Header.Set(<span class="str">"X-API-Key"</span>, os.Getenv(<span class="str">"API_KEY"</span>))
+
+	resp, err := http.DefaultClient.Do(req)
+	<span class="kw">if</span> err != <span class="kw">nil</span> {
+		panic(err)
+	}
+	<span class="kw">defer</span> resp.Body.Close()
+
+	<span class="kw">var</span> usage <span class="kw">struct</span> {
+		TotalRequests <span class="kw">int</span>     <span class="str">`json:"total_requests"`</span>
+		CacheHitRate  <span class="kw">float64</span> <span class="str">`json:"cache_hit_rate"`</span>
+	}
+	json.NewDecoder(resp.Body).Decode(&amp;usage)
+	fmt.Println(usage.TotalRequests, usage.CacheHitRate)
+}</code></pre>
+  </div>
+
+  <h4>Response</h4>
+  <pre><code>{
+  <span class="str">"total_requests"</span>: <span class="num">1284</span>,
+  <span class="str">"cache_hits"</span>: <span class="num">3907</span>,
+  <span class="str">"cache_misses"</span>: <span class="num">1130</span>,
+  <span class="str">"cache_hit_rate"</span>: <span class="num">0.776</span>,
+  <span class="str">"avg_latency_ms"</span>: <span class="num">412.8</span>,
+  <span class="str">"total_domains"</span>: <span class="num">2140</span>,
+  <span class="str">"total_ips"</span>: <span class="num">96</span>,
+  <span class="str">"status_codes"</span>: { <span class="str">"200"</span>: <span class="num">1270</span>, <span class="str">"429"</span>: <span class="num">14</span> },
+  <span class="str">"feature_usage"</span>: { <span class="str">"dns"</span>: <span class="num">2140</span>, <span class="str">"ssl"</span>: <span class="num">2140</span>, <span class="str">"whois"</span>: <span class="num">757</span> },
+  <span class="str">"requests_by_path"</span>: { <span class="str">"/v1/domain/lookup"</span>: <span class="num">1188</span>, <span class="str">"/v1/ip/lookup"</span>: <span class="num">96</span> },
+  <span class="str">"period_start"</span>: <span class="str">"2026-08-03T00:00:00Z"</span>,
+  <span class="str">"period_end"</span>: <span class="str">"2026-08-10T00:00:00Z"</span>
+}</code></pre>
+
+  <h3 id="usage-fields">Response Fields</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>total_requests</code></td><td><code>int</code></td><td>Requests you made in the period, counting every status code</td></tr>
+        <tr><td><code>cache_hits</code></td><td><code>int</code></td><td>Individual lookups served from cache</td></tr>
+        <tr><td><code>cache_misses</code></td><td><code>int</code></td><td>Individual lookups fetched live</td></tr>
+        <tr><td><code>cache_hit_rate</code></td><td><code>float</code></td><td><code>cache_hits</code> over the sum of both, <code>0</code>&ndash;<code>1</code></td></tr>
+        <tr><td><code>avg_latency_ms</code></td><td><code>float</code></td><td>Mean server-side response time in milliseconds</td></tr>
+        <tr><td><code>total_domains</code></td><td><code>int</code></td><td>Domains submitted across all requests, counting duplicates</td></tr>
+        <tr><td><code>total_ips</code></td><td><code>int</code></td><td>IPs submitted across all requests, counting duplicates</td></tr>
+        <tr><td><code>status_codes</code></td><td><code>object</code></td><td>Request counts keyed by HTTP status code</td></tr>
+        <tr><td><code>feature_usage</code></td><td><code>object</code></td><td>Counts keyed by lookup name &mdash; see below</td></tr>
+        <tr><td><code>requests_by_path</code></td><td><code>object</code></td><td>Request counts keyed by endpoint path</td></tr>
+        <tr><td><code>period_start</code></td><td><code>string</code></td><td>Start of the window, RFC 3339</td></tr>
+        <tr><td><code>period_end</code></td><td><code>string</code></td><td>End of the window, RFC 3339</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="counting">How Counting Works</h3>
+  <p><code>feature_usage</code> counts the lookups you <strong>requested</strong>, however they were served. A lookup answered from cache still counts, because otherwise caching would make a feature you depend on look unused.</p>
+  <p><code>cache_hits</code> and <code>cache_misses</code> count <strong>individual lookups</strong>, not requests. That is why they routinely exceed <code>total_requests</code>: one request naming six lookups across three domains contributes eighteen to their sum and one to <code>total_requests</code>.</p>
+  <div class="note">Usage is recorded asynchronously and flushed in batches, so a request you made moments ago may not appear yet. Everything older than a few seconds is complete.</div>
+
+  <!-- Key rotation -->
+  <h2 id="rotate">Key Rotation</h2>
+
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/v1/keys/rotate</span>
+  </div>
+
+  <p>Issues a fresh API key and starts a grace window on every key you held before it. The request takes no body. Rotate on a schedule, when someone with access leaves, or immediately if a key may have been exposed.</p>
+
+  <h3 id="rotate-example">Example</h3>
+  <pre><code>curl <span class="flag">-X POST</span> <span class="url">https://api.securityaccelerated.com/v1/keys/rotate</span> \
+  <span class="flag">-H</span> <span class="str">'X-API-Key: your-current-api-key'</span></code></pre>
+
+  <h4>Response</h4>
+  <pre><code>{
+  <span class="str">"api_key"</span>: <span class="str">"3f9a1c...  (64 hex characters)"</span>,
+  <span class="str">"old_keys_expire_at"</span>: <span class="str">"2026-08-11T14:22:05Z"</span>,
+  <span class="str">"message"</span>: <span class="str">"store this key now — it cannot be retrieved again; previous keys stop working at old_keys_expire_at"</span>
+}</code></pre>
+
+  <h3 id="rotate-fields">Response Fields</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>api_key</code></td><td><code>string</code></td><td>The new key, 64 hex characters. Shown exactly once</td></tr>
+        <tr><td><code>old_keys_expire_at</code></td><td><code>string</code></td><td>When every previous key stops authenticating, RFC 3339</td></tr>
+        <tr><td><code>message</code></td><td><code>string</code></td><td>A reminder of both of the above, for logs and CLI output</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note note-warn">The new key is returned in this response and never again. It is stored as a hash, so nobody &mdash; including support &mdash; can recover it for you. If you lose it before the grace window ends, rotate again using a key that still works; if you lose it after, contact support to have the account re-keyed.</div>
+
+  <h3 id="rotation-sequence">Rotating Safely</h3>
+  <p>The grace window exists so that rotation is not an outage. Both the old and new keys authenticate until <code>old_keys_expire_at</code>, which gives you time to deploy:</p>
+  <ol class="checklist">
+    <li>Call <code>POST /v1/keys/rotate</code> and store <code>api_key</code> in your secret manager.</li>
+    <li>Deploy it everywhere that talks to the API &mdash; every service, job runner, and CI secret.</li>
+    <li>Confirm the rollout before <code>old_keys_expire_at</code>. A single lookup with the new key is enough.</li>
+    <li>At <code>old_keys_expire_at</code> the previous keys stop working. Anything still holding one starts receiving <code>401</code>.</li>
+  </ol>
+  <p>The grace window is 24 hours. Rotating again during one issues another key and starts a fresh window on the key you just replaced &mdash; but it never pushes back an expiry that is already set. Keys grace-expired by an earlier rotation keep their original deadline, so repeated rotation cannot be used to keep an exposed key alive.</p>
+  <div class="note">Suspect a key is compromised? Rotate, deploy, and then contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a> to have the grace window cut short. Until it ends, the exposed key still works &mdash; that is the cost of not breaking deployed clients, and it is the one case where you want it shortened.</div>
+
+  <!-- Errors -->
+  <h2 id="error-handling">Error Handling</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Status</th><th>Endpoint</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>400 Bad Request</code></td><td><code>/v1/usage</code></td><td><code>days</code> is not an integer between 1 and 365</td></tr>
+        <tr><td><code>401 Unauthorized</code></td><td>Both</td><td>Missing or invalid API key &mdash; including a previous key after its grace window ended</td></tr>
+        <tr><td><code>429 Too Many Requests</code></td><td>Both</td><td>Rate limit exceeded &mdash; check the <code>Retry-After</code> header</td></tr>
+        <tr><td><code>500 Internal Server Error</code></td><td>Both</td><td>Server error &mdash; contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
+        <tr><td><code>503 Service Unavailable</code></td><td>Both</td><td>The feature is not configured on this deployment. Not expected in production</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>All error responses use the same envelope as the rest of the API:</p>
+  <pre><code>{
+  <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
+}</code></pre>
+  <p>Both endpoints count against your plan's rate limit like any other request, and both echo <code>X-Request-ID</code> and your <code>X-Client-Request-ID</code>. See <a href="/docs/domain#request-correlation">Request Correlation</a> for the header contract.</p>
+
+<footer class="page-footer">
+  <p>
+    Prefer to generate a client? The full
+    <a href="/docs/openapi.yaml">OpenAPI 3.1 specification</a>
+    covers every endpoint &mdash; domain lookup, IP lookup, usage, and key rotation.
+  </p>
+  <p class="page-footer-meta">
+    Questions: <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a>
+  </p>
+</footer>
+
+</main>
+
+<script src="/docs/docs.js" defer></script>
+
+</body>
+</html>

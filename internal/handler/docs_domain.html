@@ -23,6 +23,7 @@
       <a href="/docs">Overview</a>
       <a href="/docs/domain" class="active">Domain</a>
       <a href="/docs/ip">IP</a>
+      <a href="/docs/account">Account</a>
       <a href="/docs/changelog">Changelog</a>
     </nav>
     <button class="theme-toggle" type="button" data-theme-toggle aria-label="Theme toggle" aria-pressed="false" title="Switch theme">
@@ -592,6 +593,13 @@ resp = requests.post(
 }</code></pre>
   <div class="note">Tries HTTPS first, then falls back to HTTP. Captured at 1280x720 with headless Chrome.</div>
 
+  <h4 id="screenshot-queue">Screenshots are captured one at a time</h4>
+  <p>Every other lookup is a network call. A screenshot is a browser, and a browser wants roughly half a gigabyte of memory, so captures are serialised across the whole service rather than run in parallel. A request asking for <code>screenshot</code> waits its turn behind any capture already running &mdash; including captures from other customers.</p>
+  <p>If a capture has not started by the time the request deadline arrives, that lookup reports a queue timeout instead of the request piling up another browser:</p>
+  <pre><code>{ <span class="str">"lookup"</span>: <span class="str">"screenshot"</span>, <span class="str">"message"</span>: <span class="str">"screenshot queue timed out, please retry"</span> }</code></pre>
+  <p>The rest of the response is unaffected &mdash; every other lookup you asked for still returns, and the status is still <code>200</code>.</p>
+  <div class="note"><strong>This one is worth retrying.</strong> Most lookup errors mean the answer is not available; this one only means the service was busy, and the same request a moment later usually succeeds. Two practical habits: ask for <code>screenshot</code> over a handful of domains rather than a full batch, and put it in its own request so a queue wait never delays the lookups that would have returned immediately.</div>
+
   <!-- reputation -->
   <h3 id="reputation"><code>reputation</code> -- Domain Reputation <span class="tag tag-pro">Pro</span></h3>
   <div class="table-scroll">
@@ -1109,6 +1117,24 @@ resp = requests.post(
       </tbody>
     </table>
   </div>
+
+  <h4>A failed lookup omits its field entirely</h4>
+  <p>This is the case worth writing your client against. The domain is valid, the request succeeded, and one upstream did not answer &mdash; here a WHOIS server that timed out while DNS and SSL returned normally:</p>
+  <pre><code>{
+  <span class="str">"results"</span>: [
+    {
+      <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
+      <span class="str">"inputs"</span>: [<span class="str">"example.com"</span>],
+      <span class="str">"dns"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, <span class="str">"a_records"</span>: [<span class="str">"93.184.216.34"</span>], ... },
+      <span class="str">"ssl"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">true</span>, <span class="str">"issuer"</span>: <span class="str">"DigiCert Inc"</span>, ... },
+      <span class="str">"errors"</span>: [
+        { <span class="str">"lookup"</span>: <span class="str">"whois"</span>, <span class="str">"message"</span>: <span class="str">"i/o timeout"</span> }
+      ]
+    }
+  ]
+}</code></pre>
+  <p>There is no <code>whois</code> key at all &mdash; not <code>null</code>, not an empty object. Requesting <em>n</em> lookups does not guarantee <em>n</em> fields in the response, so code that reaches straight for <code>result.whois.registrar</code> works in testing and throws the first time an upstream has a bad minute.</p>
+  <div class="note">Failures are never cached, so the next request retries the lookup rather than remembering the failure. If a lookup matters to your workflow, checking <code>errors</code> and retrying that domain is usually better than treating an absent field as an absent answer &mdash; the two look identical in the response, and only <code>errors</code> tells them apart.</div>
 
   <!-- Caching -->
   <h2 id="caching">Caching</h2>
