@@ -362,7 +362,7 @@ resp = requests.post(
   { <span class="str">"lookup"</span>: <span class="str">"reverse_dns"</span>, <span class="str">"message"</span>: <span class="str">"ptr lookup: no such host"</span> }
 ]</code></pre>
 
-  <h4>A failed lookup omits its field entirely</h4>
+  <h4>A lookup that failed outright omits its field entirely</h4>
   <p>The IP is valid, the request succeeded, and one lookup did not answer. The field it would have filled is absent &mdash; not <code>null</code>, not an empty object:</p>
   <pre><code>{
   <span class="str">"results"</span>: [
@@ -378,6 +378,7 @@ resp = requests.post(
   ]
 }</code></pre>
   <p>Requesting <em>n</em> lookups does not guarantee <em>n</em> fields, so code that reaches straight for <code>result.abuse_contact.email</code> works in testing and throws the first time an upstream has a bad minute. Failures are never cached &mdash; the next request retries rather than remembering the failure.</p>
+  <div class="note">One exception, and it is the useful kind: <code>threat_intel</code> fans out to several providers and reports a failing one as <code>threat_intel:virustotal</code> &mdash; a name qualified with a colon. That entry means one provider was unavailable, not that the lookup failed: <code>threat_intel</code> is still present, scored over the providers that did answer. A plain <code>threat_intel</code> means the whole lookup failed and the field is gone.</div>
 
   <h2 id="error-handling">Error Handling</h2>
   <div class="table-scroll">

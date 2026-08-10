@@ -593,8 +593,8 @@ resp = requests.post(
 }</code></pre>
   <div class="note">Tries HTTPS first, then falls back to HTTP. Captured at 1280x720 with headless Chrome.</div>
 
-  <h4 id="screenshot-queue">Screenshots are captured one at a time</h4>
-  <p>Every other lookup is a network call. A screenshot is a browser, and a browser wants roughly half a gigabyte of memory, so captures are serialised across the whole service rather than run in parallel. A request asking for <code>screenshot</code> waits its turn behind any capture already running &mdash; including captures from other customers.</p>
+  <h4 id="screenshot-queue">Screenshots are captured a few at a time</h4>
+  <p>Every other lookup is a network call. A screenshot is a browser, and a browser wants roughly half a gigabyte of memory, so captures run under a small service-wide concurrency cap &mdash; typically one at a time &mdash; rather than in parallel. A request asking for <code>screenshot</code> waits its turn behind any capture already running &mdash; including captures from other customers.</p>
   <p>If a capture has not started by the time the request deadline arrives, that lookup reports a queue timeout instead of the request piling up another browser:</p>
   <pre><code>{ <span class="str">"lookup"</span>: <span class="str">"screenshot"</span>, <span class="str">"message"</span>: <span class="str">"screenshot queue timed out, please retry"</span> }</code></pre>
   <p>The rest of the response is unaffected &mdash; every other lookup you asked for still returns, and the status is still <code>200</code>.</p>
@@ -1118,7 +1118,28 @@ resp = requests.post(
     </table>
   </div>
 
-  <h4>A failed lookup omits its field entirely</h4>
+  <h4>What the <code>lookup</code> name tells you</h4>
+  <p>The name is either a plain lookup or <code>&lt;lookup&gt;:&lt;provider&gt;</code>, and the two mean different things:</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Shape</th><th>Example</th><th>What it means for the result</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Plain name</td>
+          <td><code>whois</code></td>
+          <td>The lookup failed outright. Its field is <strong>absent</strong> from the result</td>
+        </tr>
+        <tr>
+          <td>Qualified name</td>
+          <td><code>threat_intel:virustotal</code></td>
+          <td>One provider inside a fan-out lookup failed while others answered. That lookup's field is <strong>present</strong>, scored over the providers that responded</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Only <code>reputation</code> and <code>threat_intel</code> fan out to providers, so only those produce qualified names. Treating every entry in <code>errors</code> as a missing field would throw away perfectly good partial results from those two.</p>
+
+  <h4>A lookup that failed outright omits its field entirely</h4>
   <p>This is the case worth writing your client against. The domain is valid, the request succeeded, and one upstream did not answer &mdash; here a WHOIS server that timed out while DNS and SSL returned normally:</p>
   <pre><code>{
   <span class="str">"results"</span>: [
@@ -1133,7 +1154,7 @@ resp = requests.post(
     }
   ]
 }</code></pre>
-  <p>There is no <code>whois</code> key at all &mdash; not <code>null</code>, not an empty object. Requesting <em>n</em> lookups does not guarantee <em>n</em> fields in the response, so code that reaches straight for <code>result.whois.registrar</code> works in testing and throws the first time an upstream has a bad minute.</p>
+  <p>There is no <code>whois</code> key at all &mdash; not <code>null</code>, not an empty object. Requesting <em>n</em> lookups does not guarantee <em>n</em> fields in the response, so code that reaches straight for <code>result.whois.registrar</code> works in testing and throws the first time an upstream has a bad minute. Contrast a <code>reputation:spamhaus_dbl</code> entry, where <code>reputation</code> is still there with the other providers' verdicts.</p>
   <div class="note">Failures are never cached, so the next request retries the lookup rather than remembering the failure. If a lookup matters to your workflow, checking <code>errors</code> and retrying that domain is usually better than treating an absent field as an absent answer &mdash; the two look identical in the response, and only <code>errors</code> tells them apart.</div>
 
   <!-- Caching -->
