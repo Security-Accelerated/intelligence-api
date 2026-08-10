@@ -141,6 +141,15 @@ Single `plan` column on `customers` table: `free`, `basic`, `pro`, `admin`. Cont
 ### StatusSnapshot for unified status
 `internal/config/status.go` defines typed structs (`SystemStatus`, `DatabaseConfig`, `CacheConfig`, `LookupConfig`, `ServicesStatus` with sub-structs) held in a `StatusSnapshot`. Built once at startup via `NewStatusSnapshot(version, domain.AllLookupNames)`, then progressively populated as services initialize in `app.go`. Used for both structured startup logging (`zap.Any("config", section)`) and the `/v1/info` admin endpoint response — adding a field to any struct automatically surfaces it in both places. Live data (runtime stats, DB pool, Redis ping, auth cache size) is computed at request time in the info handler and merged with the static snapshot. JSON response groups: `system`, `database`, `cache` (static config + live stats), `lookups`, `services`, `runtime`, `postgres_pool`.
 
+### Docs pages and the 404
+`internal/handler/docs_*.html` are `go:embed`ed templates sharing one stylesheet (`docs_styles.css`) and one script (`docs.js`). `docs_404.html` is the engine's `NoRoute` handler: paths under `/v1` or `/billing` get the standard `{"error": "not found"}` envelope so a mistyped endpoint lands in a caller's existing error path, everything else gets the docs-styled page. The requested path is deliberately **not** echoed back — reflecting caller-chosen text onto our own domain is a phishing primitive.
+
+Two layout rules exist because their absence is invisible at a desktop viewport and made every page unreadable on a phone, and both are pinned by tests in `docs_layout_test.go`:
+- **Every table is wrapped in `<div class="table-scroll">`.** `width: 100%` on a table is a floor, not a ceiling: when the columns' min-content widths exceed the container the table grows past it and takes the document's scroll width with it. `docs.js` grants the wrapper a tab stop only while it actually overflows, so ~40 fitting tables don't add dead tab stops.
+- **Collapsed grids use `minmax(0, 1fr)`, never `1fr`.** An `auto` minimum floors the track at the widest item's min-content — the unbreakable base URL — and `.hero-card` clips its overflow, so the hero copy was cut off mid-sentence.
+
+Below 860px the topbar becomes a two-row grid with the section nav on the second row (`--topbar-height` changes with it and the bar's height is pinned to the variable so they cannot drift). The nav used to be `display: none` there, which left the overview — the only page without a sidebar — with no navigation at all.
+
 ### Changelog
 `internal/handler/changelog.yaml` (symlinked from project root as `changelog.yaml`) is the single source of truth for all changes. Each entry has a `version`, `date`, and list of `changes` with `audience` tags (`public` or `internal`). Embedded via `go:embed` in the handler package, parsed at startup. The docs pages (`/docs`, `/docs/domain`, `/docs/ip`) render only `public` entries in a "What's New" section. The admin endpoint (`GET /v1/admin/changelog`) returns all entries unfiltered. Update this file with every release.
 

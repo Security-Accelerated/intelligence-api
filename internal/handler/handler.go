@@ -168,6 +168,8 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	billingGroup := router.Group("/billing")
 	billingGroup.POST("/webhook", h.StripeWebhook)
 	billingGroup.GET("/success", h.CheckoutSuccess)
+
+	router.NoRoute(h.NotFound)
 }
 
 // RegisterProtectedRoutes registers routes that require API key authentication.

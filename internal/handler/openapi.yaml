@@ -367,6 +367,12 @@ components:
             stripped automatically. Raw IP addresses are not accepted. Entries
             that normalize to the same domain are deduplicated into one result;
             plan limits count the entries you submit.
+
+            The cap is 1 (free), 5 (basic) or 20 (pro) domains per request. A
+            request that includes the `subdomains` lookup is held to a tighter
+            cap of 1, 3 or 5 for the same plans, because subdomain enumeration
+            queries Certificate Transparency logs. Exceeding either cap returns
+            400 and nothing is looked up.
           examples:
             - ["example.com"]
         lookups:
@@ -1179,6 +1185,8 @@ components:
           type: integer
         cache_hits:
           type: integer
+        cache_misses:
+          type: integer
         cache_hit_rate:
           type: number
         avg_latency_ms:
@@ -1215,6 +1223,7 @@ components:
       required:
         - total_requests
         - cache_hits
+        - cache_misses
         - cache_hit_rate
         - avg_latency_ms
         - total_domains

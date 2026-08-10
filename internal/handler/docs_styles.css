@@ -102,6 +102,7 @@
   --theme-icon-light: #f8fbff;
   --theme-icon-ring: rgba(125, 140, 168, 0.46);
   --theme-icon-divider: rgba(125, 140, 168, 0.58);
+  --scroll-edge: rgba(16, 32, 43, 0.34);
 }
 
 /* ----- Custom Properties (Dark) ----- */
@@ -197,6 +198,7 @@ html[data-theme="dark"] {
   --theme-toggle-label: #f3f7ff;
   --theme-icon-ring: rgba(196, 209, 223, 0.54);
   --theme-icon-divider: rgba(196, 209, 223, 0.62);
+  --scroll-edge: rgba(0, 0, 0, 0.8);
 }
 
 /* ----- Reset & Base ----- */
@@ -206,6 +208,9 @@ html {
   scroll-behavior: smooth;
   scroll-padding-top: 112px;
   color-scheme: light;
+  /* iOS inflates text in narrow blocks unless this is pinned, which silently
+     widens code and table cells past the widths measured here. */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -214,6 +219,11 @@ body {
   font-size: 15px;
   line-height: 1.72;
   color: var(--ink-soft);
+  /* Prose here includes config keys, header names and URLs written as plain
+     text — the changelog is authored in YAML, so anything can appear. Any one
+     of them is wider than a phone's content column and would otherwise paint
+     past it. Code blocks opt back out; they scroll instead. */
+  overflow-wrap: break-word;
   background:
     radial-gradient(circle at 0 0, var(--page-glow-a), transparent 28rem),
     radial-gradient(circle at 100% 0, var(--page-glow-b), transparent 24rem),
@@ -603,9 +613,15 @@ a:hover { color: var(--accent-strong); }
 }
 
 /* ----- Base URL, Version Pill, Support Link ----- */
+/* Wraps rather than holding one line: the base URL plus the version pill is
+   wider than a phone's content column, and the hero clips its overflow, so an
+   unwrapped row lost the end of the URL entirely. */
 .base-url {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   gap: 12px;
   padding: 13px 16px;
   border: 1px solid var(--code-inline-border);
@@ -676,6 +692,10 @@ ul { margin-top: 12px; padding-left: 20px; }
 li + li { margin-top: 8px; }
 
 /* ----- Code ----- */
+/* Inline code is where the unbreakable tokens live — header names, IPv6
+   addresses, lookup names. A single one of those is wider than a phone's
+   content column, and without a break opportunity it pushes its table cell,
+   its table, and then the whole document sideways. */
 code {
   padding: 2px 6px;
   border: 1px solid var(--code-inline-border);
@@ -684,12 +704,16 @@ code {
   color: var(--accent-strong);
   font-family: var(--font-mono);
   font-size: 13px;
+  overflow-wrap: break-word;
 }
 
 pre {
   margin: 16px 0 22px;
   padding: 18px 20px;
   overflow-x: auto;
+  /* Keep a sideways swipe inside the code block instead of handing it to the
+     page once the block hits its end. */
+  overscroll-behavior-x: contain;
   border: 1px solid var(--code-block-border);
   border-radius: 20px;
   background: linear-gradient(180deg, var(--code-block-start) 0%, var(--code-block-end) 100%);
@@ -697,12 +721,15 @@ pre {
   line-height: 1.58;
 }
 
+/* Code blocks scroll rather than wrap: a re-wrapped payload example is no
+   longer the JSON the caller would send. */
 pre code {
   padding: 0;
   border: none;
   background: transparent;
   color: var(--code-block-text);
   font-size: 13px;
+  overflow-wrap: normal;
 }
 
 .kw { color: #b9a6ff; }
@@ -714,6 +741,28 @@ pre code {
 .flag { color: #f28482; }
 
 /* ----- Tables ----- */
+/* Every table is wrapped in .table-scroll. `width: 100%` on a table is only a
+   floor: when the columns' own min-content widths add up to more than the
+   container, the table grows past it and drags the document's scroll width
+   with it. Wrapping means a reference table that cannot fit a phone scrolls
+   inside its own box instead of making the whole page scroll sideways. */
+.table-scroll {
+  margin: 16px 0 24px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: 16px;
+}
+
+.table-scroll > table { margin: 0; }
+
+/* Applied by docs.js only while the table really is wider than its container,
+   so it reads as "there is more to the right" rather than as decoration on
+   every table. An inset shadow is painted on the container, not the content,
+   so it stays pinned to the edge as the table scrolls under it. */
+.table-scroll.is-scrollable {
+  box-shadow: inset -22px 0 18px -16px var(--scroll-edge);
+}
+
 table {
   width: 100%;
   margin: 16px 0 24px;
@@ -750,6 +799,12 @@ td {
   background: var(--table-cell-bg);
   vertical-align: top;
 }
+
+/* Cells deliberately do NOT get `overflow-wrap: anywhere`. It would lower each
+   column's min-content to a single character, which does make wide tables fit
+   a phone — by stacking `ips` as "ip/s" and `string[]` as "str/ing[/]". A
+   field-reference table whose identifiers are unreadable is worse than one
+   that scrolls, and .table-scroll already keeps that scrolling off the page. */
 
 tbody tr:last-child td:first-child { border-bottom-left-radius: 16px; }
 tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
@@ -968,6 +1023,12 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
   .page-footer {
     margin-top: 40px;
   }
+
+  /* The support address is one unbreakable token wider than a small phone's
+     content column, so it can't be held on one line there. */
+  .page-footer-meta {
+    white-space: normal;
+  }
 }
 
 .docs-footer {
@@ -1135,14 +1196,76 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
 }
 
 @media (max-width: 860px) {
+  /* The bar grows a second row for the nav, so the page-level offsets that
+     read this variable follow it instead of being measured against a height
+     the bar no longer has. The bar is then pinned to the same value below, so
+     the variable cannot drift out of agreement with what is rendered and
+     leave the first heading sitting under the bar. */
+  :root { --topbar-height: 132px; }
+
   .sidebar-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
 
-  .topbar { padding: 16px 18px 16px 70px; }
-  .topbar-nav { display: none; }
+  /* Brand and theme toggle share the first row; the section nav spans the
+     second. It used to be hidden outright, which left the overview — the one
+     page with no sidebar — with no way to reach the other pages at all. */
+  .topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    height: var(--topbar-height);
+    gap: 10px 12px;
+    padding: 12px 18px;
+  }
+
+  /* Room for the fixed sidebar toggle is made on the brand, not on the bar:
+     padding on the bar would indent the nav row too, and the nav needs the
+     full width to hold four items without scrolling. The overview has no
+     toggle and resets this. */
+  .topbar-brand { margin-left: 52px; }
+
+  .topbar-actions { display: contents; }
+
+  /* Placed explicitly. Auto-placement puts the toggle after the full-width
+     nav, which lands it on a third row. */
+  .topbar .theme-toggle {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .topbar-nav {
+    display: flex;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    /* Without this the nav's min-content is distributed across the two tracks
+       it spans and widens the bar past the viewport, even though the nav
+       itself scrolls. */
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .topbar-nav::-webkit-scrollbar { display: none; }
+
+  .topbar-nav a {
+    padding: 8px 12px;
+    white-space: nowrap;
+  }
+
+  table { font-size: 13.5px; }
+
+  th { padding: 10px 12px; }
+  td { padding: 11px 12px; }
+
+  pre {
+    padding: 14px 15px;
+    border-radius: 16px;
+  }
 
   .sidebar {
     transform: translateX(-100%);
@@ -1174,5 +1297,13 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
   .support-link {
     width: 100%;
     justify-content: center;
+  }
+
+  /* A step down in size and padding keeps the base URL on one line at common
+     phone widths. Below roughly 360px it still wraps, which is fine — it
+     wraps inside its box rather than out of it. */
+  .base-url {
+    padding: 12px 13px;
+    font-size: 12.5px;
   }
 }

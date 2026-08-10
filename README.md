@@ -55,6 +55,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/v1/health` | None | Dependency health (Postgres, Redis, GeoIP) for ops monitoring |
 | POST | `/billing/webhook` | None (Stripe signature) | Stripe webhook endpoint |
 | GET | `/billing/success` | None (session_id token) | Post-checkout API key retrieval page |
+| any | *(unmatched)* | None | 404 — docs-styled page in a browser, `{"error": "not found"}` under `/v1` and `/billing` |
 | GET | `/v1/info` | `admin` | Application and environment info |
 | POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |
 | POST | `/v1/ip/lookup` | All plans | IP intelligence lookup |

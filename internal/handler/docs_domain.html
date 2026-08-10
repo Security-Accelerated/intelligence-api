@@ -61,6 +61,7 @@
     <div class="sidebar-section-title">Endpoint</div>
     <a href="#domain-lookup">Domain Intelligence</a>
     <a href="#request-body" class="indent">Request Body</a>
+    <a href="#subdomain-cap" class="indent">Subdomain Limits</a>
     <a href="#example-request" class="indent">Example</a>
     <a href="#invalid-domains" class="indent">Validation</a>
   </div>
@@ -113,74 +114,82 @@
   <h2 id="authentication">Authentication</h2>
   <p>All requests require an API key passed via the <code>X-API-Key</code> header:</p>
   <pre><code><span class="hdr">X-API-Key:</span> <span class="str">your-api-key-here</span></code></pre>
-  <table>
-    <thead><tr><th>Scenario</th><th>Response</th></tr></thead>
-    <tbody>
-      <tr><td>Missing API key</td><td><code>401 Unauthorized</code></td></tr>
-      <tr><td>Invalid API key</td><td><code>401 Unauthorized</code></td></tr>
-      <tr><td>Feature not included in plan</td><td><code>403 Forbidden</code></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Scenario</th><th>Response</th></tr></thead>
+      <tbody>
+        <tr><td>Missing API key</td><td><code>401 Unauthorized</code></td></tr>
+        <tr><td>Invalid API key</td><td><code>401 Unauthorized</code></td></tr>
+        <tr><td>Feature not included in plan</td><td><code>403 Forbidden</code></td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <!-- Plans -->
   <h2 id="plans">Plans</h2>
   <p>Feature access and limits are determined by your API key's plan.</p>
-  <table>
-    <thead><tr><th></th><th>Free</th><th>Basic</th><th>Pro</th></tr></thead>
-    <tbody>
-      <tr><td><strong>Rate limit</strong></td><td>5 req/min</td><td>30 req/min</td><td>120 req/min</td></tr>
-      <tr><td><strong>Max domains per request</strong></td><td>1</td><td>5</td><td>20</td></tr>
-      <tr><td><strong>WHOIS, DNS, SSL, Headers</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>Email Security</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>Subdomains</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>CT Logs</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>BGP / ASN</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>DNS Security (DNSSEC / CAA)</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>Aggregate Risk Score</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-      <tr><td><strong>Screenshot</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
-      <tr><td><strong>Reputation</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
-      <tr><td><strong>Threat Intelligence</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th></th><th>Free</th><th>Basic</th><th>Pro</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Rate limit</strong></td><td>5 req/min</td><td>30 req/min</td><td>120 req/min</td></tr>
+        <tr><td><strong>Max domains per request</strong></td><td>1</td><td>5</td><td>20</td></tr>
+        <tr><td><strong>WHOIS, DNS, SSL, Headers</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Email Security</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Subdomains</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>CT Logs</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>BGP / ASN</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>DNS Security (DNSSEC / CAA)</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Aggregate Risk Score</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Screenshot</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+        <tr><td><strong>Reputation</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+        <tr><td><strong>Threat Intelligence</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <!-- Pricing -->
   <h2 id="pricing">Pricing</h2>
   <p>Get started with a free plan or upgrade for higher limits and premium features.</p>
-  <table>
-    <thead><tr><th>Plan</th><th>Features</th><th></th></tr></thead>
-    <tbody>
-      <tr>
-        <td><strong>Free</strong></td>
-        <td>5 req/min, 1 domain/request, all lookups except screenshot, reputation, and threat intel</td>
-        <td>Included with any API key</td>
-      </tr>
-      <tr>
-        <td><strong>Basic</strong></td>
-        <td>30 req/min, 5 domains/request, all lookups except screenshot, reputation, and threat intel</td>
-        <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
-      </tr>
-      <tr>
-        <td><strong>Pro</strong></td>
-        <td>120 req/min, 20 domains/request, all lookups including screenshot, reputation, and threat intel</td>
-        <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Plan</th><th>Features</th><th></th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Free</strong></td>
+          <td>5 req/min, 1 domain/request, all lookups except screenshot, reputation, and threat intel</td>
+          <td>Included with any API key</td>
+        </tr>
+        <tr>
+          <td><strong>Basic</strong></td>
+          <td>30 req/min, 5 domains/request, all lookups except screenshot, reputation, and threat intel</td>
+          <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
+        </tr>
+        <tr>
+          <td><strong>Pro</strong></td>
+          <td>120 req/min, 20 domains/request, all lookups including screenshot, reputation, and threat intel</td>
+          <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
   <div class="note">After subscribing, your API key will be shown on a one-time confirmation page. Save it immediately -- it cannot be retrieved again.</div>
   {{if .PortalLink}}<p>Already a subscriber? <a href="{{.PortalLink}}" target="_blank" rel="noopener noreferrer" class="portal-link">Manage your subscription</a></p>{{end}}
 
   <!-- Rate Limiting -->
   <h2 id="rate-limiting">Rate Limiting</h2>
   <p>Requests are rate-limited per API key using a sliding window. Responses report your current window state:</p>
-  <table>
-    <thead><tr><th>Header</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests allowed per minute</td></tr>
-      <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
-      <tr><td><code>Retry-After</code></td><td>Seconds until the window resets (only present on <code>429</code> responses)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Header</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests allowed per minute</td></tr>
+        <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
+        <tr><td><code>Retry-After</code></td><td>Seconds until the window resets (only present on <code>429</code> responses)</td></tr>
+      </tbody>
+    </table>
+  </div>
   <p>When the limit is exceeded, the API returns <code>429 Too Many Requests</code>. Wait until the <code>Retry-After</code> period expires before retrying.</p>
 
   <!-- Domain Intelligence -->
@@ -195,60 +204,80 @@
 
   <h3 id="request-body">Request Body</h3>
 
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr>
-        <td><code>domains</code></td>
-        <td><code>string[]</code></td>
-        <td><span class="tag tag-required">Required</span></td>
-        <td>Domain names to look up. Max count depends on plan (1 / 5 / 20), counted on the entries you submit.</td>
-      </tr>
-      <tr>
-        <td><code>lookups</code></td>
-        <td><code>string[]</code></td>
-        <td><span class="tag tag-required">Required</span></td>
-        <td>Which lookups to run. Must be non-empty &mdash; there is no default set and no <code>"all"</code> value. Names are trimmed, lowercased and deduplicated, so <code>[" SSL ", "ssl"]</code> is just <code>["ssl"]</code>.</td>
-      </tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>domains</code></td>
+          <td><code>string[]</code></td>
+          <td><span class="tag tag-required">Required</span></td>
+          <td>Domain names to look up. Max count depends on plan (1 / 5 / 20), counted on the entries you submit. Requesting subdomain enumeration lowers that cap &mdash; see <a href="#subdomain-cap">Subdomain batch limits</a>.</td>
+        </tr>
+        <tr>
+          <td><code>lookups</code></td>
+          <td><code>string[]</code></td>
+          <td><span class="tag tag-required">Required</span></td>
+          <td>Which lookups to run. Must be non-empty &mdash; there is no default set and no <code>"all"</code> value. Names are trimmed, lowercased and deduplicated, so <code>[" SSL ", "ssl"]</code> is just <code>["ssl"]</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Valid Lookups</h4>
-  <table>
-    <thead><tr><th>Name</th><th>Plan</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>whois</code></td><td>All</td><td>Registration, registrar, expiry, nameservers, contacts.</td></tr>
-      <tr><td><code>dns</code></td><td>All</td><td>A, AAAA, MX, NS, TXT, and CNAME records.</td></tr>
-      <tr><td><code>ssl</code></td><td>All</td><td>TLS certificate subject, issuer, validity window, SANs.</td></tr>
-      <tr><td><code>headers</code></td><td>All</td><td>HTTP response headers and security header analysis.</td></tr>
-      <tr><td><code>email_security</code></td><td>All</td><td>Check SPF, DMARC, and DKIM records.</td></tr>
-      <tr><td><code>subdomains</code></td><td>All</td><td>Enumerate subdomains via Certificate Transparency logs.</td></tr>
-      <tr><td><code>ct_logs</code></td><td>All</td><td>Query Certificate Transparency logs for issued certificates.</td></tr>
-      <tr><td><code>bgp</code></td><td>All</td><td>Look up BGP/ASN information for the domain's IP addresses.</td></tr>
-      <tr><td><code>fingerprint</code></td><td>All</td><td>Detect web technologies from HTTP response headers. Costs no extra network call &mdash; see <a href="#caching">Caching</a>.</td></tr>
-      <tr><td><code>dns_security</code></td><td>All</td><td>DNSSEC deployment (DS + DNSKEY + algorithms) and CAA records.</td></tr>
-      <tr><td><code>risk</code></td><td>All</td><td>Weighted 0&ndash;100 aggregate risk score over the other lookups you requested. No network call, never cached &mdash; see <a href="#caching">Caching</a>.</td></tr>
-      <tr><td><code>screenshot</code></td><td><span class="tag tag-pro">Pro</span></td><td>Capture a page screenshot.</td></tr>
-      <tr><td><code>reputation</code></td><td><span class="tag tag-pro">Pro</span></td><td>Check domain against threat blocklists.</td></tr>
-      <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query threat intelligence feeds (VirusTotal, URLhaus, AlienVault OTX).</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Name</th><th>Plan</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>whois</code></td><td>All</td><td>Registration, registrar, expiry, nameservers, contacts.</td></tr>
+        <tr><td><code>dns</code></td><td>All</td><td>A, AAAA, MX, NS, TXT, and CNAME records.</td></tr>
+        <tr><td><code>ssl</code></td><td>All</td><td>TLS certificate subject, issuer, validity window, SANs.</td></tr>
+        <tr><td><code>headers</code></td><td>All</td><td>HTTP response headers and security header analysis.</td></tr>
+        <tr><td><code>email_security</code></td><td>All</td><td>Check SPF, DMARC, and DKIM records.</td></tr>
+        <tr><td><code>subdomains</code></td><td>All</td><td>Enumerate subdomains via Certificate Transparency logs.</td></tr>
+        <tr><td><code>ct_logs</code></td><td>All</td><td>Query Certificate Transparency logs for issued certificates.</td></tr>
+        <tr><td><code>bgp</code></td><td>All</td><td>Look up BGP/ASN information for the domain's IP addresses.</td></tr>
+        <tr><td><code>fingerprint</code></td><td>All</td><td>Detect web technologies from HTTP response headers. Costs no extra network call &mdash; see <a href="#caching">Caching</a>.</td></tr>
+        <tr><td><code>dns_security</code></td><td>All</td><td>DNSSEC deployment (DS + DNSKEY + algorithms) and CAA records.</td></tr>
+        <tr><td><code>risk</code></td><td>All</td><td>Weighted 0&ndash;100 aggregate risk score over the other lookups you requested. No network call, never cached &mdash; see <a href="#caching">Caching</a>.</td></tr>
+        <tr><td><code>screenshot</code></td><td><span class="tag tag-pro">Pro</span></td><td>Capture a page screenshot.</td></tr>
+        <tr><td><code>reputation</code></td><td><span class="tag tag-pro">Pro</span></td><td>Check domain against threat blocklists.</td></tr>
+        <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query threat intelligence feeds (VirusTotal, URLhaus, AlienVault OTX).</td></tr>
+      </tbody>
+    </table>
+  </div>
   <p>An unrecognized name returns <code>400</code> naming the offending entry. A lookup outside your plan returns <code>403</code>.</p>
+
+  <h4 id="subdomain-cap">Subdomain batch limits</h4>
+  <p>Subdomain enumeration queries Certificate Transparency logs, which are slower and more rate-limited than the other sources, so a request that includes <code>subdomains</code> is held to a tighter domain cap than the same plan's usual one. The cap applies to the whole request: exceeding it returns <code>400</code> and nothing is looked up.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Plan</th><th>Domains per request</th><th>With <code>subdomains</code> requested</th></tr></thead>
+      <tbody>
+        <tr><td>Free</td><td>1</td><td>1</td></tr>
+        <tr><td>Basic</td><td>5</td><td>3</td></tr>
+        <tr><td>Pro</td><td>20</td><td>5</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>To enumerate subdomains for a larger batch, split it into several requests, or run <code>subdomains</code> in its own request and the remaining lookups in another.</p>
 
   <h4>Domain Normalization</h4>
   <p>Domain names are normalized automatically. You can pass bare domains or full URLs with any scheme &mdash; the API extracts the hostname by stripping scheme prefixes, userinfo, ports, paths, query strings, and fragments, then trims whitespace and lowercases the result. Entries that normalize to the same domain are deduplicated into a single result. The <code>domain</code> field in the response holds the normalized form and <code>inputs</code> lists the original entries that mapped to it. Raw IP addresses are rejected &mdash; use the <a href="/docs/ip">IP Intelligence</a> endpoint instead.</p>
-  <table class="param-table">
-    <thead><tr><th>You send</th><th>We look up</th></tr></thead>
-    <tbody>
-      <tr><td><code>example.com</code></td><td><code>example.com</code></td></tr>
-      <tr><td><code>https://example.com/path?q=1</code></td><td><code>example.com</code></td></tr>
-      <tr><td><code>ftp://example.com</code></td><td><code>example.com</code></td></tr>
-      <tr><td><code>example.com:8080</code></td><td><code>example.com</code></td></tr>
-      <tr><td><code>user:pass@example.com</code></td><td><code>example.com</code></td></tr>
-      <tr><td><code>Example.COM/</code></td><td><code>example.com</code></td></tr>
-      <tr><td><code>&nbsp;&nbsp;example.com&nbsp;&nbsp;</code></td><td><code>example.com</code></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table class="param-table">
+      <thead><tr><th>You send</th><th>We look up</th></tr></thead>
+      <tbody>
+        <tr><td><code>example.com</code></td><td><code>example.com</code></td></tr>
+        <tr><td><code>https://example.com/path?q=1</code></td><td><code>example.com</code></td></tr>
+        <tr><td><code>ftp://example.com</code></td><td><code>example.com</code></td></tr>
+        <tr><td><code>example.com:8080</code></td><td><code>example.com</code></td></tr>
+        <tr><td><code>user:pass@example.com</code></td><td><code>example.com</code></td></tr>
+        <tr><td><code>Example.COM/</code></td><td><code>example.com</code></td></tr>
+        <tr><td><code>&nbsp;&nbsp;example.com&nbsp;&nbsp;</code></td><td><code>example.com</code></td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h3 id="example-request">Example</h3>
   <div class="lang-tabs">
@@ -417,22 +446,24 @@ resp = requests.post(
 
   <!-- whois -->
   <h3 id="whois"><code>whois</code> -- Domain Registration</h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>domain_name</code></td><td><code>string</code></td><td>The registered domain name</td></tr>
-      <tr><td><code>registrar</code></td><td><code>string</code></td><td>Registrar (e.g., GoDaddy, Namecheap)</td></tr>
-      <tr><td><code>created_date</code></td><td><code>string</code></td><td>Registration date -- new domains are higher risk</td></tr>
-      <tr><td><code>updated_date</code></td><td><code>string</code></td><td>Last modification date</td></tr>
-      <tr><td><code>expiry_date</code></td><td><code>string</code></td><td>Expiration date -- expiring domains are red flags</td></tr>
-      <tr><td><code>status</code></td><td><code>string[]</code></td><td>EPP status codes (e.g., <code>clientTransferProhibited</code>)</td></tr>
-      <tr><td><code>name_servers</code></td><td><code>string[]</code></td><td>Authoritative DNS servers</td></tr>
-      <tr><td><code>registrant</code></td><td><code>object</code></td><td>Registrant contact (<code>name</code>, <code>organization</code>, <code>country</code>, <code>email</code>)</td></tr>
-      <tr><td><code>admin</code></td><td><code>object</code></td><td>Administrative contact</td></tr>
-      <tr><td><code>tech</code></td><td><code>object</code></td><td>Technical contact</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>domain_name</code></td><td><code>string</code></td><td>The registered domain name</td></tr>
+        <tr><td><code>registrar</code></td><td><code>string</code></td><td>Registrar (e.g., GoDaddy, Namecheap)</td></tr>
+        <tr><td><code>created_date</code></td><td><code>string</code></td><td>Registration date -- new domains are higher risk</td></tr>
+        <tr><td><code>updated_date</code></td><td><code>string</code></td><td>Last modification date</td></tr>
+        <tr><td><code>expiry_date</code></td><td><code>string</code></td><td>Expiration date -- expiring domains are red flags</td></tr>
+        <tr><td><code>status</code></td><td><code>string[]</code></td><td>EPP status codes (e.g., <code>clientTransferProhibited</code>)</td></tr>
+        <tr><td><code>name_servers</code></td><td><code>string[]</code></td><td>Authoritative DNS servers</td></tr>
+        <tr><td><code>registrant</code></td><td><code>object</code></td><td>Registrant contact (<code>name</code>, <code>organization</code>, <code>country</code>, <code>email</code>)</td></tr>
+        <tr><td><code>admin</code></td><td><code>object</code></td><td>Administrative contact</td></tr>
+        <tr><td><code>tech</code></td><td><code>object</code></td><td>Technical contact</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"domain_name"</span>: <span class="str">"example.com"</span>,
   <span class="str">"registrar"</span>: <span class="str">"RESERVED-Internet Assigned Numbers Authority"</span>,
@@ -447,18 +478,20 @@ resp = requests.post(
 
   <!-- dns -->
   <h3 id="dns"><code>dns</code> -- DNS Records</h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>a</code></td><td><code>string[]</code></td><td>IPv4 addresses</td></tr>
-      <tr><td><code>aaaa</code></td><td><code>string[]</code></td><td>IPv6 addresses</td></tr>
-      <tr><td><code>mx</code></td><td><code>object[]</code></td><td>Mail servers (<code>host</code>, <code>priority</code>)</td></tr>
-      <tr><td><code>ns</code></td><td><code>string[]</code></td><td>Name servers</td></tr>
-      <tr><td><code>txt</code></td><td><code>string[]</code></td><td>TXT records (SPF, verification tokens, etc.)</td></tr>
-      <tr><td><code>cname</code></td><td><code>string</code></td><td>Canonical name alias</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>a</code></td><td><code>string[]</code></td><td>IPv4 addresses</td></tr>
+        <tr><td><code>aaaa</code></td><td><code>string[]</code></td><td>IPv6 addresses</td></tr>
+        <tr><td><code>mx</code></td><td><code>object[]</code></td><td>Mail servers (<code>host</code>, <code>priority</code>)</td></tr>
+        <tr><td><code>ns</code></td><td><code>string[]</code></td><td>Name servers</td></tr>
+        <tr><td><code>txt</code></td><td><code>string[]</code></td><td>TXT records (SPF, verification tokens, etc.)</td></tr>
+        <tr><td><code>cname</code></td><td><code>string</code></td><td>Canonical name alias</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>],
   <span class="str">"aaaa"</span>: [<span class="str">"2606:2800:220:1:248:1893:25c8:1946"</span>],
@@ -469,21 +502,23 @@ resp = requests.post(
 
   <!-- ssl -->
   <h3 id="ssl"><code>ssl</code> -- TLS Certificate</h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>subject</code></td><td><code>string</code></td><td>Entity the certificate was issued to</td></tr>
-      <tr><td><code>issuer</code></td><td><code>string</code></td><td>Certificate authority</td></tr>
-      <tr><td><code>not_before</code></td><td><code>string</code></td><td>Start of validity period</td></tr>
-      <tr><td><code>not_after</code></td><td><code>string</code></td><td>End of validity period</td></tr>
-      <tr><td><code>expired</code></td><td><code>bool</code></td><td>Whether the certificate has expired</td></tr>
-      <tr><td><code>days_until_expiry</code></td><td><code>int</code></td><td>Days remaining until expiration</td></tr>
-      <tr><td><code>sans</code></td><td><code>string[]</code></td><td>Subject Alternative Names -- all hostnames the cert covers</td></tr>
-      <tr><td><code>serial_number</code></td><td><code>string</code></td><td>Certificate serial number</td></tr>
-      <tr><td><code>signature_algorithm</code></td><td><code>string</code></td><td>Cryptographic algorithm (e.g., SHA-256)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>subject</code></td><td><code>string</code></td><td>Entity the certificate was issued to</td></tr>
+        <tr><td><code>issuer</code></td><td><code>string</code></td><td>Certificate authority</td></tr>
+        <tr><td><code>not_before</code></td><td><code>string</code></td><td>Start of validity period</td></tr>
+        <tr><td><code>not_after</code></td><td><code>string</code></td><td>End of validity period</td></tr>
+        <tr><td><code>expired</code></td><td><code>bool</code></td><td>Whether the certificate has expired</td></tr>
+        <tr><td><code>days_until_expiry</code></td><td><code>int</code></td><td>Days remaining until expiration</td></tr>
+        <tr><td><code>sans</code></td><td><code>string[]</code></td><td>Subject Alternative Names -- all hostnames the cert covers</td></tr>
+        <tr><td><code>serial_number</code></td><td><code>string</code></td><td>Certificate serial number</td></tr>
+        <tr><td><code>signature_algorithm</code></td><td><code>string</code></td><td>Cryptographic algorithm (e.g., SHA-256)</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"subject"</span>: <span class="str">"www.example.org"</span>,
   <span class="str">"issuer"</span>: <span class="str">"DigiCert Global G2 TLS RSA SHA256 2020 CA1"</span>,
@@ -498,29 +533,33 @@ resp = requests.post(
 
   <!-- headers -->
   <h3 id="headers"><code>headers</code> -- HTTP Response</h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code (200, 301, 404, etc.)</td></tr>
-      <tr><td><code>headers</code></td><td><code>object</code></td><td>Raw response headers as key-value pairs</td></tr>
-      <tr><td><code>security_headers</code></td><td><code>object</code></td><td>Security header audit (see below)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code (200, 301, 404, etc.)</td></tr>
+        <tr><td><code>headers</code></td><td><code>object</code></td><td>Raw response headers as key-value pairs</td></tr>
+        <tr><td><code>security_headers</code></td><td><code>object</code></td><td>Security header audit (see below)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Security Headers Checked</h4>
-  <table>
-    <thead><tr><th>Field</th><th>HTTP Header</th></tr></thead>
-    <tbody>
-      <tr><td><code>strict_transport_security</code></td><td>Strict-Transport-Security (HSTS)</td></tr>
-      <tr><td><code>content_security_policy</code></td><td>Content-Security-Policy (CSP)</td></tr>
-      <tr><td><code>x_frame_options</code></td><td>X-Frame-Options</td></tr>
-      <tr><td><code>x_content_type_options</code></td><td>X-Content-Type-Options</td></tr>
-      <tr><td><code>x_xss_protection</code></td><td>X-XSS-Protection</td></tr>
-      <tr><td><code>referrer_policy</code></td><td>Referrer-Policy</td></tr>
-      <tr><td><code>permissions_policy</code></td><td>Permissions-Policy</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>HTTP Header</th></tr></thead>
+      <tbody>
+        <tr><td><code>strict_transport_security</code></td><td>Strict-Transport-Security (HSTS)</td></tr>
+        <tr><td><code>content_security_policy</code></td><td>Content-Security-Policy (CSP)</td></tr>
+        <tr><td><code>x_frame_options</code></td><td>X-Frame-Options</td></tr>
+        <tr><td><code>x_content_type_options</code></td><td>X-Content-Type-Options</td></tr>
+        <tr><td><code>x_xss_protection</code></td><td>X-XSS-Protection</td></tr>
+        <tr><td><code>referrer_policy</code></td><td>Referrer-Policy</td></tr>
+        <tr><td><code>permissions_policy</code></td><td>Permissions-Policy</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"status_code"</span>: <span class="num">200</span>,
   <span class="str">"headers"</span>: {
@@ -537,14 +576,16 @@ resp = requests.post(
 
   <!-- screenshot -->
   <h3 id="screenshot"><code>screenshot</code> -- Page Screenshot <span class="tag tag-pro">Pro</span></h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code from probing the domain</td></tr>
-      <tr><td><code>png</code></td><td><code>string</code></td><td>Base64-encoded PNG image (empty for non-200 responses)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code from probing the domain</td></tr>
+        <tr><td><code>png</code></td><td><code>string</code></td><td>Base64-encoded PNG image (empty for non-200 responses)</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"status_code"</span>: <span class="num">200</span>,
   <span class="str">"png"</span>: <span class="str">"iVBORw0KGgoAAAANSUhEUgAA..."</span>
@@ -553,26 +594,30 @@ resp = requests.post(
 
   <!-- reputation -->
   <h3 id="reputation"><code>reputation</code> -- Domain Reputation <span class="tag tag-pro">Pro</span></h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>score</code></td><td><code>int</code></td><td>Risk score from 0 (clean) to 100 (maximum risk)</td></tr>
-      <tr><td><code>risk</code></td><td><code>string</code></td><td><code>clean</code>, <code>low</code>, <code>medium</code>, or <code>high</code></td></tr>
-      <tr><td><code>providers</code></td><td><code>array</code></td><td>Per-provider results</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>score</code></td><td><code>int</code></td><td>Risk score from 0 (clean) to 100 (maximum risk)</td></tr>
+        <tr><td><code>risk</code></td><td><code>string</code></td><td><code>clean</code>, <code>low</code>, <code>medium</code>, or <code>high</code></td></tr>
+        <tr><td><code>providers</code></td><td><code>array</code></td><td>Per-provider results</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Provider Result</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>listed</code></td><td><code>bool</code></td><td>Whether the domain appears on this blocklist</td></tr>
-      <tr><td><code>category</code></td><td><code>string</code></td><td>Classification if listed (e.g., <code>phishing</code>, <code>malware</code>)</td></tr>
-      <tr><td><code>provider</code></td><td><code>string</code></td><td>Blocklist name</td></tr>
-      <tr><td><code>return_code</code></td><td><code>string</code></td><td>Raw DNS return code (only when listed)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>listed</code></td><td><code>bool</code></td><td>Whether the domain appears on this blocklist</td></tr>
+        <tr><td><code>category</code></td><td><code>string</code></td><td>Classification if listed (e.g., <code>phishing</code>, <code>malware</code>)</td></tr>
+        <tr><td><code>provider</code></td><td><code>string</code></td><td>Blocklist name</td></tr>
+        <tr><td><code>return_code</code></td><td><code>string</code></td><td>Raw DNS return code (only when listed)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <pre><code>{
   <span class="str">"score"</span>: <span class="num">35</span>,
@@ -589,89 +634,103 @@ resp = requests.post(
   <p>The following blocklists are checked: Spamhaus DBL, SURBL, URIBL, and Spamhaus ZEN.</p>
 
   <h4>Risk Levels</h4>
-  <table>
-    <thead><tr><th>Risk</th><th>Score Range</th></tr></thead>
-    <tbody>
-      <tr><td><span class="risk-clean">clean</span></td><td>0</td></tr>
-      <tr><td><span class="risk-low">low</span></td><td>1 -- 29</td></tr>
-      <tr><td><span class="risk-medium">medium</span></td><td>30 -- 59</td></tr>
-      <tr><td><span class="risk-high">high</span></td><td>60 -- 100</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Risk</th><th>Score Range</th></tr></thead>
+      <tbody>
+        <tr><td><span class="risk-clean">clean</span></td><td>0</td></tr>
+        <tr><td><span class="risk-low">low</span></td><td>1 -- 29</td></tr>
+        <tr><td><span class="risk-medium">medium</span></td><td>30 -- 59</td></tr>
+        <tr><td><span class="risk-high">high</span></td><td>60 -- 100</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <!-- email_security -->
   <h3 id="email-security"><code>email_security</code> -- Email Authentication</h3>
 
   <h4><code>spf</code> -- Sender Policy Framework</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full SPF TXT record</td></tr>
-      <tr><td><code>version</code></td><td><code>string</code></td><td>SPF version (typically <code>spf1</code>)</td></tr>
-      <tr><td><code>mechanisms</code></td><td><code>string[]</code></td><td>Parsed mechanisms (<code>include:</code>, <code>ip4:</code>, etc.)</td></tr>
-      <tr><td><code>all</code></td><td><code>string</code></td><td>Terminal qualifier: <code>-all</code>, <code>~all</code>, <code>?all</code>, or <code>+all</code></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>raw</code></td><td><code>string</code></td><td>Full SPF TXT record</td></tr>
+        <tr><td><code>version</code></td><td><code>string</code></td><td>SPF version (typically <code>spf1</code>)</td></tr>
+        <tr><td><code>mechanisms</code></td><td><code>string[]</code></td><td>Parsed mechanisms (<code>include:</code>, <code>ip4:</code>, etc.)</td></tr>
+        <tr><td><code>all</code></td><td><code>string</code></td><td>Terminal qualifier: <code>-all</code>, <code>~all</code>, <code>?all</code>, or <code>+all</code></td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4><code>dmarc</code> -- DMARC Policy</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DMARC TXT record</td></tr>
-      <tr><td><code>version</code></td><td><code>string</code></td><td>DMARC version (typically <code>DMARC1</code>)</td></tr>
-      <tr><td><code>policy</code></td><td><code>string</code></td><td><code>none</code>, <code>quarantine</code>, or <code>reject</code></td></tr>
-      <tr><td><code>pct</code></td><td><code>int</code></td><td>Percentage of messages the policy applies to</td></tr>
-      <tr><td><code>rua</code></td><td><code>string</code></td><td>Aggregate report destination</td></tr>
-      <tr><td><code>ruf</code></td><td><code>string</code></td><td>Forensic report destination</td></tr>
-      <tr><td><code>sp</code></td><td><code>string</code></td><td>Subdomain policy</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DMARC TXT record</td></tr>
+        <tr><td><code>version</code></td><td><code>string</code></td><td>DMARC version (typically <code>DMARC1</code>)</td></tr>
+        <tr><td><code>policy</code></td><td><code>string</code></td><td><code>none</code>, <code>quarantine</code>, or <code>reject</code></td></tr>
+        <tr><td><code>pct</code></td><td><code>int</code></td><td>Percentage of messages the policy applies to</td></tr>
+        <tr><td><code>rua</code></td><td><code>string</code></td><td>Aggregate report destination</td></tr>
+        <tr><td><code>ruf</code></td><td><code>string</code></td><td>Forensic report destination</td></tr>
+        <tr><td><code>sp</code></td><td><code>string</code></td><td>Subdomain policy</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4><code>dkim</code> -- DKIM Records</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>selector</code></td><td><code>string</code></td><td>Selector name probed</td></tr>
-      <tr><td><code>found</code></td><td><code>bool</code></td><td>Whether a DKIM record exists for this selector</td></tr>
-      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DKIM TXT record (only when found)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>selector</code></td><td><code>string</code></td><td>Selector name probed</td></tr>
+        <tr><td><code>found</code></td><td><code>bool</code></td><td>Whether a DKIM record exists for this selector</td></tr>
+        <tr><td><code>raw</code></td><td><code>string</code></td><td>Full DKIM TXT record (only when found)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4><code>mta_sts</code> -- MTA Strict Transport Security</h4>
   <p>Only present when a record exists at <code>_mta-sts.&lt;domain&gt;</code>. When the TXT record is found, the policy file at <code>https://mta-sts.&lt;domain&gt;/.well-known/mta-sts.txt</code> is fetched for the mode and MX patterns.</p>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full MTA-STS TXT record</td></tr>
-      <tr><td><code>id</code></td><td><code>string</code></td><td>Policy version identifier (<code>id=</code> tag)</td></tr>
-      <tr><td><code>policy_fetched</code></td><td><code>bool</code></td><td>Whether the well-known policy file was retrieved</td></tr>
-      <tr><td><code>mode</code></td><td><code>string</code></td><td><code>enforce</code>, <code>testing</code>, or <code>none</code> (from the policy file)</td></tr>
-      <tr><td><code>max_age</code></td><td><code>int</code></td><td>Policy cache lifetime in seconds</td></tr>
-      <tr><td><code>mx_patterns</code></td><td><code>string[]</code></td><td>MX host patterns the policy allows</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>raw</code></td><td><code>string</code></td><td>Full MTA-STS TXT record</td></tr>
+        <tr><td><code>id</code></td><td><code>string</code></td><td>Policy version identifier (<code>id=</code> tag)</td></tr>
+        <tr><td><code>policy_fetched</code></td><td><code>bool</code></td><td>Whether the well-known policy file was retrieved</td></tr>
+        <tr><td><code>mode</code></td><td><code>string</code></td><td><code>enforce</code>, <code>testing</code>, or <code>none</code> (from the policy file)</td></tr>
+        <tr><td><code>max_age</code></td><td><code>int</code></td><td>Policy cache lifetime in seconds</td></tr>
+        <tr><td><code>mx_patterns</code></td><td><code>string[]</code></td><td>MX host patterns the policy allows</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4><code>tls_rpt</code> -- SMTP TLS Reporting</h4>
   <p>Only present when a record exists at <code>_smtp._tls.&lt;domain&gt;</code>.</p>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full TLS-RPT TXT record</td></tr>
-      <tr><td><code>rua</code></td><td><code>string</code></td><td>Report destination (e.g., <code>mailto:tlsrpt@example.com</code>)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>raw</code></td><td><code>string</code></td><td>Full TLS-RPT TXT record</td></tr>
+        <tr><td><code>rua</code></td><td><code>string</code></td><td>Report destination (e.g., <code>mailto:tlsrpt@example.com</code>)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4><code>bimi</code> -- Brand Indicators for Message Identification</h4>
   <p>Only present when a record exists at <code>default._bimi.&lt;domain&gt;</code>.</p>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>raw</code></td><td><code>string</code></td><td>Full BIMI TXT record</td></tr>
-      <tr><td><code>location</code></td><td><code>string</code></td><td>Brand logo SVG URL (<code>l=</code> tag)</td></tr>
-      <tr><td><code>authority</code></td><td><code>string</code></td><td>Verified Mark Certificate URL (<code>a=</code> tag)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>raw</code></td><td><code>string</code></td><td>Full BIMI TXT record</td></tr>
+        <tr><td><code>location</code></td><td><code>string</code></td><td>Brand logo SVG URL (<code>l=</code> tag)</td></tr>
+        <tr><td><code>authority</code></td><td><code>string</code></td><td>Verified Mark Certificate URL (<code>a=</code> tag)</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"spf"</span>: {
     <span class="str">"raw"</span>: <span class="str">"v=spf1 include:_spf.google.com -all"</span>,
@@ -704,24 +763,28 @@ resp = requests.post(
 
   <!-- subdomains -->
   <h3 id="subdomains"><code>subdomains</code> -- Subdomain Enumeration</h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>count</code></td><td><code>int</code></td><td>Number of subdomains returned</td></tr>
-      <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (500)</td></tr>
-      <tr><td><code>subdomains</code></td><td><code>array</code></td><td>Discovered subdomains</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>count</code></td><td><code>int</code></td><td>Number of subdomains returned</td></tr>
+        <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (500)</td></tr>
+        <tr><td><code>subdomains</code></td><td><code>array</code></td><td>Discovered subdomains</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Subdomain Entry</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>domain</code></td><td><code>string</code></td><td>The subdomain</td></tr>
-      <tr><td><code>source</code></td><td><code>string</code></td><td>Data source (<code>crt.sh</code>)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>domain</code></td><td><code>string</code></td><td>The subdomain</td></tr>
+        <tr><td><code>source</code></td><td><code>string</code></td><td>Data source (<code>crt.sh</code>)</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"count"</span>: <span class="num">3</span>,
   <span class="str">"capped"</span>: <span class="kw">false</span>,
@@ -734,29 +797,33 @@ resp = requests.post(
 
   <!-- ct_logs -->
   <h3 id="ct-logs"><code>ct_logs</code> -- Certificate Transparency Logs</h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>count</code></td><td><code>int</code></td><td>Number of certificate entries returned</td></tr>
-      <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (100)</td></tr>
-      <tr><td><code>entries</code></td><td><code>array</code></td><td>Certificate log entries, sorted newest-first</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>count</code></td><td><code>int</code></td><td>Number of certificate entries returned</td></tr>
+        <tr><td><code>capped</code></td><td><code>bool</code></td><td><code>true</code> if results were truncated at the cap (100)</td></tr>
+        <tr><td><code>entries</code></td><td><code>array</code></td><td>Certificate log entries, sorted newest-first</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>CT Log Entry</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>logged_at</code></td><td><code>string</code></td><td>When the certificate was logged to CT</td></tr>
-      <tr><td><code>not_before</code></td><td><code>string</code></td><td>Certificate validity start</td></tr>
-      <tr><td><code>not_after</code></td><td><code>string</code></td><td>Certificate validity end</td></tr>
-      <tr><td><code>issuer</code></td><td><code>string</code></td><td>Certificate Authority</td></tr>
-      <tr><td><code>common_name</code></td><td><code>string</code></td><td>Certificate CN field</td></tr>
-      <tr><td><code>name_value</code></td><td><code>string</code></td><td>All names covered by the certificate</td></tr>
-      <tr><td><code>serial</code></td><td><code>string</code></td><td>Certificate serial number</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>logged_at</code></td><td><code>string</code></td><td>When the certificate was logged to CT</td></tr>
+        <tr><td><code>not_before</code></td><td><code>string</code></td><td>Certificate validity start</td></tr>
+        <tr><td><code>not_after</code></td><td><code>string</code></td><td>Certificate validity end</td></tr>
+        <tr><td><code>issuer</code></td><td><code>string</code></td><td>Certificate Authority</td></tr>
+        <tr><td><code>common_name</code></td><td><code>string</code></td><td>Certificate CN field</td></tr>
+        <tr><td><code>name_value</code></td><td><code>string</code></td><td>All names covered by the certificate</td></tr>
+        <tr><td><code>serial</code></td><td><code>string</code></td><td>Certificate serial number</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"count"</span>: <span class="num">2</span>,
   <span class="str">"capped"</span>: <span class="kw">false</span>,
@@ -775,26 +842,30 @@ resp = requests.post(
 
   <!-- bgp -->
   <h3 id="bgp"><code>bgp</code> -- BGP / ASN Enrichment</h3>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>records</code></td><td><code>array</code></td><td>ASN records, deduplicated by ASN</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>records</code></td><td><code>array</code></td><td>ASN records, deduplicated by ASN</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>ASN Record</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>ip</code></td><td><code>string</code></td><td>Resolved IP address</td></tr>
-      <tr><td><code>asn</code></td><td><code>int</code></td><td>Autonomous System Number</td></tr>
-      <tr><td><code>prefix</code></td><td><code>string</code></td><td>IP prefix (CIDR notation)</td></tr>
-      <tr><td><code>country</code></td><td><code>string</code></td><td>Country code</td></tr>
-      <tr><td><code>registry</code></td><td><code>string</code></td><td>Regional Internet Registry (arin, ripe, apnic, etc.)</td></tr>
-      <tr><td><code>description</code></td><td><code>string</code></td><td>Organization name</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>ip</code></td><td><code>string</code></td><td>Resolved IP address</td></tr>
+        <tr><td><code>asn</code></td><td><code>int</code></td><td>Autonomous System Number</td></tr>
+        <tr><td><code>prefix</code></td><td><code>string</code></td><td>IP prefix (CIDR notation)</td></tr>
+        <tr><td><code>country</code></td><td><code>string</code></td><td>Country code</td></tr>
+        <tr><td><code>registry</code></td><td><code>string</code></td><td>Regional Internet Registry (arin, ripe, apnic, etc.)</td></tr>
+        <tr><td><code>description</code></td><td><code>string</code></td><td>Organization name</td></tr>
+      </tbody>
+    </table>
+  </div>
   <pre><code>{
   <span class="str">"records"</span>: [
     {
@@ -812,25 +883,29 @@ resp = requests.post(
   <!-- fingerprint -->
   <h3 id="fingerprint"><code>fingerprint</code> -- Technology Fingerprinting</h3>
   <p>Detects web servers, frameworks, CDNs, CMS platforms, and programming languages from HTTP response headers. No extra HTTP requests are made -- detection uses the headers already fetched, so requesting <code>headers</code> alongside it costs nothing extra. Approximately 90 technologies are covered.</p>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether the underlying <code>headers</code> data was served from cache. Fingerprint has no cache entry of its own -- see <a href="#caching">Caching</a></td></tr>
-      <tr><td><code>count</code></td><td><code>int</code></td><td>Number of detected technologies</td></tr>
-      <tr><td><code>technologies</code></td><td><code>array</code></td><td>Detected technologies</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether the underlying <code>headers</code> data was served from cache. Fingerprint has no cache entry of its own -- see <a href="#caching">Caching</a></td></tr>
+        <tr><td><code>count</code></td><td><code>int</code></td><td>Number of detected technologies</td></tr>
+        <tr><td><code>technologies</code></td><td><code>array</code></td><td>Detected technologies</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Technology Entry</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>name</code></td><td><code>string</code></td><td>Technology name (e.g., <code>Nginx</code>, <code>PHP</code>, <code>Cloudflare</code>)</td></tr>
-      <tr><td><code>category</code></td><td><code>string</code></td><td>Category (see below)</td></tr>
-      <tr><td><code>version</code></td><td><code>string</code></td><td>Version extracted from header value (empty if not detectable)</td></tr>
-      <tr><td><code>confidence</code></td><td><code>string</code></td><td>Which signal matched: <code>header</code> or <code>cookie</code></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code></td><td><code>string</code></td><td>Technology name (e.g., <code>Nginx</code>, <code>PHP</code>, <code>Cloudflare</code>)</td></tr>
+        <tr><td><code>category</code></td><td><code>string</code></td><td>Category (see below)</td></tr>
+        <tr><td><code>version</code></td><td><code>string</code></td><td>Version extracted from header value (empty if not detectable)</td></tr>
+        <tr><td><code>confidence</code></td><td><code>string</code></td><td>Which signal matched: <code>header</code> or <code>cookie</code></td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <pre><code>{
   <span class="str">"count"</span>: <span class="num">2</span>,
@@ -846,28 +921,32 @@ resp = requests.post(
   <!-- threat_intel -->
   <h3 id="threat-intel"><code>threat_intel</code> -- Threat Intelligence <span class="tag tag-pro">Pro</span></h3>
   <p>Queries external threat intelligence feeds concurrently and returns an aggregated risk assessment. Three providers are queried: <strong>VirusTotal</strong> (70+ antivirus engines), <strong>URLhaus</strong> (Abuse.ch malware URL database), and <strong>AlienVault OTX</strong> (community threat pulses).</p>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-      <tr><td><code>risk_level</code></td><td><code>string</code></td><td>Aggregate risk: <code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, or <code>critical</code></td></tr>
-      <tr><td><code>score</code></td><td><code>int</code></td><td>Weighted aggregate score (0--100)</td></tr>
-      <tr><td><code>categories</code></td><td><code>string[]</code></td><td>Merged threat categories across all providers</td></tr>
-      <tr><td><code>providers</code></td><td><code>array</code></td><td>Per-provider results (see below)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
+        <tr><td><code>risk_level</code></td><td><code>string</code></td><td>Aggregate risk: <code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, or <code>critical</code></td></tr>
+        <tr><td><code>score</code></td><td><code>int</code></td><td>Weighted aggregate score (0--100)</td></tr>
+        <tr><td><code>categories</code></td><td><code>string[]</code></td><td>Merged threat categories across all providers</td></tr>
+        <tr><td><code>providers</code></td><td><code>array</code></td><td>Per-provider results (see below)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Provider Result</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>provider</code></td><td><code>string</code></td><td>Provider name: <code>virustotal</code>, <code>urlhaus</code>, or <code>alienvault_otx</code></td></tr>
-      <tr><td><code>detected</code></td><td><code>bool</code></td><td>Whether the provider flagged this domain</td></tr>
-      <tr><td><code>score</code></td><td><code>int</code></td><td>Provider-specific score (0--100). Omitted when not detected.</td></tr>
-      <tr><td><code>categories</code></td><td><code>string[]</code></td><td>Threat categories from this provider. Omitted when not detected.</td></tr>
-      <tr><td><code>details</code></td><td><code>string</code></td><td>Human-readable summary (e.g., "3/70 engines detected this domain"). Omitted when not detected.</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>provider</code></td><td><code>string</code></td><td>Provider name: <code>virustotal</code>, <code>urlhaus</code>, or <code>alienvault_otx</code></td></tr>
+        <tr><td><code>detected</code></td><td><code>bool</code></td><td>Whether the provider flagged this domain</td></tr>
+        <tr><td><code>score</code></td><td><code>int</code></td><td>Provider-specific score (0--100). Omitted when not detected.</td></tr>
+        <tr><td><code>categories</code></td><td><code>string[]</code></td><td>Threat categories from this provider. Omitted when not detected.</td></tr>
+        <tr><td><code>details</code></td><td><code>string</code></td><td>Human-readable summary (e.g., "3/70 engines detected this domain"). Omitted when not detected.</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <pre><code>{
   <span class="str">"risk_level"</span>: <span class="str">"medium"</span>,
@@ -903,24 +982,28 @@ resp = requests.post(
   <p>Checks DNSSEC deployment (DS records at the parent zone, DNSKEY records at the zone, signing algorithms) and CAA records via raw DNS queries. Available to all plans. Missing DNSSEC means DNS responses can be spoofed; missing CAA means any certificate authority can issue certificates for the domain.</p>
 
   <h4><code>dnssec</code></h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>enabled</code></td><td><code>bool</code></td><td><code>true</code> when both DS (parent) and DNSKEY (zone) records exist</td></tr>
-      <tr><td><code>ds_records</code></td><td><code>int</code></td><td>Number of DS records at the parent zone</td></tr>
-      <tr><td><code>dnskey_records</code></td><td><code>int</code></td><td>Number of DNSKEY records at the zone</td></tr>
-      <tr><td><code>algorithms</code></td><td><code>string[]</code></td><td>Signing algorithms from DS records (e.g., <code>ECDSAP256SHA256</code>)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>enabled</code></td><td><code>bool</code></td><td><code>true</code> when both DS (parent) and DNSKEY (zone) records exist</td></tr>
+        <tr><td><code>ds_records</code></td><td><code>int</code></td><td>Number of DS records at the parent zone</td></tr>
+        <tr><td><code>dnskey_records</code></td><td><code>int</code></td><td>Number of DNSKEY records at the zone</td></tr>
+        <tr><td><code>algorithms</code></td><td><code>string[]</code></td><td>Signing algorithms from DS records (e.g., <code>ECDSAP256SHA256</code>)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4><code>caa</code></h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>present</code></td><td><code>bool</code></td><td>Whether any CAA records exist</td></tr>
-      <tr><td><code>records</code></td><td><code>array</code></td><td>CAA records: <code>flag</code> (int), <code>tag</code> (<code>issue</code>, <code>issuewild</code>, or <code>iodef</code>), <code>value</code></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>present</code></td><td><code>bool</code></td><td>Whether any CAA records exist</td></tr>
+        <tr><td><code>records</code></td><td><code>array</code></td><td>CAA records: <code>flag</code> (int), <code>tag</code> (<code>issue</code>, <code>issuewild</code>, or <code>iodef</code>), <code>value</code></td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Example</h4>
   <pre><code><span class="flag">curl</span> <span class="flag">-X</span> POST <span class="url">https://api.securityaccelerated.com/v1/domain/lookup</span> \
@@ -950,38 +1033,44 @@ resp = requests.post(
   <!-- risk -->
   <h3 id="risk"><code>risk</code> -- Aggregate Risk Score</h3>
   <p>A computed 0--100 weighted risk score. Only present when <code>risk</code> is included in <code>lookups</code>. It makes no extra network calls and is never cached &mdash; the score is derived from whichever <em>other</em> requested lookups landed on the response, renormalized over the weights of the components that have data. Its <code>cache_hit</code> is <code>true</code> only when every scoring input came from cache.</p>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>score</code></td><td><code>int</code></td><td>Weighted aggregate risk score (0--100)</td></tr>
-      <tr><td><code>risk_level</code></td><td><code>string</code></td><td><code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, or <code>critical</code></td></tr>
-      <tr><td><code>components</code></td><td><code>array</code></td><td>Per-component breakdown (see below)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>score</code></td><td><code>int</code></td><td>Weighted aggregate risk score (0--100)</td></tr>
+        <tr><td><code>risk_level</code></td><td><code>string</code></td><td><code>none</code>, <code>low</code>, <code>medium</code>, <code>high</code>, or <code>critical</code></td></tr>
+        <tr><td><code>components</code></td><td><code>array</code></td><td>Per-component breakdown (see below)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Risk Component</h4>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>component</code></td><td><code>string</code></td><td>Which signal contributed (see weights below)</td></tr>
-      <tr><td><code>score</code></td><td><code>int</code></td><td>This component's 0--100 score</td></tr>
-      <tr><td><code>weight</code></td><td><code>float</code></td><td>The component's weight in the aggregate</td></tr>
-      <tr><td><code>detail</code></td><td><code>string</code></td><td>Human-readable explanation (e.g., <code>certificate expires in 12 days</code>)</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>component</code></td><td><code>string</code></td><td>Which signal contributed (see weights below)</td></tr>
+        <tr><td><code>score</code></td><td><code>int</code></td><td>This component's 0--100 score</td></tr>
+        <tr><td><code>weight</code></td><td><code>float</code></td><td>The component's weight in the aggregate</td></tr>
+        <tr><td><code>detail</code></td><td><code>string</code></td><td>Human-readable explanation (e.g., <code>certificate expires in 12 days</code>)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Component Weights</h4>
-  <table>
-    <thead><tr><th>Component</th><th>Weight</th><th>Signal</th></tr></thead>
-    <tbody>
-      <tr><td><code>threat_intel</code></td><td>0.35</td><td>Aggregate threat intelligence score (when requested)</td></tr>
-      <tr><td><code>reputation</code></td><td>0.25</td><td>DNS blocklist reputation score (when requested)</td></tr>
-      <tr><td><code>ssl</code></td><td>0.10</td><td>Certificate expired or expiring soon</td></tr>
-      <tr><td><code>security_headers</code></td><td>0.10</td><td>Missing common security headers</td></tr>
-      <tr><td><code>email_security</code></td><td>0.10</td><td>Missing or weak SPF / DMARC (when requested)</td></tr>
-      <tr><td><code>domain_age</code></td><td>0.10</td><td>Recently registered domains score higher</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Component</th><th>Weight</th><th>Signal</th></tr></thead>
+      <tbody>
+        <tr><td><code>threat_intel</code></td><td>0.35</td><td>Aggregate threat intelligence score (when requested)</td></tr>
+        <tr><td><code>reputation</code></td><td>0.25</td><td>DNS blocklist reputation score (when requested)</td></tr>
+        <tr><td><code>ssl</code></td><td>0.10</td><td>Certificate expired or expiring soon</td></tr>
+        <tr><td><code>security_headers</code></td><td>0.10</td><td>Missing common security headers</td></tr>
+        <tr><td><code>email_security</code></td><td>0.10</td><td>Missing or weak SPF / DMARC (when requested)</td></tr>
+        <tr><td><code>domain_age</code></td><td>0.10</td><td>Recently registered domains score higher</td></tr>
+      </tbody>
+    </table>
+  </div>
   <p>Components only contribute when their underlying lookup ran and returned data. A base lookup scores from SSL, security headers, and domain age alone; requesting <code>threat_intel</code> or <code>reputation</code> makes those signals dominate.</p>
 
   <pre><code>{
@@ -995,27 +1084,31 @@ resp = requests.post(
 }</code></pre>
 
   <h4>Risk Levels</h4>
-  <table>
-    <thead><tr><th>Risk Level</th><th>Score Range</th></tr></thead>
-    <tbody>
-      <tr><td><span class="risk-clean">none</span></td><td>0</td></tr>
-      <tr><td><span class="risk-low">low</span></td><td>1 -- 20</td></tr>
-      <tr><td><span class="risk-medium">medium</span></td><td>21 -- 50</td></tr>
-      <tr><td><span class="risk-high">high</span></td><td>51 -- 80</td></tr>
-      <tr><td><span class="risk-high">critical</span></td><td>81 -- 100</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Risk Level</th><th>Score Range</th></tr></thead>
+      <tbody>
+        <tr><td><span class="risk-clean">none</span></td><td>0</td></tr>
+        <tr><td><span class="risk-low">low</span></td><td>1 -- 20</td></tr>
+        <tr><td><span class="risk-medium">medium</span></td><td>21 -- 50</td></tr>
+        <tr><td><span class="risk-high">high</span></td><td>51 -- 80</td></tr>
+        <tr><td><span class="risk-high">critical</span></td><td>81 -- 100</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <!-- errors -->
   <h3 id="errors-field"><code>errors</code> -- Partial Failures</h3>
   <p>Individual lookups can fail without blocking the rest of the response. Each error contains:</p>
-  <table>
-    <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>lookup</code></td><td><code>string</code></td><td>Which lookup failed (e.g., <code>whois</code>, <code>dns</code>, <code>ssl</code>)</td></tr>
-      <tr><td><code>message</code></td><td><code>string</code></td><td>Human-readable error description</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>lookup</code></td><td><code>string</code></td><td>Which lookup failed (e.g., <code>whois</code>, <code>dns</code>, <code>ssl</code>)</td></tr>
+        <tr><td><code>message</code></td><td><code>string</code></td><td>Human-readable error description</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <!-- Caching -->
   <h2 id="caching">Caching</h2>
@@ -1024,15 +1117,17 @@ resp = requests.post(
 
   <h4>TTLs</h4>
   <p>Every lookup has its own TTL, reflecting how fast that data actually changes. Expiry is absolute &mdash; an expired entry is gone and the lookup is refetched. There is no stale serving.</p>
-  <table>
-    <thead><tr><th>Lookup</th><th>TTL</th></tr></thead>
-    <tbody>
-      <tr><td><code>whois</code>, <code>ct_logs</code>, <code>subdomains</code>, <code>bgp</code></td><td>24 hours</td></tr>
-      <tr><td><code>ssl</code>, <code>email_security</code>, <code>dns_security</code></td><td>4 hours</td></tr>
-      <tr><td><code>screenshot</code></td><td>60 minutes</td></tr>
-      <tr><td><code>dns</code>, <code>headers</code>, <code>reputation</code>, <code>threat_intel</code></td><td>30 minutes</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Lookup</th><th>TTL</th></tr></thead>
+      <tbody>
+        <tr><td><code>whois</code>, <code>ct_logs</code>, <code>subdomains</code>, <code>bgp</code></td><td>24 hours</td></tr>
+        <tr><td><code>ssl</code>, <code>email_security</code>, <code>dns_security</code></td><td>4 hours</td></tr>
+        <tr><td><code>screenshot</code></td><td>60 minutes</td></tr>
+        <tr><td><code>dns</code>, <code>headers</code>, <code>reputation</code>, <code>threat_intel</code></td><td>30 minutes</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4><code>fingerprint</code> and <code>risk</code> are never cached separately</h4>
   <p>Both are pure computation over data already fetched for other lookups, so they cost no network call and get no cache entry of their own.</p>
@@ -1050,20 +1145,23 @@ resp = requests.post(
 
   <!-- Error Handling -->
   <h2 id="error-handling">Error Handling</h2>
-  <table>
-    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
-    <tbody>
-      <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>domains</code> field, or invalid domain name</td></tr>
-      <tr><td><code>400 Bad Request</code></td><td><code>lookups</code> missing or empty after normalization &mdash; <code>lookups is required, e.g. ["dns", "ssl"]</code></td></tr>
-      <tr><td><code>400 Bad Request</code></td><td>Unrecognized lookup name &mdash; the message names the offending entry</td></tr>
-      <tr><td><code>400 Bad Request</code></td><td>More domains than your plan allows</td></tr>
-      <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
-      <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint, or a requested lookup &mdash; e.g. <code>screenshot requires a pro plan</code></td></tr>
-      <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
-      <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
-      <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing <code>domains</code> field, or invalid domain name</td></tr>
+        <tr><td><code>400 Bad Request</code></td><td><code>lookups</code> missing or empty after normalization &mdash; <code>lookups is required, e.g. ["dns", "ssl"]</code></td></tr>
+        <tr><td><code>400 Bad Request</code></td><td>Unrecognized lookup name &mdash; the message names the offending entry</td></tr>
+        <tr><td><code>400 Bad Request</code></td><td>More domains than your plan allows</td></tr>
+        <tr><td><code>400 Bad Request</code></td><td>More domains than the tighter cap that applies when <code>subdomains</code> is requested &mdash; see <a href="#subdomain-cap">Subdomain batch limits</a></td></tr>
+        <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
+        <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint, or a requested lookup &mdash; e.g. <code>screenshot requires a pro plan</code></td></tr>
+        <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
+        <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
+        <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <h4>Error Response Format</h4>
   <p>All error responses use this format:</p>
@@ -1077,14 +1175,16 @@ resp = requests.post(
   <h2 id="request-correlation">Request Correlation</h2>
   <p>Every response carries an <code>X-Request-ID</code> the API generates for you. You can additionally send your own <code>X-Client-Request-ID</code> to tie a request to an identifier your systems already use &mdash; it is echoed back and recorded in server-side logs.</p>
 
-  <table>
-    <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
-    <tbody>
-      <tr><td><code>X-Client-Request-ID</code></td><td>Request</td><td>Your correlation ID. Up to 64 characters, limited to letters, digits, hyphens, underscores, dots, and colons &mdash; enough for UUIDs and common trace IDs.</td></tr>
-      <tr><td><code>X-Client-Request-ID</code></td><td>Response</td><td>Echoed back byte for byte when the value you sent was accepted.</td></tr>
-      <tr><td><code>X-Request-ID</code></td><td>Response</td><td>A UUID the API generates for every request, whether or not you sent a correlation ID. Quote this when contacting support.</td></tr>
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>X-Client-Request-ID</code></td><td>Request</td><td>Your correlation ID. Up to 64 characters, limited to letters, digits, hyphens, underscores, dots, and colons &mdash; enough for UUIDs and common trace IDs.</td></tr>
+        <tr><td><code>X-Client-Request-ID</code></td><td>Response</td><td>Echoed back byte for byte when the value you sent was accepted.</td></tr>
+        <tr><td><code>X-Request-ID</code></td><td>Response</td><td>A UUID the API generates for every request, whether or not you sent a correlation ID. Quote this when contacting support.</td></tr>
+      </tbody>
+    </table>
+  </div>
 
   <div class="note">A correlation ID that is too long or contains other characters is ignored rather than rejected &mdash; the request succeeds normally, but nothing is echoed back. If you are relying on the header for tracing, treat a missing <code>X-Client-Request-ID</code> on the response as a signal that the value did not pass validation. <code>X-Request-ID</code> is always present &mdash; including on error responses, where correlation matters most &mdash; so it works as a fallback.</div>
 
