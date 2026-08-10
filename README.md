@@ -1059,7 +1059,7 @@ make run    # builds and starts the server
 | `make clean` | Remove build artifacts |
 | `make release V=v0.1.0` | Tag and push a release |
 | `make deploy` | Deploy to Fly.io with git version baked in |
-| `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup |
+| `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup. The wait is bounded by `RESET_TIMEOUT` (default 300s), after which it names the dependency that never came up |
 | `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080` |
 | `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
 | `./scripts/info.sh [host]` | Pretty-print the `/v1/info` admin endpoint. Defaults to production |

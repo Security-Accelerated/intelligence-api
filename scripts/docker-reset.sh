@@ -26,6 +26,23 @@ docker compose up --build -d
 # name of the stuck dependency instead of hanging the terminal forever.
 TIMEOUT="${RESET_TIMEOUT:-300}"
 
+# Each probe carries its own timeout as well, because wait_for only re-checks
+# the deadline between calls: a probe that blocks forever never returns to the
+# loop, and TIMEOUT bounds nothing.
+#
+# curl is the one that could actually hang. It has no read timeout by default,
+# and a Go server that has bound its listener but is still starting accepts the
+# connection and writes no response — measured at over 10s against a socket that
+# accepts and never replies, versus 5s with this flag. pg_isready already
+# defaults to a 3s connect timeout, so it is stated here for symmetry and to
+# stop the bound depending on a tool default rather than on this script.
+#
+# The bound is per-probe rather than an outer `timeout`, which is GNU coreutils
+# and absent from a stock macOS. It also stops at the readiness loop on purpose:
+# a wedged Docker daemon hangs `docker compose up --build` several lines earlier,
+# so bounding only these two calls against it would be a false reassurance.
+PROBE_TIMEOUT=5
+
 wait_for() {
     local name="$1"
     shift
@@ -41,7 +58,8 @@ wait_for() {
 }
 
 echo "==> Waiting for postgres to be ready..."
-wait_for postgres docker compose exec -T postgres pg_isready -U intelligence -d intelligence_api
+wait_for postgres docker compose exec -T postgres \
+    pg_isready -U intelligence -d intelligence_api -t "$PROBE_TIMEOUT"
 
 echo "==> Waiting for API to be ready..."
-wait_for api curl -sf http://localhost:8080/v1/hello
+wait_for api curl -sf --max-time "$PROBE_TIMEOUT" http://localhost:8080/v1/hello
