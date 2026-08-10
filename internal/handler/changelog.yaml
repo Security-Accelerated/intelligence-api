@@ -8,6 +8,32 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.69.0
+  date: 2026-08-10
+  changes:
+    - text: "The overview now opens with a working request. Authentication, plans, pricing, rate limiting and error handling all came before the first copy-pasteable call, so the page that should get you started explained the API before it showed it"
+      audience: public
+    - text: "/v1/usage and /v1/keys/rotate have a reference page of their own at /docs/account, with parameters, response fields, four-language examples, and the sequence for rotating a key without downtime. They are two of the four public endpoints and were the only two documented by a single table row"
+      audience: public
+    - text: "Documented that screenshot captures run under a small service-wide concurrency cap — typically one at a time — and that a capture which does not start before the request deadline reports 'screenshot queue timed out, please retry' in errors. Unlike most lookup errors that one is worth retrying — it means the service was busy, not that the answer is unavailable"
+      audience: public
+    - text: "Both reference pages now show what a real upstream failure looks like: a valid target, a 200 response, and the failed lookup's field absent entirely rather than null. Requesting n lookups does not guarantee n fields, and code reaching straight for result.whois.registrar works in testing and throws the first time an upstream has a bad minute"
+      audience: public
+    - text: "Documented that repeated key rotation never extends an expiry that is already set, so keys grace-expired by an earlier rotation keep their original deadline and rotation cannot be used to keep an exposed key alive"
+      audience: public
+    - text: "The OpenAPI spec carries the same two contracts: the screenshot queue timeout on the screenshot property, and the absent-field behaviour on the errors array"
+      audience: public
+    - text: "Documented what the lookup name in an errors entry actually tells you. A plain name (whois) means that lookup failed and its field is absent; a qualified name (threat_intel:virustotal) means one provider inside a fan-out lookup failed while the others answered, and that lookup's field is still present. Treating every errors entry as a missing field throws away good partial results from reputation and threat_intel"
+      audience: public
+    - text: "docsPages in docs.go is now the canonical page set — routes are registered by looping it and tests derive their lists from it. The set was previously spelled out in six places, and adding /docs/account meant finding them all by hand. The nav test caught only the last of them"
+      audience: internal
+    - text: "Found while wiring that up: the language-tab, Go-compile and request-contract tests each carried their own hard-coded two-page list, so the new page's Go example was not being compiled. The first two now select pages that actually carry tabs; the third stays scoped to the lookup pages, since it asserts the lookup request contract the account examples do not share"
+      audience: internal
+    - text: "The rotation wording was checked against the SQL rather than assumed: RotateKey only sets expires_at where it is NULL or later than the new grace expiry, which is what makes repeated rotation unable to extend an exposed key's life"
+      audience: internal
+    - text: "Review caught two over-claims in the first draft: errors was described as always meaning an absent field, which is wrong for the fan-out lookups, and screenshot concurrency was stated as one at a time when screenshot.max_concurrent is configurable. The README also still said each customer has one API key, which migration 012 stopped being true"
+      audience: internal
+
 - version: v0.68.0
   date: 2026-08-10
   changes:

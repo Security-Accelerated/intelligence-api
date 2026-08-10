@@ -49,6 +49,9 @@ var docsDomainHTML string
 //go:embed docs_ip.html
 var docsIPHTML string
 
+//go:embed docs_account.html
+var docsAccountHTML string
+
 //go:embed docs_changelog.html
 var docsChangelogHTML string
 
@@ -58,8 +61,32 @@ var docsNotFoundHTML string
 var docsTmpl = template.Must(template.New("docs").Parse(docsHTML))
 var docsDomainTmpl = template.Must(template.New("docs_domain").Parse(docsDomainHTML))
 var docsIPTmpl = template.Must(template.New("docs_ip").Parse(docsIPHTML))
+var docsAccountTmpl = template.Must(template.New("docs_account").Parse(docsAccountHTML))
 var docsChangelogTmpl = template.Must(template.New("docs_changelog").Parse(docsChangelogHTML))
 var docsNotFoundTmpl = template.Must(template.New("docs_404").Parse(docsNotFoundHTML))
+
+// docsPage is one public documentation page.
+type docsPage struct {
+	Path string
+	HTML string
+	Tmpl *template.Template
+}
+
+// docsPages is the canonical set of documentation pages, in nav order. Routes
+// are registered from it and the tests enumerate it, so a page cannot be added
+// to one and forgotten in the other.
+//
+// It exists because the alternative failed: the page set was previously spelled
+// out in the router, twice in docs_test.go, twice more in docs_layout_test.go,
+// and in every template's topbar nav. Adding /docs/account meant finding all
+// six by hand, and the nav test only catches the last of them.
+var docsPages = []docsPage{
+	{"/docs", docsHTML, docsTmpl},
+	{"/docs/domain", docsDomainHTML, docsDomainTmpl},
+	{"/docs/ip", docsIPHTML, docsIPTmpl},
+	{"/docs/account", docsAccountHTML, docsAccountTmpl},
+	{"/docs/changelog", docsChangelogHTML, docsChangelogTmpl},
+}
 
 type docsData struct {
 	BasicPaymentLink string
@@ -130,16 +157,9 @@ func (h *Handler) CheckoutSuccessJS(c *gin.Context) {
 	c.Data(http.StatusOK, "application/javascript; charset=utf-8", []byte(checkoutSuccessJS))
 }
 
-func (h *Handler) Docs(c *gin.Context) {
-	h.renderDocs(c, docsTmpl)
-}
-
-func (h *Handler) DocsDomain(c *gin.Context) {
-	h.renderDocs(c, docsDomainTmpl)
-}
-
-func (h *Handler) DocsIP(c *gin.Context) {
-	h.renderDocs(c, docsIPTmpl)
+// docsPageHandler serves one page from the docsPages table.
+func (h *Handler) docsPageHandler(tmpl *template.Template) gin.HandlerFunc {
+	return func(c *gin.Context) { h.renderDocs(c, tmpl) }
 }
 
 // NotFound answers any request that matched no route. It is the engine's
@@ -173,10 +193,9 @@ func isAPIPath(path string) bool {
 	return path == "/v1" || path == "/billing"
 }
 
-// DocsChangelog serves the release notes as their own page. They used to sit at
-// the bottom of the overview and the domain reference, which pushed the
-// changelog's length onto pages people open to look something up, and meant two
-// copies of the same list to keep in sync.
-func (h *Handler) DocsChangelog(c *gin.Context) {
-	h.renderDocs(c, docsChangelogTmpl)
-}
+// The release notes have their own page rather than sitting at the bottom of
+// the overview and the domain reference, which pushed the changelog's length
+// onto pages people open to look something up and meant two copies of the same
+// list to keep in sync. Likewise the account endpoints have their own page
+// rather than a table row on the overview: /v1/usage and /v1/keys/rotate are
+// two of the four public endpoints and were the only two with no reference.

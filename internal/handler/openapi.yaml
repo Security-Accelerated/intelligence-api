@@ -414,7 +414,20 @@ components:
         headers:
           $ref: '#/components/schemas/HeadersInfo'
         screenshot:
-          $ref: '#/components/schemas/ScreenshotInfo'
+          allOf:
+            - $ref: '#/components/schemas/ScreenshotInfo'
+          description: >
+            Screenshot captures run under a small service-wide concurrency
+            cap — typically one at a time — because each capture runs a
+            browser. A request whose capture has not started before the
+            deadline reports `screenshot queue timed out, please retry` in
+            `errors` instead, leaving every other lookup unaffected.
+
+            Unlike most lookup errors this one is worth retrying: it means the
+            service was busy, not that the answer is unavailable. Ask for
+            `screenshot` over a handful of domains rather than a full batch,
+            and send it as its own request so a queue wait never delays
+            lookups that would have returned immediately.
         reputation:
           $ref: '#/components/schemas/ReputationResult'
         email_security:
@@ -437,7 +450,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LookupError'
-          description: Per-lookup failures; the rest of the response is still populated.
+          description: >
+            Per-lookup failures; the rest of the response is still populated.
+
+            `lookup` is either a plain lookup name or `<lookup>:<provider>`,
+            and the two mean different things. A plain name means that lookup
+            failed outright and its field is absent from the result — the key
+            is missing rather than null, so requesting n lookups does not
+            guarantee n fields. A qualified name means one provider inside a
+            fan-out lookup (reputation, threat_intel) failed while the others
+            answered: that lookup's field IS present, scored over the providers
+            that responded.
+
+            Either way the failure is never cached, so the next request retries.
       required:
         - domain
         - inputs

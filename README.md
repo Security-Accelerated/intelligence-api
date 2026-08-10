@@ -7,7 +7,7 @@ A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header,
 
 ## Authentication
 
-Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL and belong to a customer. Each customer has one API key and a plan. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/changelog`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
+Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL as `hex(sha256(key))` and belong to a customer, who has a plan. A customer normally holds one live key, but holds several during a rotation grace window: `POST /v1/keys/rotate` issues a new key and leaves the previous ones authenticating until `auth.rotation_grace` (default 24h) elapses, so deployed clients can be switched over without downtime. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/account`, `/docs/changelog`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
 
 ### Customer Plans
 
@@ -49,6 +49,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/docs` | None | API documentation landing page |
 | GET | `/docs/domain` | None | Domain Intelligence API docs |
 | GET | `/docs/ip` | None | IP Intelligence API docs |
+| GET | `/docs/account` | None | Usage statistics and key rotation docs |
 | GET | `/docs/changelog` | None | Public release notes |
 | GET | `/docs/openapi.yaml` | None | OpenAPI specification for the public API |
 | GET | `/v1/hello` | None | Health check, returns `{"message": "hello world"}` |

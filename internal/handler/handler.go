@@ -152,10 +152,9 @@ func (h *Handler) maxIPs(plan string) int {
 // RegisterRoutes registers unauthenticated routes only (health check, docs, billing).
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
 	router.GET("/", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/docs") })
-	router.GET("/docs", h.Docs)
-	router.GET("/docs/domain", h.DocsDomain)
-	router.GET("/docs/ip", h.DocsIP)
-	router.GET("/docs/changelog", h.DocsChangelog)
+	for _, page := range docsPages {
+		router.GET(page.Path, h.docsPageHandler(page.Tmpl))
+	}
 	router.GET("/docs/styles.css", h.DocsCSS)
 	router.GET("/docs/theme.js", h.DocsThemeJS)
 	router.GET("/docs/docs.js", h.DocsJS)
