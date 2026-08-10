@@ -107,6 +107,40 @@ document.querySelectorAll('.lang-tab').forEach(function(tab) {
   }
 })();
 
+/* Keyboard access for tables that scroll sideways.
+
+   A scrollable box is only reachable by keyboard if it is focusable, but
+   marking every table focusable in the markup would add a dead tab stop for
+   each of the ~40 tables on the domain page that fit fine. So the tab stop is
+   granted only while a table actually overflows, which on these pages means
+   only on narrow viewports. */
+(function() {
+  var wrappers = document.querySelectorAll('.table-scroll');
+  if (!wrappers.length) return;
+
+  function sync() {
+    wrappers.forEach(function(el) {
+      if (el.scrollWidth > el.clientWidth + 1) {
+        el.classList.add('is-scrollable');
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('role', 'region');
+        el.setAttribute('aria-label', 'Table, scrollable');
+      } else {
+        el.classList.remove('is-scrollable');
+        el.removeAttribute('tabindex');
+        el.removeAttribute('role');
+        el.removeAttribute('aria-label');
+      }
+    });
+  }
+
+  sync();
+  window.addEventListener('resize', sync);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(sync);
+  }
+})();
+
 /* Sidebar scroll-spy */
 (function() {
   var links = document.querySelectorAll('.sidebar a[href^="#"]');

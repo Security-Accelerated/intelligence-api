@@ -55,6 +55,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/v1/health` | None | Dependency health (Postgres, Redis, GeoIP) for ops monitoring |
 | POST | `/billing/webhook` | None (Stripe signature) | Stripe webhook endpoint |
 | GET | `/billing/success` | None (session_id token) | Post-checkout API key retrieval page |
+| any | *(unmatched)* | None | 404 — `{"error": "not found"}` under `/v1` and `/billing`, docs-styled HTML page for every other path |
 | GET | `/v1/info` | `admin` | Application and environment info |
 | POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |
 | POST | `/v1/ip/lookup` | All plans | IP intelligence lookup |
@@ -66,6 +67,8 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | POST | `/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
 | GET | `/v1/admin/usage` | `admin` | Aggregated API usage statistics |
 | GET | `/v1/admin/changelog` | `admin` | Full changelog with audience tags |
+
+The 404 chooses its form by path prefix, not by `Accept`, so a mistyped endpoint returns the error envelope to any client. Neither form echoes the requested path back: reflecting caller-chosen text onto our own domain would turn the 404 into a place to host arbitrary wording under `api.securityaccelerated.com`.
 
 ### POST /v1/domain/lookup
 

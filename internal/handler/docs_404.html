@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="No route matches this address. Links to the Intelligence API documentation, endpoint reference, and OpenAPI specification.">
+<meta name="robots" content="noindex">
+<title>Not found - Intelligence API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/styles.css">
+<script src="/docs/theme.js"></script>
+<style>
+  /* No sidebar on this page, so the bar scrolls with the content and the
+     brand has no toggle to clear. */
+  .topbar { position: sticky; left: auto; right: auto; z-index: 20; }
+
+  .page-shell { max-width: 860px; }
+
+  .notfound-code {
+    display: block;
+    margin-bottom: 10px;
+    color: var(--ink-soft);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+  }
+
+  /* min(230px, 100%) rather than a bare 230px: when the container is narrower
+     than the minimum track, auto-fit still floors the track at 230px and the
+     cards overhang it — measured overflowing the page below 305px. Folding the
+     container width into the minimum collapses it to one full-width column
+     wherever it has to, at every width rather than at one breakpoint. */
+  .notfound-routes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
+    gap: 12px;
+    margin-top: 26px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .notfound-routes li { margin: 0; }
+
+  .notfound-routes a {
+    display: block;
+    height: 100%;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--control-soft-bg);
+    color: var(--ink);
+    font-weight: 700;
+    transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+  }
+
+  .notfound-routes a:hover {
+    border-color: var(--card-hover-border);
+    background: var(--nav-hover-bg);
+    transform: translateY(-1px);
+  }
+
+  .notfound-routes span {
+    display: block;
+    margin-top: 4px;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    font-weight: 400;
+  }
+
+  @media (max-width: 860px) {
+    .topbar-brand { margin-left: 0; }
+  }
+
+  @media (max-width: 720px) {
+    .page-shell { padding: 28px 16px 24px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .notfound-routes a { transition: none; }
+    .notfound-routes a:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="/docs" class="topbar-brand"><span>Security</span> Accelerated</a>
+  <div class="topbar-actions">
+    <nav class="topbar-nav">
+      <a href="/docs">Overview</a>
+      <a href="/docs/domain">Domain</a>
+      <a href="/docs/ip">IP</a>
+      <a href="/docs/changelog">Changelog</a>
+    </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Theme toggle" aria-pressed="false" title="Switch theme">
+      <span class="theme-toggle-glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="transparent" stroke="var(--theme-icon-ring)" stroke-width="1.5"></circle>
+          <path d="M12 4.5A7.5 7.5 0 0 0 12 19.5Z" fill="var(--theme-icon-dark)"></path>
+          <path d="M12 4.5A7.5 7.5 0 0 1 12 19.5Z" fill="var(--theme-icon-light)"></path>
+          <path d="M12 4.6v14.8" stroke="var(--theme-icon-divider)" stroke-width="1"></path>
+        </svg>
+      </span>
+      <span class="theme-toggle-label">Dark mode</span>
+    </button>
+  </div>
+</header>
+
+<main class="page-shell">
+  <section class="hero">
+    <p class="eyebrow">Error 404</p>
+    <h1>No route here</h1>
+    <p>Nothing is served at the address you requested. If a link on this site brought you here, tell us at <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a> and we will fix it.</p>
+    <p>Calling the API? An unknown path under <code>/v1</code> returns the same error envelope as every other failure, so your existing error handling covers it:</p>
+    <pre><code><span class="notfound-code">HTTP/1.1 404 Not Found</span>{
+  <span class="str">"error"</span>: <span class="str">"not found"</span>
+}</code></pre>
+
+    <ul class="notfound-routes">
+      <li><a href="/docs">Overview<span>Authentication, plans, rate limits, and error handling</span></a></li>
+      <li><a href="/docs/domain">Domain Intelligence<span>POST /v1/domain/lookup and every response field</span></a></li>
+      <li><a href="/docs/ip">IP Intelligence<span>POST /v1/ip/lookup and every response field</span></a></li>
+      <li><a href="/docs/changelog">Changelog<span>Customer-facing changes, newest first</span></a></li>
+      <li><a href="/docs/openapi.yaml">OpenAPI specification<span>Generate a client from the full contract</span></a></li>
+    </ul>
+  </section>
+</main>
+
+<footer class="docs-footer">
+  <div class="docs-footer-shell">
+    <div class="docs-footer-panel">
+      <p class="docs-footer-copy">&copy; 2026 Security Accelerated</p>
+      <nav class="docs-footer-links" aria-label="Footer links">
+        <a href="/docs/openapi.yaml" class="docs-footer-link">OpenAPI spec</a>
+        <a href="mailto:support@securityaccelerated.com" class="docs-footer-link">support@securityaccelerated.com</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<script src="/docs/docs.js" defer></script>
+</body>
+</html>

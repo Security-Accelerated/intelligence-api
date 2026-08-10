@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -51,10 +52,14 @@ var docsIPHTML string
 //go:embed docs_changelog.html
 var docsChangelogHTML string
 
+//go:embed docs_404.html
+var docsNotFoundHTML string
+
 var docsTmpl = template.Must(template.New("docs").Parse(docsHTML))
 var docsDomainTmpl = template.Must(template.New("docs_domain").Parse(docsDomainHTML))
 var docsIPTmpl = template.Must(template.New("docs_ip").Parse(docsIPHTML))
 var docsChangelogTmpl = template.Must(template.New("docs_changelog").Parse(docsChangelogHTML))
+var docsNotFoundTmpl = template.Must(template.New("docs_404").Parse(docsNotFoundHTML))
 
 type docsData struct {
 	BasicPaymentLink string
@@ -135,6 +140,37 @@ func (h *Handler) DocsDomain(c *gin.Context) {
 
 func (h *Handler) DocsIP(c *gin.Context) {
 	h.renderDocs(c, docsIPTmpl)
+}
+
+// NotFound answers any request that matched no route. It is the engine's
+// NoRoute handler, so it runs under the global middleware only — no auth, no
+// rate limit.
+//
+// API namespaces get the same JSON error envelope as every other failure, so a
+// mistyped endpoint is handled by a caller's existing error path rather than
+// arriving as a page of HTML. Everything else gets the docs-styled page, which
+// is what a browser following a stale link is asking for.
+//
+// The requested path is deliberately not echoed back. Reflecting attacker-chosen
+// text onto our own domain is a phishing primitive, and a 404 page has no need
+// to repeat an address the reader just typed.
+func (h *Handler) NotFound(c *gin.Context) {
+	if isAPIPath(c.Request.URL.Path) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	renderHTML(c, http.StatusNotFound, docsNotFoundTmpl, h.buildDocsData(), htmlPageHeaders(nil))
+}
+
+// isAPIPath reports whether a path belongs to a machine-facing namespace, where
+// a JSON body is the useful answer.
+func isAPIPath(path string) bool {
+	for _, prefix := range []string{"/v1/", "/billing/"} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return path == "/v1" || path == "/billing"
 }
 
 // DocsChangelog serves the release notes as their own page. They used to sit at

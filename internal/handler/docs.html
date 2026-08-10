@@ -16,7 +16,7 @@
 <style>
   /* Overview layout overrides */
   .topbar { position: sticky; left: auto; right: auto; z-index: 20; }
-  html { scroll-padding-top: 96px; }
+  html { scroll-padding-top: calc(var(--topbar-height) + 24px); }
 
   .hero-card,
   .section-card,
@@ -220,16 +220,24 @@
     align-items: start;
   }
 
+  /* minmax(0, 1fr), not 1fr: an auto minimum floors the track at the widest
+     item's min-content — here the unbreakable base URL — so the collapsed
+     single column stayed wider than the card, and the card clips its overflow,
+     which cut the hero copy off mid-sentence on a phone. */
   @media (max-width: 980px) {
     .hero-card,
     .two-column,
-    .services { grid-template-columns: 1fr; }
+    .services { grid-template-columns: minmax(0, 1fr); }
     .hero-card h1 { max-width: none; }
   }
 
+  /* The overview is the one page with no sidebar, so it has no sidebar toggle
+     for the brand to clear. */
+  @media (max-width: 860px) {
+    .topbar-brand { margin-left: 0; }
+  }
+
   @media (max-width: 720px) {
-    .topbar { padding: 16px 18px; }
-    .topbar-nav { display: none; }
     .page-shell { padding: 28px 16px 24px; }
     .hero-card,
     .section-card,
@@ -345,45 +353,49 @@
     <p class="section-label">Commercial Model</p>
     <h2>Plans</h2>
     <p>Plans control request volume, batch size, and access to premium lookups such as screenshots, reputation, and threat intelligence.</p>
-    <table>
-      <thead><tr><th>Feature</th><th>Free</th><th>Basic</th><th>Pro</th></tr></thead>
-      <tbody>
-        <tr><td>Rate limit</td><td>5 req/min</td><td>30 req/min</td><td>120 req/min</td></tr>
-        <tr><td>Domains per request</td><td>1</td><td>5</td><td>20</td></tr>
-        <tr><td>IPs per request</td><td>1</td><td>5</td><td>20</td></tr>
-        <tr><td>Core lookups (WHOIS, DNS, SSL, headers, GeoIP, ASN, RDNS)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-        <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, DNS security, abuse contact</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-        <tr><td>Aggregate risk score (computed on every domain lookup)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-        <tr><td>Usage statistics + self-service key rotation</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-        <tr><td>Screenshot, reputation, threat intelligence</td><td>-</td><td>-</td><td>Yes</td></tr>
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Feature</th><th>Free</th><th>Basic</th><th>Pro</th></tr></thead>
+        <tbody>
+          <tr><td>Rate limit</td><td>5 req/min</td><td>30 req/min</td><td>120 req/min</td></tr>
+          <tr><td>Domains per request</td><td>1</td><td>5</td><td>20</td></tr>
+          <tr><td>IPs per request</td><td>1</td><td>5</td><td>20</td></tr>
+          <tr><td>Core lookups (WHOIS, DNS, SSL, headers, GeoIP, ASN, RDNS)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, DNS security, abuse contact</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Aggregate risk score (computed on every domain lookup)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Usage statistics + self-service key rotation</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Screenshot, reputation, threat intelligence</td><td>-</td><td>-</td><td>Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section class="section-card">
     <p class="section-label">Upgrade Paths</p>
     <h2>Pricing</h2>
     <p>Start with a free key, then move up when you need larger request batches or premium enrichment.</p>
-    <table>
-      <thead><tr><th>Plan</th><th>Features</th><th></th></tr></thead>
-      <tbody>
-        <tr>
-          <td><strong>Free</strong></td>
-          <td>5 req/min, 1 target/request, core lookups</td>
-          <td>Included with any API key</td>
-        </tr>
-        <tr>
-          <td><strong>Basic</strong></td>
-          <td>30 req/min, 5 targets/request, core lookups + email security, subdomains, CT logs, BGP, fingerprint</td>
-          <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
-        </tr>
-        <tr>
-          <td><strong>Pro</strong></td>
-          <td>120 req/min, 20 targets/request, all lookups including screenshot, reputation, and threat intel</td>
-          <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Plan</th><th>Features</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Free</strong></td>
+            <td>5 req/min, 1 target per request, every lookup except screenshot, reputation, and threat intelligence</td>
+            <td>Included with any API key</td>
+          </tr>
+          <tr>
+            <td><strong>Basic</strong></td>
+            <td>30 req/min, 5 targets per request, same lookups as Free</td>
+            <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
+          </tr>
+          <tr>
+            <td><strong>Pro</strong></td>
+            <td>120 req/min, 20 targets per request, adds screenshot, reputation, and threat intelligence</td>
+            <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div class="note">After subscribing, your API key is shown once on the confirmation page. Capture it immediately because it cannot be retrieved later.</div>
     {{if .PortalLink}}<a href="{{.PortalLink}}" class="portal-link">Manage your subscription</a>{{end}}
   </section>
@@ -393,20 +405,22 @@
       <p class="section-label">Traffic Control</p>
       <h2>Rate Limiting</h2>
       <p>Requests are rate-limited per API key with a sliding window. Every response includes headers that let your client adapt without guesswork.</p>
-      <table>
-        <thead><tr><th>Header</th><th>Description</th></tr></thead>
-        <tbody>
-          <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests per minute for your plan</td></tr>
-          <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
-          <tr><td><code>Retry-After</code></td><td>Seconds to wait before retrying on <code>429</code></td></tr>
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Header</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests per minute for your plan</td></tr>
+            <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
+            <tr><td><code>Retry-After</code></td><td>Seconds to wait before retrying on <code>429</code></td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
     <div>
       <p class="section-label">Freshness</p>
       <h2>Caching</h2>
       <p>Domain results are cached <strong>per lookup, per domain</strong>, each with its own TTL &mdash; 30 minutes for fast-moving data like <code>dns</code> and <code>headers</code>, up to 24 hours for <code>whois</code> and <code>ct_logs</code>. Every lookup object reports its own <code>cache_hit</code>, so a single result can mix cached and live fields. See the <a href="/docs/domain#caching">Domain Intelligence</a> docs for the full table.</p>
-      <p>IP results are cached as a whole document for 60 minutes and report a single top-level <code>cache_hit</code>.</p>
+      <p>IP results work the same way, under a separate <code>ip:</code> key namespace &mdash; 24 hours for <code>abuse_contact</code>, 6 hours for <code>reverse_dns</code>, 30 minutes for <code>threat_intel</code>. <code>geo</code> and <code>asn</code> read a local database and are never cached, so their <code>cache_hit</code> is always <code>false</code>. See the <a href="/docs/ip#caching">IP Intelligence</a> docs.</p>
     </div>
   </section>
 
@@ -414,17 +428,19 @@
     <p class="section-label">Failure Modes</p>
     <h2>Error Handling</h2>
     <p>HTTP errors cover malformed requests, auth failures, feature gating, and server-side faults. Partial lookup failures are returned inside successful responses instead.</p>
-    <table>
-      <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
-      <tbody>
-        <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing required fields, or invalid target</td></tr>
-        <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
-        <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this feature</td></tr>
-        <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
-        <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded; inspect <code>Retry-After</code></td></tr>
-        <tr><td><code>500 Internal Server Error</code></td><td>Unexpected server-side failure. Contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a> if it persists.</td></tr>
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>400 Bad Request</code></td><td>Invalid request body, missing required fields, or invalid target</td></tr>
+          <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
+          <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this feature</td></tr>
+          <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
+          <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded; inspect <code>Retry-After</code></td></tr>
+          <tr><td><code>500 Internal Server Error</code></td><td>Unexpected server-side failure. Contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a> if it persists.</td></tr>
+        </tbody>
+      </table>
+    </div>
     <p>All error responses use the same envelope:</p>
     <pre><code>{
   <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
@@ -442,14 +458,44 @@
     <p class="section-label">Self-Service</p>
     <h2>Account &amp; Keys</h2>
     <p>Every plan can inspect its own usage and rotate its API key without contacting support.</p>
-    <table>
-      <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td><span class="method-tag">GET</span> <span class="endpoint-path">/v1/usage</span></td><td>Your aggregated usage for the last 30 days (override with <code>?days=1..365</code>): request counts, cache hit rate, latency, status codes, and feature usage.</td></tr>
-        <tr><td><span class="method-tag">POST</span> <span class="endpoint-path">/v1/keys/rotate</span></td><td>Issues a fresh API key, returned exactly once. Previous keys keep working for a 24-hour grace window so deployed clients can be switched over without downtime.</td></tr>
-      </tbody>
-    </table>
-    <div class="note">The rotated key cannot be retrieved again &mdash; store it immediately. The response includes <code>old_keys_expire_at</code> so you know exactly when previous keys stop working.</div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="method-tag">GET</span> <span class="endpoint-path">/v1/usage</span></td><td>Your aggregated usage for the last 30 days (override with <code>?days=1..365</code>): request counts, cache hit rate, latency, status codes, and feature usage.</td></tr>
+          <tr><td><span class="method-tag">POST</span> <span class="endpoint-path">/v1/keys/rotate</span></td><td>Issues a fresh API key, returned exactly once. Previous keys keep working for a 24-hour grace window so deployed clients can be switched over without downtime.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Check your usage</h3>
+    <pre><code><span class="cmt"># Defaults to the last 30 days</span>
+curl <span class="url">https://api.securityaccelerated.com/v1/usage?days=7</span> \
+  -H <span class="str">"X-API-Key: $API_KEY"</span></code></pre>
+    <pre><code>{
+  <span class="str">"total_requests"</span>: <span class="num">1284</span>,
+  <span class="str">"cache_hits"</span>: <span class="num">3907</span>,
+  <span class="str">"cache_misses"</span>: <span class="num">1130</span>,
+  <span class="str">"cache_hit_rate"</span>: <span class="num">0.776</span>,
+  <span class="str">"avg_latency_ms"</span>: <span class="num">412.8</span>,
+  <span class="str">"total_domains"</span>: <span class="num">2140</span>,
+  <span class="str">"total_ips"</span>: <span class="num">96</span>,
+  <span class="str">"status_codes"</span>: { <span class="str">"200"</span>: <span class="num">1270</span>, <span class="str">"429"</span>: <span class="num">14</span> },
+  <span class="str">"feature_usage"</span>: { <span class="str">"dns"</span>: <span class="num">2140</span>, <span class="str">"ssl"</span>: <span class="num">2140</span>, <span class="str">"whois"</span>: <span class="num">757</span> },
+  <span class="str">"requests_by_path"</span>: { <span class="str">"/v1/domain/lookup"</span>: <span class="num">1188</span>, <span class="str">"/v1/ip/lookup"</span>: <span class="num">96</span> },
+  <span class="str">"period_start"</span>: <span class="str">"2026-08-03T00:00:00Z"</span>,
+  <span class="str">"period_end"</span>: <span class="str">"2026-08-10T00:00:00Z"</span>
+}</code></pre>
+    <p><code>feature_usage</code> counts the lookups you asked for however they were served, so a cache hit never makes a lookup look less used. <code>cache_hits</code> and <code>cache_misses</code> count individual lookups rather than requests, which is why they exceed <code>total_requests</code>.</p>
+
+    <h3>Rotate your key</h3>
+    <pre><code>curl -X POST <span class="url">https://api.securityaccelerated.com/v1/keys/rotate</span> \
+  -H <span class="str">"X-API-Key: $API_KEY"</span></code></pre>
+    <pre><code>{
+  <span class="str">"api_key"</span>: <span class="str">"a1b2c3...  (64 hex characters)"</span>,
+  <span class="str">"old_keys_expire_at"</span>: <span class="str">"2026-08-11T14:22:05Z"</span>,
+  <span class="str">"message"</span>: <span class="str">"store this key now — it cannot be retrieved again; previous keys stop working at old_keys_expire_at"</span>
+}</code></pre>
+    <div class="note">The rotated key cannot be retrieved again &mdash; store it immediately. Deploy it everywhere before <code>old_keys_expire_at</code>, after which the previous keys stop authenticating.</div>
   </section>
 
   <section class="section-card">
