@@ -63,7 +63,6 @@ func groups() []group {
 		lookupGroup(),
 		customerGroup(),
 		keyGroup(),
-		devGroup(),
 	}
 }
 
@@ -73,7 +72,6 @@ func topLevel() []command {
 		statusCommand(),
 		infoCommand(),
 		usageCommand(),
-		smokeCommand(),
 	}
 }
 

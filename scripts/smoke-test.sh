@@ -139,8 +139,50 @@ check_header() {
 ADMIN="${SMOKE_ADMIN_KEY:-test-admin-key}"
 BASIC="${SMOKE_BASIC_KEY:-test-basic-key}"
 PRO="${SMOKE_PRO_KEY:-test-pro-key}"
-FREE="${SMOKE_FREE_KEY:-test-free-key}"
-FREE2="${SMOKE_FREE_KEY_2:-test-free-key-2}"
+
+# Free-plan keys are pooled and rotated: the rate limiter is per key per minute
+# and free allows 5, so one key alone makes a full run spend minutes waiting out
+# windows. SMOKE_FREE_KEYS (comma-separated) or numbered siblings
+# (SMOKE_FREE_KEY_2, _3, ...) are picked up automatically.
+FREE_POOL=()
+if [ -n "${SMOKE_FREE_KEYS:-}" ]; then
+    IFS=',' read -r -a FREE_POOL <<< "$SMOKE_FREE_KEYS"
+else
+    FREE_POOL=("${SMOKE_FREE_KEY:-test-free-key}")
+    n=2
+    while true; do
+        var="SMOKE_FREE_KEY_$n"
+        [ -z "${!var:-}" ] && break
+        FREE_POOL+=("${!var}")
+        n=$((n + 1))
+    done
+    # No configured siblings means the local stack: seed.sql provides three.
+    if [ ${#FREE_POOL[@]} -eq 1 ] && [ "${FREE_POOL[0]}" = "test-free-key" ]; then
+        FREE_POOL+=("test-free-key-2" "test-free-key-3")
+    fi
+fi
+
+# SMOKE_RATELIMIT_KEY is a free key RESERVED for the rate limit check and held
+# out of the pool. That check has to exhaust one key's window, which is the
+# opposite of what the pool is for: rotating would spread the load and never
+# reach the limit, and reusing a pooled key would stall whichever later check
+# drew it. Without one the check is skipped rather than run wrongly.
+RATELIMIT_KEY="${SMOKE_RATELIMIT_KEY:-}"
+if [ -z "$RATELIMIT_KEY" ] && [[ "$HOST" == *"localhost"* || "$HOST" == *"127.0.0.1"* ]]; then
+    RATELIMIT_KEY="test-free-key-4"  # seeded by migrations/seed.sql
+fi
+if [ -n "$RATELIMIT_KEY" ]; then
+    filtered=()
+    for k in "${FREE_POOL[@]}"; do [ "$k" != "$RATELIMIT_KEY" ] && filtered+=("$k"); done
+    [ ${#filtered[@]} -gt 0 ] && FREE_POOL=("${filtered[@]}")
+fi
+
+# free_key rotates the pool, setting FK to the next key.
+free_i=0
+free_key() {
+    FK="${FREE_POOL[free_i % ${#FREE_POOL[@]}]}"
+    free_i=$((free_i + 1))
+}
 
 DOMAIN='{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}'
 
@@ -169,8 +211,8 @@ echo "=== Domain Lookup — Auth ==="
 post 200 "lookup (admin)"      "/v1/domain/lookup" "$ADMIN" "$DOMAIN"
 post 200 "lookup (pro)"        "/v1/domain/lookup" "$PRO"   "$DOMAIN"
 post 200 "lookup (basic)"      "/v1/domain/lookup" "$BASIC" "$DOMAIN"
-post 200 "lookup (free)"       "/v1/domain/lookup" "$FREE"  "$DOMAIN"
-post 400 "free plan max domains" "/v1/domain/lookup" "$FREE" '{"domains":["a.com","b.com"],"lookups":["dns"]}'
+free_key; post 200 "lookup (free)"       "/v1/domain/lookup" "$FK"  "$DOMAIN"
+free_key; post 400 "free plan max domains" "/v1/domain/lookup" "$FK" '{"domains":["a.com","b.com"],"lookups":["dns"]}'
 post 401 "lookup (no key)"     "/v1/domain/lookup" ""       "$DOMAIN"
 post 401 "lookup (wrong key)"  "/v1/domain/lookup" "totally-wrong-key" "$DOMAIN"
 
@@ -179,23 +221,23 @@ echo "=== Domain Lookup — Pro Options ==="
 post 200 "screenshot (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot"]}'
 post 200 "screenshot (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["screenshot"]}'
 post 403 "screenshot (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["screenshot"]}'
-post 403 "screenshot (free — pro only)"  "/v1/domain/lookup" "$FREE"  '{"domains":["example.com"],"lookups":["screenshot"]}'
+free_key; post 403 "screenshot (free — pro only)"  "/v1/domain/lookup" "$FK"  '{"domains":["example.com"],"lookups":["screenshot"]}'
 post 200 "reputation (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["reputation"]}'
 post 200 "reputation (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["reputation"]}'
 post 403 "reputation (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["reputation"]}'
-post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["reputation"]}'
+free_key; post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["reputation"]}'
 post 200 "screenshot+reputation (admin)" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot","reputation"]}'
 post 200 "threat_intel (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["threat_intel"]}'
 post 200 "threat_intel (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["threat_intel"]}'
 post 403 "threat_intel (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["threat_intel"]}'
-post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["threat_intel"]}'
+free_key; post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["threat_intel"]}'
 
 echo ""
 echo "=== Domain Lookup — All-Plan Options ==="
 post 200 "email_security (admin)"  "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["email_security"]}'
 post 200 "email_security (pro)"    "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["email_security"]}'
 post 200 "email_security (basic)"  "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["email_security"]}'
-post 200 "email_security (free)"   "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["email_security"]}'
+free_key; post 200 "email_security (free)"   "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["email_security"]}'
 post 200 "subdomains (admin)"      "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["subdomains"]}'
 post 200 "subdomains (basic)"      "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["subdomains"]}'
 post 200 "ct_logs (admin)"         "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["ct_logs"]}'
@@ -206,9 +248,9 @@ post 200 "fingerprint (admin)"     "/v1/domain/lookup" "$ADMIN" '{"domains":["ex
 post 200 "fingerprint (basic)"     "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["fingerprint"]}'
 post 200 "dns_security (admin)"    "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["dns_security"]}'
 post 200 "dns_security (basic)"    "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["dns_security"]}'
-post 200 "dns_security (free)"     "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["dns_security"]}'
+free_key; post 200 "dns_security (free)"     "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["dns_security"]}'
 post 200 "risk (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
-post 200 "risk (free)"             "/v1/domain/lookup" "$FREE2" '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
+free_key; post 200 "risk (free)"             "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
 
 echo ""
 echo "=== Domain Lookup — Validation ==="
@@ -389,6 +431,42 @@ check_header "X-RateLimit-Limit on basic request"     "X-RateLimit-Limit"     ""
 check_header "X-RateLimit-Remaining on basic request" "X-RateLimit-Remaining" "" "$HOST/v1/domain/lookup" -X POST -H "Content-Type: application/json" -H "X-API-Key: $BASIC" -d "$DOMAIN"
 
 echo ""
+echo "=== Rate Limit Enforcement ==="
+# Exhausts the reserved key's window: free allows 5/min, so within 7 rapid
+# requests one must come back 429 carrying Retry-After. Uses GET /v1/usage —
+# authenticated and rate-limited, but no lookup cost. The key stays exhausted
+# for up to a minute afterwards, which is why it must not be in the pool.
+if [ -z "$RATELIMIT_KEY" ]; then
+    printf "  \033[33m!\033[0m skipped — set SMOKE_RATELIMIT_KEY to a free key reserved for this check\n"
+    warn=$((warn + 1))
+    warnings+=("rate limit enforcement skipped: no SMOKE_RATELIMIT_KEY configured")
+else
+    rl_headers=""
+    rl_status=""
+    for _ in 1 2 3 4 5 6 7; do
+        rl_headers=$(curl -s -D - -o /dev/null "$HOST/v1/usage" -H "X-API-Key: $RATELIMIT_KEY") || true
+        rl_status=$(echo "$rl_headers" | head -1 | awk '{print $2}')
+        [ "$rl_status" = "429" ] && break
+    done
+    if [ "$rl_status" = "429" ]; then
+        printf "  \033[32m✓\033[0m free plan rate limit enforced → 429\n"
+        pass=$((pass + 1))
+        if echo "$rl_headers" | grep -qi '^Retry-After:'; then
+            printf "  \033[32m✓\033[0m 429 carries Retry-After\n"
+            pass=$((pass + 1))
+        else
+            printf "  \033[31m✗\033[0m 429 without Retry-After header\n"
+            fail=$((fail + 1))
+            errors+=("429 response missing Retry-After header")
+        fi
+    else
+        printf "  \033[31m✗\033[0m rate limit never triggered (last status %s)\n" "$rl_status"
+        fail=$((fail + 1))
+        errors+=("free plan rate limit not enforced: 7 rapid requests, no 429")
+    fi
+fi
+
+echo ""
 echo "=== Body Size Limit ==="
 # Send a >1MB payload. MaxBytesReader surfaces through Gin's binding layer as 400.
 # Written to a temp file because the shell can't pass >1MB as a CLI argument.
@@ -448,7 +526,7 @@ IP='{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
 post 200 "admin key" /v1/ip/lookup "$ADMIN" "$IP"
 post 200 "basic key" /v1/ip/lookup "$BASIC" "$IP"
 post 200 "pro key" /v1/ip/lookup "$PRO" "$IP"
-post 200 "free key" /v1/ip/lookup "$FREE" "$IP"
+free_key; post 200 "free key" /v1/ip/lookup "$FK" "$IP"
 post 401 "no key" /v1/ip/lookup "" "$IP"
 post 401 "bad key" /v1/ip/lookup "invalid-key" "$IP"
 
@@ -456,7 +534,7 @@ echo "=== IP Lookup — Pro Options ==="
 post 200 "threat_intel (admin)" /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
 post 200 "threat_intel (pro)" /v1/ip/lookup "$PRO" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
 post 403 "threat_intel (basic)" /v1/ip/lookup "$BASIC" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
-post 403 "threat_intel (free)" /v1/ip/lookup "$FREE" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
+free_key; post 403 "threat_intel (free)" /v1/ip/lookup "$FK" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
 
 echo "=== IP Lookup — Validation ==="
 post 400 "invalid IP" /v1/ip/lookup "$ADMIN" '{"ips":["not-an-ip"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
