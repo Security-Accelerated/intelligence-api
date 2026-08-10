@@ -8,7 +8,7 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
-- version: v0.67.0
+- version: v0.68.0
   date: 2026-08-10
   changes:
     - text: "The documentation now fits a phone. Every page scrolled sideways and ran body text off the screen at any width below roughly 500px, which made the reference unreadable on the device people reach for first"
