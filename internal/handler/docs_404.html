@@ -27,9 +27,14 @@
     letter-spacing: 0.16em;
   }
 
+  /* min(230px, 100%) rather than a bare 230px: when the container is narrower
+     than the minimum track, auto-fit still floors the track at 230px and the
+     cards overhang it — measured overflowing the page below 305px. Folding the
+     container width into the minimum collapses it to one full-width column
+     wherever it has to, at every width rather than at one breakpoint. */
   .notfound-routes {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
     gap: 12px;
     margin-top: 26px;
     padding: 0;

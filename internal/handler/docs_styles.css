@@ -206,7 +206,11 @@ html[data-theme="dark"] {
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 112px;
+  /* Derived from the bar rather than restated, because the mobile bar is 132px
+     and a fixed 112px put the target 20px *behind* it — a hash link scrolled to
+     a heading the reader could not see. The +40 keeps the desktop value at the
+     112px it has always been. */
+  scroll-padding-top: calc(var(--topbar-height) + 40px);
   color-scheme: light;
   /* iOS inflates text in narrow blocks unless this is pinned, which silently
      widens code and table cells past the widths measured here. */
