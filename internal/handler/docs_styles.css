@@ -246,7 +246,10 @@ body::before {
   mask-image: linear-gradient(180deg, var(--grid-mask), transparent 70%);
 }
 
-body.shell-open { overflow: hidden; }
+/* Two locks, not one: shell-open is also what slides the mobile drawer out, so
+   the search overlay taking it would open the drawer behind itself. */
+body.shell-open,
+body.search-open { overflow: hidden; }
 
 /* ----- Links ----- */
 a { color: var(--accent); text-decoration: none; }
@@ -744,6 +747,234 @@ pre code {
 .hdr { color: #8ee6d7; }
 .flag { color: #f28482; }
 
+/* ----- Code Block Copy ----- */
+/* The wrapper and the button are injected by docs.js, so nothing here applies
+   until the script runs — with JavaScript off the block keeps its own margin
+   and padding and is simply selectable, as it was.
+
+   The button sits in the wrapper rather than in the <pre>, because a <pre> is
+   its own horizontal scroll container: a control inside one scrolls away with
+   the code. The top padding is the block's, not the button's — reserving the
+   room in the code box is the only way a long first line cannot pass under the
+   control, since padding-right on a scroll container is only honoured at the
+   end of the scrollable content. */
+.code-block {
+  position: relative;
+  margin: 16px 0 22px;
+}
+
+.code-block > pre {
+  margin: 0;
+  padding-top: 46px;
+}
+
+.code-copy {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 5px 11px;
+  /* Not themed: the code block is dark in light mode too, so a token that
+     flipped with the theme would put dark text on a dark block. */
+  border: 1px solid rgba(226, 236, 231, 0.22);
+  border-radius: 999px;
+  background: rgba(226, 236, 231, 0.08);
+  color: var(--code-block-text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+/* Wide enough for the longest of the three labels, so confirming a copy does
+   not resize the control under the pointer that just clicked it. */
+.code-copy-label {
+  display: inline-block;
+  min-width: 7ch;
+  text-align: center;
+}
+
+.code-copy:hover {
+  border-color: rgba(226, 236, 231, 0.4);
+  background: rgba(226, 236, 231, 0.16);
+}
+
+.code-copy.is-copied {
+  border-color: rgba(199, 233, 176, 0.5);
+  color: #c7e9b0;
+}
+
+/* The block is dark in both themes, so the accent outline the rest of the page
+   uses is the one thing here that does not read against it. */
+.code-copy:focus-visible {
+  outline-color: var(--code-block-text);
+}
+
+/* ----- Search ----- */
+.docs-search-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--theme-toggle-border);
+  border-radius: 999px;
+  background: var(--theme-toggle-bg);
+  box-shadow: var(--theme-toggle-shadow);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.docs-search-trigger:hover {
+  border-color: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent-soft), var(--theme-toggle-shadow);
+}
+
+.docs-search-trigger svg {
+  width: 20px;
+  height: 20px;
+}
+
+.docs-search {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.docs-search[hidden] { display: none; }
+
+.docs-search-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--sidebar-backdrop);
+}
+
+/* Anchored near the top rather than centred: the reader is looking down a list
+   of results, and a centred panel jumps position as the list grows. */
+.docs-search-panel {
+  position: relative;
+  /* A percentage of the overlay, not of 100vw: vw counts the scrollbar the
+     page still has under the panel, and the panel would overhang by its
+     width. */
+  width: min(640px, calc(100% - 32px));
+  max-height: min(70vh, 560px);
+  margin: min(12vh, 96px) auto 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.docs-search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 12px;
+  border-bottom: 1px solid var(--divider);
+  color: var(--ink-soft);
+}
+
+.docs-search-field svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.docs-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+
+.docs-search-input:focus { outline: none; }
+.docs-search-input::placeholder { color: var(--ink-soft); }
+
+.docs-search-results {
+  margin: 0;
+  padding: 6px 0 0;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.docs-search-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.docs-search-result.is-active { background: var(--accent-soft); }
+
+.docs-search-result-label {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* The section a hit belongs to is the whole point of this over the browser's
+   own find: `cache_hit` matches every one of the fourteen lookups, and only
+   the scope says which. */
+.docs-search-result-scope {
+  margin-left: auto;
+  color: var(--ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-align: right;
+}
+
+.docs-search-status,
+.docs-search-hint {
+  padding: 8px 12px 0;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.docs-search-status:empty { display: none; }
+
+.docs-search-hint {
+  border-top: 1px solid var(--divider);
+  margin-top: 8px;
+  padding-top: 10px;
+}
+
+/* Where a result landed. A row is highlighted through its cells: the table
+   sets border-collapse: separate, so the cells are what paint. */
+tr.is-search-hit > td,
+h2.is-search-hit,
+h3.is-search-hit,
+h4.is-search-hit {
+  background: var(--accent-soft);
+  transition: background 0.4s ease;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* ----- Tables ----- */
 /* Every table is wrapped in .table-scroll. `width: 100%` on a table is only a
    floor: when the columns' own min-content widths add up to more than the
@@ -1134,13 +1365,35 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
 }
 
 /* ----- Print ----- */
+/* ----- Reduced Motion ----- */
+/* The smooth scroll here is not decoration: every sidebar link and every search
+   result moves the whole document. Honour the preference for all of them at
+   once rather than per feature. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+
+  .code-copy,
+  .docs-search-trigger,
+  tr.is-search-hit > td,
+  h2.is-search-hit,
+  h3.is-search-hit,
+  h4.is-search-hit,
+  .sidebar { transition: none; }
+}
+
 @media print {
   body::before,
   .topbar,
   .sidebar,
   .sidebar-toggle,
   .sidebar-backdrop,
+  .code-copy,
+  .docs-search,
+  .docs-search-trigger,
   .theme-toggle { display: none !important; }
+
+  /* The copy control is gone, so the room reserved for it is dead space. */
+  .code-block > pre { padding-top: 18px; }
 
   body {
     background: #fff;
@@ -1218,7 +1471,7 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
      page with no sidebar — with no way to reach the other pages at all. */
   .topbar {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     height: var(--topbar-height);
     gap: 10px 12px;
@@ -1234,11 +1487,36 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
   .topbar-actions { display: contents; }
 
   /* Placed explicitly. Auto-placement puts the toggle after the full-width
-     nav, which lands it on a third row. */
-  .topbar .theme-toggle {
+     nav, which lands it on a third row. The search control is injected by
+     docs.js, so its track is empty when the script has not run — an empty
+     `auto` track is zero-wide and the toggle stays where it was. */
+  .topbar .docs-search-trigger {
     grid-column: 2;
     grid-row: 1;
   }
+
+  .topbar .theme-toggle {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  /* Both controls shrink so the brand keeps a usable share of the first row. */
+  .topbar .theme-toggle,
+  .topbar .docs-search-trigger {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* The overlay sits above the bar, so there is nothing to clear: start near
+     the top and give the results the rest of the screen. The ceiling is short
+     of the viewport because the on-screen keyboard takes the lower half as
+     soon as the input is focused. */
+  .docs-search-panel {
+    margin-top: 12px;
+    max-height: 74vh;
+  }
+
+  .code-block > pre { padding-top: 42px; }
 
   .topbar-nav {
     display: flex;
