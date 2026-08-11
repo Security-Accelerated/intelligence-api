@@ -124,15 +124,70 @@ func TestDocs_StylesheetHonoursReducedMotion(t *testing.T) {
 // TestDocs_ControlsAreHiddenInPrint keeps the injected controls out of a printed
 // page, where a "Copy" button is ink spent on something the reader cannot press.
 func TestDocs_ControlsAreHiddenInPrint(t *testing.T) {
+	block := printBlock(t)
+
+	for _, selector := range []string{".code-copy", ".docs-search", ".docs-search-trigger"} {
+		if !hiddenInPrint(block, selector) {
+			t.Errorf("@media print has no rule hiding %s", selector)
+		}
+	}
+}
+
+// printBlock returns the contents of the stylesheet's @media print rule, matched
+// brace by brace.
+//
+// Reading to the end of the file instead — which this test used to do — let a
+// rule that has nothing to do with printing satisfy the assertion: the
+// responsive blocks sit after @media print and style .docs-search-trigger
+// themselves, so removing the trigger from the print rule still passed.
+func printBlock(t *testing.T) string {
+	t.Helper()
+
 	start := strings.Index(docsCSS, "@media print")
 	if start == -1 {
 		t.Fatal("stylesheet has no @media print block")
 	}
+	open := strings.Index(docsCSS[start:], "{")
+	if open == -1 {
+		t.Fatal("@media print is not followed by a block")
+	}
 
-	printCSS := docsCSS[start:]
-	for _, class := range []string{".code-copy", ".docs-search", ".docs-search-trigger"} {
-		if !strings.Contains(printCSS, class) {
-			t.Errorf("print styles do not hide %s", class)
+	depth := 0
+	for i := start + open; i < len(docsCSS); i++ {
+		switch docsCSS[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return docsCSS[start+open+1 : i]
+			}
 		}
 	}
+
+	t.Fatal("@media print block is never closed")
+	return ""
+}
+
+// hiddenInPrint reports whether the print block carries a rule that names the
+// selector and actually hides it. Both halves matter: a class name appearing
+// somewhere in the block proves nothing, since it could be picking up a padding
+// adjustment.
+//
+// The selector is matched whole rather than as a substring, because
+// ".docs-search" is a prefix of ".docs-search-trigger" — a substring check would
+// let the trigger's rule stand in for the overlay's.
+func hiddenInPrint(block, selector string) bool {
+	for rule := range strings.SplitSeq(block, "}") {
+		parts := strings.SplitN(rule, "{", 2)
+		if len(parts) != 2 || !strings.Contains(parts[1], "display: none") {
+			continue
+		}
+		for sel := range strings.SplitSeq(parts[0], ",") {
+			if strings.TrimSpace(sel) == selector {
+				return true
+			}
+		}
+	}
+	return false
 }
