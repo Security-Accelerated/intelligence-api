@@ -309,10 +309,6 @@ document.querySelectorAll('.lang-tab').forEach(function(tab) {
   var trail = [];
 
   main.querySelectorAll('h2, h3, h4, table tbody tr').forEach(function(node) {
-    /* Anything not rendered — the inactive halves of the language tabs — is
-       skipped: jumping to it would scroll to nothing. */
-    if (!node.getClientRects().length) return;
-
     if (node.tagName === 'TR') {
       var cell = node.querySelector('td');
       if (!cell) return;
@@ -381,6 +377,16 @@ document.querySelectorAll('.lang-tab').forEach(function(tab) {
     return 3;
   }
 
+  /* Whether a hit is on screen is a question about now, not about page load:
+     the language tabs hide and show their panels, so an index filtered once at
+     load would keep offering a section that has since been hidden and would
+     never offer one that has since appeared. Asked here, after ranking, so the
+     layout read happens for the few entries that matched rather than for every
+     entry on the page. */
+  function isRendered(el) {
+    return el.getClientRects().length > 0;
+  }
+
   function search(raw) {
     var query = clean(raw).toLowerCase();
     if (!query) return [];
@@ -389,6 +395,7 @@ document.querySelectorAll('.lang-tab').forEach(function(tab) {
     entries.forEach(function(entry) {
       var score = rank(entry, query, tokens);
       if (score < 0) return;
+      if (!isRendered(entry.el)) return;
       hits.push({ entry: entry, score: score });
     });
     hits.sort(function(a, b) {
@@ -568,18 +575,22 @@ document.querySelectorAll('.lang-tab').forEach(function(tab) {
     update();
   }
 
-  function close() {
+  /* Closing normally puts focus back where it came from. Closing on the way to
+     a result does not: jump() is about to focus the result itself, and moving
+     focus twice makes a screen reader announce the trigger before the thing the
+     reader actually asked for. */
+  function close(keepFocus) {
     if (overlay.hidden) return;
     overlay.hidden = true;
     document.body.classList.remove('search-open');
-    if (restoreFocus && restoreFocus.focus) restoreFocus.focus();
+    if (!keepFocus && restoreFocus && restoreFocus.focus) restoreFocus.focus();
     restoreFocus = null;
   }
 
   var lastHit = null;
 
   function jump(entry) {
-    close();
+    close(true);
 
     var offset = 24;
     var bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--topbar-height'));

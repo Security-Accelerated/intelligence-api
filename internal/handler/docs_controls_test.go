@@ -124,9 +124,14 @@ func TestDocs_StylesheetHonoursReducedMotion(t *testing.T) {
 // TestDocs_ControlsAreHiddenInPrint keeps the injected controls out of a printed
 // page, where a "Copy" button is ink spent on something the reader cannot press.
 func TestDocs_ControlsAreHiddenInPrint(t *testing.T) {
-	print := docsCSS[strings.Index(docsCSS, "@media print"):]
+	start := strings.Index(docsCSS, "@media print")
+	if start == -1 {
+		t.Fatal("stylesheet has no @media print block")
+	}
+
+	printCSS := docsCSS[start:]
 	for _, class := range []string{".code-copy", ".docs-search", ".docs-search-trigger"} {
-		if !strings.Contains(print, class) {
+		if !strings.Contains(printCSS, class) {
 			t.Errorf("print styles do not hide %s", class)
 		}
 	}
