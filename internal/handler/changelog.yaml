@@ -8,6 +8,22 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.70.0
+  date: 2026-08-11
+  changes:
+    - text: "Every code block on the docs pages now has a copy button. The reference pages carry 40-plus line payloads, and dragging a selection through one on a phone means fighting the block's own sideways scroll"
+      audience: public
+    - text: "The docs pages have a search: press / or Cmd-K (Ctrl-K on Windows) and type a field or section name, arrows to move, Enter to jump. Every result says which lookup it belongs to, which the browser's own find cannot — cache_hit appears on all fourteen lookups, so find walks fourteen identical hits with no way to tell them apart"
+      audience: public
+    - text: "Both controls are built by docs.js at load rather than written into the templates, so the index cannot drift from the page it describes and there is no dead control when the script does not run. Nothing is fetched: the pages are already in the reader's browser, and the CSP stays as it is"
+      audience: internal
+    - text: "The copy button lives in a wrapper around the block, not inside it — a <pre> is its own scroll container, so a control placed inside slides away with the code exactly when a long payload is hardest to select. It copies textContent, never the syntax-highlighting markup, and no clipboard API means no button rather than one that always fails"
+      audience: internal
+    - text: "The search overlay takes its own scroll-lock class. body.shell-open is what slides the mobile drawer out, so reusing it would have opened the drawer behind the overlay on a phone"
+      audience: internal
+    - text: "Added a prefers-reduced-motion block, which the stylesheet had never had: the smooth scroll it now disables is shared by every sidebar link, not just the new search results"
+      audience: internal
+
 - version: v0.69.0
   date: 2026-08-10
   changes:
