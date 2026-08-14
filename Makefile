@@ -3,7 +3,7 @@ CLI_NAME := sactl
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty)
 
-.PHONY: all build build-cli install-cli clean deps test test-integration test-all run release deploy docker-reset
+.PHONY: all build build-cli install-cli clean deps lint lint-new test test-integration test-all run release deploy docker-reset
 
 all: test build build-cli
 
@@ -26,6 +26,16 @@ clean:
 deps:
 	go get -u ./...
 	go mod tidy
+
+# Full lint over the whole tree. Config lives in .golangci.yml, copied from the
+# fleet repo — edit it there and re-run bin/lint-apply.sh rather than diverging.
+lint:
+	golangci-lint run --timeout 10m ./...
+
+# Only findings introduced relative to main. This is what CI gates on, so the
+# pre-existing backlog does not block unrelated work.
+lint-new:
+	golangci-lint run --timeout 10m --new-from-rev=origin/main ./...
 
 test:
 	go mod tidy

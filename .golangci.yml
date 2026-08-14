@@ -1,0 +1,113 @@
+# Canonical golangci-lint config for Jason's Go projects.
+#
+# This file is the source of truth. It is COPIED into each Go repo (not symlinked)
+# so that CI and anyone else checking out the repo gets it too. When this file
+# changes, re-copy it: bin/lint-apply.sh
+#
+# Profile: opinionated — bug-catching linters plus style and complexity rules.
+# Thresholds are deliberately loose enough to be adoptable on existing code;
+# tighten them once the backlog is cleared.
+
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    # --- correctness ---
+    - errcheck        # unchecked error returns
+    - govet           # suspicious constructs
+    - staticcheck     # bugs, dead code, simplifications
+    - ineffassign     # assignments never used
+    - unused          # unused code
+    - bodyclose       # unclosed HTTP response bodies
+    - sqlclosecheck   # unclosed sql.Rows / sql.Stmt
+    - rowserrcheck    # unchecked sql.Rows.Err
+    - nilerr          # returning nil when err is non-nil
+
+    # --- security ---
+    - gosec           # hardcoded creds, weak rand, file perms, subprocess
+
+    # --- style and complexity ---
+    - revive          # golint successor
+    - gocritic        # opinionated diagnostics
+    - gocyclo         # cyclomatic complexity
+    - dupl            # duplicated blocks
+    - godot           # comments end in a period
+    - misspell        # typos in comments and strings
+    - unconvert       # redundant type conversions
+    - wastedassign    # assignments overwritten before use
+
+  settings:
+    gocyclo:
+      # 20 is loose on purpose. Existing handlers run complex; drop toward 15
+      # once the first backlog is cleared.
+      min-complexity: 20
+
+    dupl:
+      threshold: 150
+
+    godot:
+      # Only declaration comments, not every inline comment.
+      scope: declarations
+
+    misspell:
+      locale: US
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true    # too noisy until doc comments are written
+        - name: package-comments
+          disabled: true
+        - name: unused-parameter
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+      disabled-checks:
+        - ifElseChain      # fights readable error handling
+        - singleCaseSwitch
+
+    gosec:
+      excludes:
+        - G104   # duplicate of errcheck
+      config:
+        G306: "0644"   # permitted WriteFile permissions
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Tests get latitude: duplication and complexity are normal there,
+      # and security rules mostly misfire on fixtures.
+      - path: _test\.go
+        linters:
+          - dupl
+          - gosec
+          - gocyclo
+          - errcheck
+          - godot
+
+      # Generated and vendored code is not ours to style.
+      - path: (vendor|third_party)/
+        linters:
+          - all
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
