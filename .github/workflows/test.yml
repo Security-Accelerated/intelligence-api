@@ -18,8 +18,9 @@ jobs:
   # every PR regardless of what it touched. Clear the backlog and this can
   # become `make lint`.
   #
-  # pull_request only: --new-from-rev needs a base branch to diff against, which
-  # the workflow_call path (invoked from publish and deploy) does not have.
+  # pull_request only: --new-from-rev needs a base commit to diff against, and
+  # it is read from the pull_request event payload, which the workflow_call path
+  # (invoked from publish and deploy) does not have.
   lint:
     name: Lint changed code
     if: github.event_name == 'pull_request'
@@ -47,11 +48,13 @@ jobs:
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 
-      # checkout does not create the base branch ref, and --new-from-rev needs
-      # it by name.
-      - name: Fetch base branch
-        run: git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
-
+      # Diffed against the base commit by SHA rather than by branch name. The
+      # name would have to be fetched, and persist-credentials: false above
+      # means a later `git fetch` has no token to authenticate with — it fails
+      # with "could not read Username for https://github.com". The SHA needs no
+      # fetch: fetch-depth: 0 on a pull_request checks out the merge commit,
+      # whose history already contains the base tip.
+      #
       # The issue caps are disabled for the same reason as in the Makefile:
       # golangci-lint reports at most 50 per linter and 3 per identical message
       # by default, which on a gate means a PR can pass having been told about
@@ -60,7 +63,7 @@ jobs:
         run: >
           golangci-lint run --timeout 10m
           --max-issues-per-linter=0 --max-same-issues=0
-          --new-from-rev="origin/${{ github.base_ref }}" ./...
+          --new-from-rev="${{ github.event.pull_request.base.sha }}" ./...
 
   test:
     name: Build, vet and test
