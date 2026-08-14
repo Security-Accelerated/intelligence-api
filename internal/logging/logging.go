@@ -29,10 +29,12 @@ func inflateLogger(logger *zap.Logger) *zap.Logger {
 }
 
 func productionLogger() (*zap.Logger, error) {
-	config := zap.NewProductionConfig()
-	config.EncoderConfig = ecszap.ECSCompatibleEncoderConfig(config.EncoderConfig)
+	// Not named `config`: that is the imported package this file calls elsewhere
+	// (config.Config()), and shadowing it makes the package unreachable here.
+	cfg := zap.NewProductionConfig()
+	cfg.EncoderConfig = ecszap.ECSCompatibleEncoderConfig(cfg.EncoderConfig)
 
-	logger, err := config.Build(ecszap.WrapCoreOption(), zap.AddCaller())
+	logger, err := cfg.Build(ecszap.WrapCoreOption(), zap.AddCaller())
 	if err != nil {
 		return nil, err
 	}

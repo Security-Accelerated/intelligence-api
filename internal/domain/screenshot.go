@@ -71,7 +71,7 @@ func LookupScreenshot(ctx context.Context, domain string, timeout time.Duration,
 }
 
 // probeURL checks HTTPS then HTTP and returns the working URL and status code.
-func probeURL(ctx context.Context, domain string) (string, int, error) {
+func probeURL(ctx context.Context, domain string) (resolvedURL string, statusCode int, err error) {
 	// probeURL validates the resolved IP before Chrome navigates. Chrome traffic
 	// is also routed through a safe proxy (see captureScreenshot), so this serves
 	// as an early rejection to avoid launching Chrome for obviously-blocked targets.

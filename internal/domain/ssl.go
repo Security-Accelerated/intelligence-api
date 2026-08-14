@@ -14,7 +14,11 @@ func LookupSSL(ctx context.Context, domain string) (*SSLInfo, error) {
 	// InsecureSkipVerify is intentional: we need to retrieve and inspect the
 	// certificate even when it is expired, self-signed, or has a mismatched CN.
 	// Validity is reported in the response fields (Expired, DaysUntilExpiry).
+	// Verifying here would turn the answer the caller asked for into a dial
+	// error, and this connection carries no credentials and reads no secrets —
+	// it exists only to look at what the target presents.
 	dialer := &tls.Dialer{
+		//nolint:gosec // G402: see above, inspecting invalid certs is the feature.
 		Config: &tls.Config{
 			InsecureSkipVerify: true,
 		},

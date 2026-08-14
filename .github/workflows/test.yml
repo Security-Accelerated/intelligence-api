@@ -14,9 +14,14 @@ on:
 jobs:
   # Gates only on findings a change introduces, not on the whole tree. The
   # repository has a pre-existing backlog (255 findings when golangci-lint was
-  # first run uncapped against it; 36 remain), and a full-tree gate would fail
+  # first run uncapped against it; 10 remain), and a full-tree gate would fail
   # every PR regardless of what it touched. Clear the backlog and this can
   # become `make lint`.
+  #
+  # What is left is not mechanical: two duplicated provider fan-outs, two
+  # functions over the complexity threshold, and six by-value parameters where
+  # value semantics are deliberate. Each needs a design decision rather than an
+  # edit, which is why they are still here.
   #
   # pull_request only: --new-from-rev needs a base commit to diff against, and
   # it is read from the pull_request event payload, which the workflow_call path

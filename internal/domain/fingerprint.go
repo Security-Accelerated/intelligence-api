@@ -109,7 +109,12 @@ func (e *FingerprintEngine) Match(headers *HeadersInfo) *FingerprintInfo {
 	seen := make(map[string]bool)
 	var matches []FingerprintMatch
 
-	for _, rule := range rules {
+	// Indexed, and the helpers take a pointer: a TechRule is 80 bytes and the
+	// default rule set is ~90 rules, so ranging by value and passing by value
+	// again copied it three times per rule on every fingerprint. The helpers
+	// only read it.
+	for i := range rules {
+		rule := &rules[i]
 		if seen[rule.Name] {
 			continue
 		}
@@ -134,7 +139,7 @@ func (e *FingerprintEngine) Match(headers *HeadersInfo) *FingerprintInfo {
 
 // matchHeaders checks if any of the rule's header patterns match.
 // Returns the match and true if found.
-func matchHeaders(rule TechRule, lowerHeaders map[string]string) (FingerprintMatch, bool) {
+func matchHeaders(rule *TechRule, lowerHeaders map[string]string) (FingerprintMatch, bool) {
 	for headerName, pattern := range rule.Headers {
 		val, exists := lowerHeaders[strings.ToLower(headerName)]
 		if !exists {
@@ -161,7 +166,7 @@ func matchHeaders(rule TechRule, lowerHeaders map[string]string) (FingerprintMat
 }
 
 // matchCookies checks if any of the rule's cookie name patterns appear in Set-Cookie values.
-func matchCookies(rule TechRule, setCookieVal string) (FingerprintMatch, bool) {
+func matchCookies(rule *TechRule, setCookieVal string) (FingerprintMatch, bool) {
 	if setCookieVal == "" || len(rule.Cookies) == 0 {
 		return FingerprintMatch{}, false
 	}

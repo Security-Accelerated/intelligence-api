@@ -8,6 +8,24 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.72.0
+  date: 2026-08-14
+  changes:
+    - text: "The SSRF proxy that headless Chrome browses through now sets ReadHeaderTimeout. Without it a client that opens a socket and dribbles request headers holds a goroutine indefinitely. The listener is loopback-only so this was not reachable from outside, but it is one field"
+      audience: internal
+    - text: "The DNS resolver's failover no longer ignores a failed SetReadDeadline. The per-server deadline is the only thing bounding a read, so if setting it failed the next read had no timeout at all — a blackholed server would consume the caller's entire budget and never fail over, which is the exact failure the failover type exists to prevent"
+      audience: internal
+    - text: "Two shadowed imports fixed. internal/logging declared a local named `config`, which made the config package it calls elsewhere in the same file unreachable inside that function"
+      audience: internal
+    - text: "cmd/api/main.go split into main and run. os.Exit skips deferred functions, so the log flush had been written twice — once deferred, once by hand before the exit — and every new exit path had to remember the second copy"
+      audience: internal
+    - text: "Ambiguous multi-value returns are now named: downloadMMDB returned (string, string, int64, error) and viewport returned (int, int). Also stopped copying an 80-byte fingerprint rule three times per rule per request, and a 136-byte usage entry once per buffered entry per flush"
+      audience: internal
+    - text: "The remaining gosec findings are annotated with why they are correct rather than left unexplained. InsecureSkipVerify is the SSL lookup's whole purpose, and the five SQL-formatting hits interpolate only generated placeholders and a fixed column list — the invariant that makes that safe is now written down next to the code that depends on it"
+      audience: internal
+    - text: "Lint backlog is 36 down to 10. The remainder are design decisions rather than edits: two duplicated provider fan-outs, two functions over the complexity threshold, and six by-value parameters where value semantics are deliberate"
+      audience: internal
+
 - version: v0.71.0
   date: 2026-08-13
   changes:

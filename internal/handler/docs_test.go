@@ -608,18 +608,20 @@ func exampleSource(t *testing.T, page, lang string) string {
 
 var tagPattern = regexp.MustCompile(`<[^>]*>`)
 
-// extractPanel returns the markup of one language panel.
-func extractPanel(t *testing.T, html, lang string) string {
+// extractPanel returns the markup of one language panel. The parameter is not
+// named `html`: this file imports the stdlib html package and calls it just
+// above, in stripTags.
+func extractPanel(t *testing.T, markup, lang string) string {
 	t.Helper()
-	start := strings.Index(html, `id="tab-`+lang+`"`)
+	start := strings.Index(markup, `id="tab-`+lang+`"`)
 	if start == -1 {
 		t.Fatalf("no panel for %q", lang)
 	}
-	end := strings.Index(html[start:], "</code></pre>")
+	end := strings.Index(markup[start:], "</code></pre>")
 	if end == -1 {
 		t.Fatalf("unterminated panel for %q", lang)
 	}
-	return html[start : start+end]
+	return markup[start : start+end]
 }
 
 // TestDocs_SidebarMatchesDocumentOrder keeps each sidebar honest about the page

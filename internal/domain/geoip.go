@@ -127,7 +127,11 @@ func (r *GeoIPReader) LookupASN(ip net.IP) (*IPASNInfo, error) {
 		return nil, err
 	}
 
+	// The MaxMind reader types the AS number as uint, which is 64-bit here, but
+	// an AS number is a 32-bit value by definition (RFC 6793) and the database
+	// stores it as one, so narrowing to uint32 cannot truncate.
 	return &IPASNInfo{
+		//nolint:gosec // G115: AS numbers are 32-bit per RFC 6793.
 		ASN:          uint32(record.AutonomousSystemNumber),
 		Organization: record.AutonomousSystemOrganization,
 	}, nil
@@ -270,7 +274,7 @@ func (r *GeoIPReader) DownloadAndReload(ctx context.Context, licenseKey, dbPath,
 // downloadMMDB downloads a MaxMind database edition, decompresses it, and writes
 // the .mmdb file to a temp file in dbPath. Returns the temp file path, SHA-256
 // hash, and file size. ctx cancels the in-flight request.
-func downloadMMDB(ctx context.Context, client *http.Client, edition, licenseKey, dbPath string) (string, string, int64, error) {
+func downloadMMDB(ctx context.Context, client *http.Client, edition, licenseKey, dbPath string) (tmpPath, sha256Hex string, size int64, err error) {
 	dlURL := fmt.Sprintf(maxmindDownloadURL, edition, licenseKey)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dlURL, http.NoBody)

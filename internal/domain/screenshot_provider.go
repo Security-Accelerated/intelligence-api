@@ -38,7 +38,7 @@ type ScreenshotOptions struct {
 	Width, Height int
 }
 
-func (o ScreenshotOptions) viewport() (int, int) {
+func (o ScreenshotOptions) viewport() (width, height int) {
 	if o.Width <= 0 || o.Height <= 0 {
 		return DefaultViewportWidth, DefaultViewportHeight
 	}

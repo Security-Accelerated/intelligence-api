@@ -75,7 +75,7 @@ func LookupThreatIntel(ctx context.Context, domain string, providers []ThreatInt
 
 // ScoreThreatIntel computes a weighted aggregate score (0–100), risk level, and
 // merged category list from individual provider results.
-func ScoreThreatIntel(results []*ThreatIntelProviderResult) (int, string, []string) {
+func ScoreThreatIntel(results []*ThreatIntelProviderResult) (score int, riskLevel string, categories []string) {
 	if len(results) == 0 {
 		return 0, "none", nil
 	}
@@ -103,7 +103,6 @@ func ScoreThreatIntel(results []*ThreatIntelProviderResult) (int, string, []stri
 		}
 	}
 
-	score := 0
 	if totalWeight > 0 {
 		score = int(weightedScore / totalWeight)
 	}
@@ -111,12 +110,10 @@ func ScoreThreatIntel(results []*ThreatIntelProviderResult) (int, string, []stri
 		score = 100
 	}
 
-	var categories []string
 	for cat := range categorySet {
 		categories = append(categories, cat)
 	}
 
-	var riskLevel string
 	switch {
 	case score == 0:
 		riskLevel = "none"

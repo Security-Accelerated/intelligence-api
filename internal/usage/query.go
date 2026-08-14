@@ -41,6 +41,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 		featureSelects[i] = fmt.Sprintf("COALESCE(SUM(CASE WHEN %s THEN 1 ELSE 0 END), 0)", name)
 	}
 
+	//nolint:gosec // G201: only $N placeholders and LookupColumns names, see buildWhere.
 	aggQuery := fmt.Sprintf(`SELECT
 		COUNT(*),
 		COALESCE(SUM(cache_hits), 0),
@@ -80,6 +81,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 	}
 
 	// Status code breakdown
+	//nolint:gosec // G201: `where` is placeholders only, see buildWhere.
 	scQuery := fmt.Sprintf(`SELECT status_code, COUNT(*) FROM request_log %s GROUP BY status_code`, where)
 	rows, err := qs.db.QueryContext(ctx, scQuery, args...)
 	if err != nil {
@@ -98,6 +100,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 	}
 
 	// Requests by path
+	//nolint:gosec // G201: `where` is placeholders only, see buildWhere.
 	pathQuery := fmt.Sprintf(`SELECT path, COUNT(*) FROM request_log %s GROUP BY path ORDER BY COUNT(*) DESC LIMIT 50`, where)
 	rows2, err := qs.db.QueryContext(ctx, pathQuery, args...)
 	if err != nil {
@@ -119,9 +122,16 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 	return summary, nil
 }
 
-func buildWhere(customerID, apiKeyID int, since, until time.Time) (string, []any) {
+// The only things this file ever interpolates into SQL are generated `$N`
+// placeholders and names drawn from LookupColumns, which is a package-level
+// constant list pinned to the schema by a test. Every caller-supplied value —
+// customer ID, key ID, both timestamps — travels in the args slice and is
+// never formatted into the statement. That invariant is what makes the gosec
+// suppressions on the fmt.Sprintf calls above correct rather than convenient;
+// anything that starts formatting a value in has to remove them.
+func buildWhere(customerID, apiKeyID int, since, until time.Time) (where string, args []any) {
 	clauses := []string{"created_at >= $1", "created_at < $2"}
-	args := []any{since, until}
+	args = []any{since, until}
 	idx := 3
 
 	if customerID > 0 {
