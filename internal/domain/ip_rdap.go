@@ -94,8 +94,17 @@ func LookupAbuseContact(ctx context.Context, ip string) (*AbuseContactInfo, erro
 // because it is a table: written as a switch it was fifty-eight branches of
 // `first >= n && first <= n`, which said nothing the numbers do not.
 //
-// Order is significant only in that the first match wins, matching the switch
-// this replaced; the listed ranges do not currently overlap.
+// Order is significant: the first match wins, exactly as the switch's case
+// order did. Two entries are shadowed by an earlier broader range and are
+// therefore unreachable, which is pre-existing and is preserved here rather
+// than fixed, so that this change stays a provable no-op:
+//
+//	27  is claimed by RIPE's 25-31, though IANA allocated 27.0.0.0/8 to APNIC
+//	181 is claimed by APNIC's 180-183, though 181.0.0.0/8 belongs to LACNIC
+//
+// Correcting them changes which RIR is queried for an abuse contact in those
+// two /8s, so it belongs in its own change with its own reasoning. See the
+// collision cases in TestRIREndpointForIP, which pin today's answers.
 var rirOctetRanges = []struct {
 	lo, hi byte
 	rir    string

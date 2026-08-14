@@ -58,7 +58,7 @@ func TestUsageLogger_DropWhenFull(t *testing.T) {
 }
 
 // TestNoopRecorder pins that the no-op path is safe to call. Not panicking is
-// the whole assertion, so the test takes no *testing.T.
+// the whole assertion, so the test never uses its *testing.T.
 func TestNoopRecorder(_ *testing.T) {
 	var r NoopRecorder
 	r.Record(UsageEntry{Method: "GET", Path: "/v1/hello", StatusCode: 200})

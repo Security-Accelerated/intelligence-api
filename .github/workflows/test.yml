@@ -59,11 +59,20 @@ jobs:
       # golangci-lint reports at most 50 per linter and 3 per identical message
       # by default, which on a gate means a PR can pass having been told about
       # only some of what it introduced.
+      #
+      # The base commit reaches the shell as an environment variable rather than
+      # by expanding ${{ }} inside the command. GitHub substitutes those before
+      # bash ever sees the line, so an expression carrying shell metacharacters
+      # becomes part of the script itself. A commit SHA cannot, but the safe
+      # form costs nothing and does not have to be revisited if this ever goes
+      # back to interpolating a branch name, which can.
       - name: golangci-lint (new findings only)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: >
           golangci-lint run --timeout 10m
           --max-issues-per-linter=0 --max-same-issues=0
-          --new-from-rev="${{ github.event.pull_request.base.sha }}" ./...
+          --new-from-rev="${BASE_SHA}" ./...
 
   test:
     name: Build, vet and test

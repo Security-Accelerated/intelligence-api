@@ -23,6 +23,14 @@ func TestRIREndpointForIP(t *testing.T) {
 		{"below range", "76.0.0.1", rirEndpoints["arin"]},
 		{"above range", "96.0.0.1", rirEndpoints["arin"]},
 
+		// Shadowed entries: an earlier, broader range claims these octets, so
+		// the later per-octet entry never matches. Both answers disagree with
+		// IANA — 27.0.0.0/8 is APNIC's and 181.0.0.0/8 is LACNIC's — and both
+		// predate the table. Pinned so that correcting the ranges has to change
+		// a test that says why, rather than passing unnoticed.
+		{"27 shadowed by RIPE 25-31", "27.0.0.1", rirEndpoints["ripe"]},
+		{"181 shadowed by APNIC 180-183", "181.0.0.1", rirEndpoints["apnic"]},
+
 		{"unallocated octet falls back", "0.0.0.1", rirEndpoints["arin"]},
 		{"ipv6 falls back", "2001:db8::1", rirEndpoints["arin"]},
 		{"unparseable falls back", "not-an-ip", rirEndpoints["arin"]},
