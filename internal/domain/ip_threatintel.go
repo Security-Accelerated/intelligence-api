@@ -99,7 +99,7 @@ func (p *VTIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatIntelProv
 	}
 
 	apiURL := "https://www.virustotal.com/api/v3/ip_addresses/" + ip
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("virustotal ip: build request: %w", err)
 	}
@@ -237,7 +237,7 @@ func (p *OTXIPProvider) QueryIP(ctx context.Context, ip string) (*ThreatIntelPro
 		indicator = "IPv6"
 	}
 	apiURL := "https://otx.alienvault.com/api/v1/indicators/" + indicator + "/" + ip + "/general"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("otx ip: build request: %w", err)
 	}

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -586,7 +587,7 @@ func TestLookup_CorruptCacheEntry_TreatedAsMissAndOverwritten(t *testing.T) {
 		t.Errorf("stats = %+v, want 0 hits 1 miss", stats)
 	}
 	// Self-healing: the live fetch overwrites the unusable entry.
-	if got := mc.payload(key("example.com", domain.LookupDNSName)); string(got) == string(corrupt) {
+	if got := mc.payload(key("example.com", domain.LookupDNSName)); bytes.Equal(got, corrupt) {
 		t.Error("expected the corrupt entry to be overwritten by the live result")
 	}
 }
@@ -1006,7 +1007,7 @@ func (m *mockCache) keys() []string {
 	return out
 }
 
-// --- Miscellaneous behaviour ---
+// --- Miscellaneous behavior ---
 
 func TestLookup_NoRunners_SkipsCacheEntirely(t *testing.T) {
 	mc := newMockCache()
@@ -1099,9 +1100,9 @@ func TestLookup_CTLogsMaxEntries_Passed(t *testing.T) {
 	svc.ctLogsMaxEntries = 7
 
 	var got int
-	svc.SetCTLogsLookup(func(_ context.Context, _ string, max int) (*domain.CTLogsInfo, error) {
-		got = max
-		return okCTLogs(context.TODO(), "", max)
+	svc.SetCTLogsLookup(func(_ context.Context, _ string, maxEntries int) (*domain.CTLogsInfo, error) {
+		got = maxEntries
+		return okCTLogs(context.TODO(), "", maxEntries)
 	})
 	svc.Lookup(context.Background(), "example.com", opts(domain.LookupCTLogsName))
 	if got != 7 {

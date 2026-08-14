@@ -31,7 +31,7 @@ func sanitizeErr(err error) string {
 
 // isExpectedError reports whether a lookup failure describes the target or an
 // upstream service rather than a fault on our side. The classification itself
-// lives in the domain package, next to the lookups whose errors it recognises
+// lives in the domain package, next to the lookups whose errors it recognizes
 // and the libraries that produce them.
 func isExpectedError(err error) bool {
 	return domain.IsExpectedError(err)

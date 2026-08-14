@@ -131,8 +131,8 @@ func (h *Handler) IPLookup(c *gin.Context) {
 	opts := domain.IPLookupOptions{Lookups: lookups}
 
 	// Plan IP limits count submitted entries, not unique canonical addresses.
-	if max := h.maxIPs(planStr); max > 0 && len(req.IPs) > max {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many IPs: maximum %d allowed for %s plan", max, planStr)})
+	if limit := h.maxIPs(planStr); limit > 0 && len(req.IPs) > limit {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("too many IPs: maximum %d allowed for %s plan", limit, planStr)})
 		return
 	}
 

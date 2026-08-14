@@ -19,7 +19,7 @@ type mockUsageQueryer struct {
 	lastAPIKeyID   int
 }
 
-func (m *mockUsageQueryer) QueryUsage(customerID, apiKeyID int, since, until time.Time) (*usage.UsageSummary, error) {
+func (m *mockUsageQueryer) QueryUsage(customerID, apiKeyID int, _, _ time.Time) (*usage.UsageSummary, error) {
 	m.lastCustomerID = customerID
 	m.lastAPIKeyID = apiKeyID
 	return m.summary, m.err
@@ -54,7 +54,7 @@ func TestGetUsage_DefaultDays(t *testing.T) {
 	r := newUsageRouter(&mockUsageQueryer{summary: summary})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -81,7 +81,7 @@ func TestGetUsage_CustomDays(t *testing.T) {
 	}})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage?days=7", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage?days=7", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -94,7 +94,7 @@ func TestGetUsage_InvalidDays(t *testing.T) {
 
 	for _, d := range []string{"0", "-1", "366", "abc"} {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage?days="+d, nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage?days="+d, http.NoBody)
 		r.ServeHTTP(w, req)
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("days=%s: status = %d, want %d", d, w.Code, http.StatusBadRequest)
@@ -106,7 +106,7 @@ func TestGetUsage_ServiceError(t *testing.T) {
 	r := newUsageRouter(&mockUsageQueryer{err: errors.New("db down")})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {
@@ -118,7 +118,7 @@ func TestGetUsage_NilService(t *testing.T) {
 	r := newUsageRouter(nil)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusServiceUnavailable {
@@ -130,7 +130,7 @@ func TestGetUsage_InvalidCustomerID(t *testing.T) {
 	r := newUsageRouter(&mockUsageQueryer{})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage?customer_id=abc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage?customer_id=abc", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
@@ -158,7 +158,7 @@ func TestMyUsage_ScopedToAuthenticatedCustomer(t *testing.T) {
 	r := newMyUsageRouter(mq, 42)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/usage?days=7&customer_id=999&api_key_id=5", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/usage?days=7&customer_id=999&api_key_id=5", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -178,7 +178,7 @@ func TestMyUsage_MissingAuthContext(t *testing.T) {
 	r := newMyUsageRouter(&mockUsageQueryer{}, nil)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/usage", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/usage", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
@@ -191,7 +191,7 @@ func TestMyUsage_InvalidDays(t *testing.T) {
 
 	for _, d := range []string{"0", "-1", "366", "abc"} {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/v1/usage?days="+d, nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/usage?days="+d, http.NoBody)
 		r.ServeHTTP(w, req)
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("days=%s: status = %d, want 400", d, w.Code)
@@ -203,7 +203,7 @@ func TestMyUsage_NilService(t *testing.T) {
 	r := newMyUsageRouter(nil, 42)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/usage", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/usage", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusServiceUnavailable {

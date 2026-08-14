@@ -75,8 +75,8 @@ func LookupBGP(ctx context.Context, domainName string) (*BGPInfo, error) {
 // lookupCymruOrigin queries <reversed-ip>.origin.asn.cymru.com TXT to get
 // ASN, prefix, country, and registry for the given IPv4 address.
 //
-// Response format: "ASN | Prefix | Country | Registry | Allocated"
-// Example: "15169 | 8.8.8.0/24 | US | arin | 1992-12-01"
+// Response format: "ASN | Prefix | Country | Registry | Allocated".
+// Example: "15169 | 8.8.8.0/24 | US | arin | 1992-12-01".
 func lookupCymruOrigin(ctx context.Context, ip string) (*ASNRecord, error) {
 	reversed, ok := reverseIPv4(ip)
 	if !ok {
@@ -119,8 +119,8 @@ func parseCymruOrigin(ip, txt string) (*ASNRecord, error) {
 // lookupCymruASName queries AS<number>.asn.cymru.com TXT to get the ASN
 // description (organization name).
 //
-// Response format: "ASN | Country | Registry | Date | Description"
-// Example: "15169 | US | arin | 2000-03-30 | GOOGLE, US"
+// Response format: "ASN | Country | Registry | Date | Description".
+// Example: "15169 | US | arin | 2000-03-30 | GOOGLE, US".
 func lookupCymruASName(ctx context.Context, asn int) (string, error) {
 	name := fmt.Sprintf("AS%d.asn.cymru.com", asn)
 	txts, err := Resolver().LookupTXT(ctx, name)

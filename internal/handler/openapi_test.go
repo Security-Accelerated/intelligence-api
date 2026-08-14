@@ -21,7 +21,7 @@ func openapiRouter() *gin.Engine {
 func TestOpenAPISpec_Endpoint(t *testing.T) {
 	r := openapiRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.yaml", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.yaml", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -40,7 +40,7 @@ func TestOpenAPISpec_Endpoint(t *testing.T) {
 func TestOpenAPISpec_ValidYAMLWithExpectedPaths(t *testing.T) {
 	r := openapiRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.yaml", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.yaml", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -89,7 +89,7 @@ func TestOpenAPISpec_ValidYAMLWithExpectedPaths(t *testing.T) {
 func TestOpenAPISpec_SecuritySchemeHeader(t *testing.T) {
 	r := openapiRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.yaml", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/openapi.yaml", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	var spec struct {

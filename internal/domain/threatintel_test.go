@@ -47,7 +47,7 @@ func TestVirusTotalProvider_Clean(t *testing.T) {
 // vtTestQuery directly calls a test server using the same parsing logic as the provider.
 func vtTestQuery(serverURL, apiKey, domain string) (*ThreatIntelProviderResult, error) {
 	url := serverURL + "/api/v3/domains/" + domain
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func vtTestQuery(serverURL, apiKey, domain string) (*ThreatIntelProviderResult, 
 }
 
 func TestVirusTotalProvider_Detected(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{
 				"attributes": map[string]any{
@@ -190,7 +190,7 @@ func urlhausTestQuery(serverURL, domain string) (*ThreatIntelProviderResult, err
 }
 
 func TestURLhausProvider_Clean(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"query_status": "no_results",
 		})
@@ -207,7 +207,7 @@ func TestURLhausProvider_Clean(t *testing.T) {
 }
 
 func TestURLhausProvider_Listed(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"query_status": "is_host",
 			"url_count":    3,
@@ -242,7 +242,7 @@ func TestURLhausProvider_Name(t *testing.T) {
 
 func alienVaultTestQuery(serverURL, apiKey, domain string) (*ThreatIntelProviderResult, error) {
 	url := serverURL + "/api/v1/indicators/domain/" + domain + "/general"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func TestAlienVaultProvider_NoPulses(t *testing.T) {
 }
 
 func TestAlienVaultProvider_WithPulses(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"pulse_info": map[string]any{
 				"count": 5,

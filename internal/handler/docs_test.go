@@ -29,7 +29,7 @@ func docsRouter() *gin.Engine {
 func TestDocs_RootRedirectsToDocs(t *testing.T) {
 	r := docsRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusMovedPermanently {
@@ -44,7 +44,7 @@ func TestDocs_RootRedirectsToDocs(t *testing.T) {
 func TestDocs_LandingPage(t *testing.T) {
 	r := docsRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -66,7 +66,7 @@ func TestDocs_LandingPage(t *testing.T) {
 func TestDocs_DomainPage(t *testing.T) {
 	r := docsRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/domain", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/domain", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -81,7 +81,7 @@ func TestDocs_DomainPage(t *testing.T) {
 func TestDocs_IPPage(t *testing.T) {
 	r := docsRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/ip", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/ip", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -96,7 +96,7 @@ func TestDocs_IPPage(t *testing.T) {
 func TestDocs_CSSEndpoint(t *testing.T) {
 	r := docsRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/styles.css", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/styles.css", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -131,7 +131,7 @@ func TestDocs_JSEndpoints(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			req := httptest.NewRequest(http.MethodGet, tt.path, http.NoBody)
 			r.ServeHTTP(w, req)
 
 			if w.Code != http.StatusOK {
@@ -183,7 +183,7 @@ func TestDocs_PagesSetCSPAndNoInlineScripts(t *testing.T) {
 	for _, path := range docsPagePaths {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
 			r.ServeHTTP(w, req)
 
 			if w.Code != http.StatusOK {
@@ -238,7 +238,7 @@ func TestDocs_ChangelogFiltersInternalEntries(t *testing.T) {
 
 	r := docsRouterWithData(changelog, nil, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/changelog", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/changelog", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -258,7 +258,7 @@ func TestDocs_ChangelogFiltersInternalEntries(t *testing.T) {
 	// otherwise leak silently.
 	for _, path := range docsPagePaths {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
 		r.ServeHTTP(w, req)
 		if strings.Contains(w.Body.String(), "Internal refactor") {
 			t.Errorf("%s leaks an internal changelog entry", path)
@@ -287,7 +287,7 @@ func TestDocs_ChangelogExcludesAllInternalVersions(t *testing.T) {
 
 	r := docsRouterWithData(changelog, nil, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs/changelog", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs/changelog", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -309,7 +309,7 @@ func TestDocs_RendersVersion(t *testing.T) {
 
 	r := docsRouterWithData(nil, nil, status)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -329,7 +329,7 @@ func TestDocs_RendersPaymentLinks(t *testing.T) {
 
 	r := docsRouterWithData(nil, cfg, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -350,7 +350,7 @@ func TestDocs_RendersPaymentLinks(t *testing.T) {
 func TestDocs_OverviewRendersFooter(t *testing.T) {
 	r := docsRouter()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/docs", nil)
+	req := httptest.NewRequest(http.MethodGet, "/docs", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -371,7 +371,7 @@ func TestDocs_OverviewRendersFooter(t *testing.T) {
 }
 
 // TestDocs_DetailPagesFooter guards the detail-page footer. These pages carry
-// the plain .page-footer, never the overview's panelled .docs-footer — the two
+// the plain .page-footer, never the overview's paneled .docs-footer — the two
 // look nothing alike and the heavy one does not belong at the end of a
 // reference page.
 func TestDocs_DetailPagesFooter(t *testing.T) {
@@ -380,7 +380,7 @@ func TestDocs_DetailPagesFooter(t *testing.T) {
 	for _, path := range docsReferencePagePaths {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
 			r.ServeHTTP(w, req)
 
 			if w.Code != http.StatusOK {
@@ -392,7 +392,7 @@ func TestDocs_DetailPagesFooter(t *testing.T) {
 				t.Error("detail page is missing its footer")
 			}
 			if strings.Contains(body, "docs-footer") {
-				t.Error("detail pages must not use the overview's panelled footer")
+				t.Error("detail pages must not use the overview's paneled footer")
 			}
 			if strings.Contains(body, "sidebar-footer") {
 				t.Error("detail pages should not have a sidebar footer")
@@ -411,7 +411,7 @@ func TestDocs_PagesLinkToOpenAPISpec(t *testing.T) {
 	for _, path := range docsPagePaths {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
 			r.ServeHTTP(w, req)
 
 			if w.Code != http.StatusOK {
@@ -451,7 +451,7 @@ func TestDocs_ResponseHeadersDocumented(t *testing.T) {
 	for _, path := range []string{"/docs/domain", "/docs/ip"} {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
 			r.ServeHTTP(w, req)
 
 			if w.Code != http.StatusOK {
@@ -642,7 +642,7 @@ func TestDocs_SidebarMatchesDocumentOrder(t *testing.T) {
 	for _, path := range docsReferencePagePaths {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
 			r.ServeHTTP(w, req)
 			if w.Code != http.StatusOK {
 				t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)

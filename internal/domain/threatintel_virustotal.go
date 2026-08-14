@@ -44,7 +44,7 @@ func (p *VirusTotalProvider) Query(ctx context.Context, domain string) (*ThreatI
 	}
 
 	url := "https://www.virustotal.com/api/v3/domains/" + domain
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("virustotal: build request: %w", err)
 	}

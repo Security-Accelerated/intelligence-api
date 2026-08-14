@@ -27,7 +27,7 @@ func TestRequestLogger_BasicFields(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	req.Header.Set("User-Agent", "test-agent")
 	r.ServeHTTP(w, req)
 
@@ -96,7 +96,7 @@ func TestRequestLogger_AuthFieldsPresent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -133,7 +133,7 @@ func TestRequestLogger_AuthFieldsAbsent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	absent := []string{"api_key_id", "api_key_plan"}
@@ -159,7 +159,7 @@ func TestRequestLogger_StringSliceContextKeysPresent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -189,7 +189,7 @@ func TestRequestLogger_StringSliceContextKeysAbsent(t *testing.T) {
 	r.GET("/test", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
 
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/test", nil))
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/test", http.NoBody))
 
 	entry := logs.All()[0]
 	for _, f := range entry.Context {
@@ -214,7 +214,7 @@ func TestRequestLogger_IntContextKeysPresent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -251,7 +251,7 @@ func TestRequestLogger_IntContextKeysAbsent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	entry := logs.All()[0]
@@ -276,7 +276,7 @@ func TestRequestLogger_StringContextKeysPresent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -307,7 +307,7 @@ func TestRequestLogger_StringContextKeysAbsent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	entry := logs.All()[0]
@@ -331,7 +331,7 @@ func TestRequestLogger_ErrorLevelFor5xx(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/fail", nil)
+	req := httptest.NewRequest(http.MethodGet, "/fail", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {
@@ -358,7 +358,7 @@ func TestRequestLogger_InfoLevelForNon5xx(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	req := httptest.NewRequest(http.MethodGet, "/ok", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	entries := logs.All()
@@ -382,7 +382,7 @@ func TestRequestLogger_ContextKeysAbsent(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {

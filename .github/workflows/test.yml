@@ -13,9 +13,10 @@ on:
 
 jobs:
   # Gates only on findings a change introduces, not on the whole tree. The
-  # repository has a pre-existing backlog (112 findings when golangci-lint was
-  # first run against it), and a full-tree gate would fail every PR regardless
-  # of what it touched. Clear the backlog and this can become `make lint`.
+  # repository has a pre-existing backlog (255 findings when golangci-lint was
+  # first run uncapped against it; 36 remain), and a full-tree gate would fail
+  # every PR regardless of what it touched. Clear the backlog and this can
+  # become `make lint`.
   #
   # pull_request only: --new-from-rev needs a base branch to diff against, which
   # the workflow_call path (invoked from publish and deploy) does not have.
@@ -51,8 +52,15 @@ jobs:
       - name: Fetch base branch
         run: git fetch --no-tags origin "${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
 
+      # The issue caps are disabled for the same reason as in the Makefile:
+      # golangci-lint reports at most 50 per linter and 3 per identical message
+      # by default, which on a gate means a PR can pass having been told about
+      # only some of what it introduced.
       - name: golangci-lint (new findings only)
-        run: golangci-lint run --timeout 10m --new-from-rev="origin/${{ github.base_ref }}" ./...
+        run: >
+          golangci-lint run --timeout 10m
+          --max-issues-per-linter=0 --max-same-issues=0
+          --new-from-rev="origin/${{ github.base_ref }}" ./...
 
   test:
     name: Build, vet and test

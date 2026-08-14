@@ -273,7 +273,7 @@ func (r *GeoIPReader) DownloadAndReload(ctx context.Context, licenseKey, dbPath,
 func downloadMMDB(ctx context.Context, client *http.Client, edition, licenseKey, dbPath string) (string, string, int64, error) {
 	dlURL := fmt.Sprintf(maxmindDownloadURL, edition, licenseKey)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dlURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dlURL, http.NoBody)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("build %s request: %w", edition, scrubLicenseKey(err))
 	}

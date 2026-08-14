@@ -21,7 +21,7 @@ const mtaSTSPolicyMaxBytes = 64 * 1024
 var mtaSTSPolicyClient = &http.Client{
 	Transport: trustedTransport,
 	Timeout:   10 * time.Second,
-	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 		// RFC 8461 §3.3: policy fetch MUST NOT follow redirects.
 		return http.ErrUseLastResponse
 	},
@@ -75,7 +75,7 @@ func parseMTASTSRecord(txt string) *MTASTSRecord {
 
 func fetchMTASTSPolicy(ctx context.Context, domain string) ([]byte, error) {
 	url := fmt.Sprintf("https://mta-sts.%s/.well-known/mta-sts.txt", domain)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}

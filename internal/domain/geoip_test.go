@@ -90,7 +90,7 @@ func TestDownloadMMDB_CancelsOnContextCancel(t *testing.T) {
 	// Server holds the response open until the connection drops, simulating a
 	// slow MaxMind download. The test cancels ctx; downloadMMDB must abort
 	// promptly via the request context, not wait for the http.Client timeout.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	}))
 	t.Cleanup(srv.Close)
@@ -112,12 +112,12 @@ func TestDownloadMMDB_CancelsOnContextCancel(t *testing.T) {
 	select {
 	case err := <-done:
 		if err == nil {
-			t.Fatal("expected an error from cancelled context")
+			t.Fatal("expected an error from canceled context")
 		}
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("err = %v, want errors.Is(context.Canceled)", err)
 		}
 	case <-time.After(2 * time.Second):
-		t.Fatal("downloadMMDB did not honor cancelled context within 2s")
+		t.Fatal("downloadMMDB did not honor canceled context within 2s")
 	}
 }

@@ -27,15 +27,21 @@ deps:
 	go get -u ./...
 	go mod tidy
 
+# golangci-lint defaults to reporting at most 50 issues per linter and 3 per
+# identical message, silently. Both targets turn that off: a capped count reads
+# as a backlog you can finish and then cannot, and on lint-new it would hide
+# findings in the very code under review.
+LINT_FLAGS := --timeout 10m --max-issues-per-linter=0 --max-same-issues=0
+
 # Full lint over the whole tree. Config lives in .golangci.yml, copied from the
 # fleet repo — edit it there and re-run bin/lint-apply.sh rather than diverging.
 lint:
-	golangci-lint run --timeout 10m ./...
+	golangci-lint run $(LINT_FLAGS) ./...
 
 # Only findings introduced relative to main. This is what CI gates on, so the
 # pre-existing backlog does not block unrelated work.
 lint-new:
-	golangci-lint run --timeout 10m --new-from-rev=origin/main ./...
+	golangci-lint run $(LINT_FLAGS) --new-from-rev=origin/main ./...
 
 test:
 	go mod tidy

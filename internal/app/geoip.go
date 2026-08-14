@@ -21,7 +21,7 @@ type geoipPlan struct {
 
 // planGeoIP decides whether the databases on disk are usable, refreshable, or
 // absent. Split out from initGeoIP because it is the part with the interesting
-// behaviour and it can be tested without touching the network.
+// behavior and it can be tested without touching the network.
 //
 // A stale database is still loaded before the refresh is started: serving
 // slightly out-of-date geolocation immediately beats serving none for the

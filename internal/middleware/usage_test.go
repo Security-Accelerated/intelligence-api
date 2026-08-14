@@ -40,7 +40,7 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if len(rec.entries) != 1 {
@@ -102,7 +102,7 @@ func TestUsageLog_NoContextKeys(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/hello", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/hello", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if len(rec.entries) != 1 {

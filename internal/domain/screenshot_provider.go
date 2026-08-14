@@ -28,7 +28,7 @@ type ScreenshotProvider interface {
 	Capture(ctx context.Context, target string, opts ScreenshotOptions) (*ScreenshotInfo, error)
 }
 
-// ScreenshotOptions are the per-request knobs a provider must honour.
+// ScreenshotOptions are the per-request knobs a provider must honor.
 type ScreenshotOptions struct {
 	// Timeout bounds the whole operation, probe included.
 	Timeout time.Duration

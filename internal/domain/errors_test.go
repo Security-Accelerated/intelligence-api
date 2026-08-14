@@ -21,7 +21,7 @@ func TestIsExpectedError_Expected(t *testing.T) {
 		err  error
 	}{
 		{"context deadline", context.DeadlineExceeded},
-		{"context cancelled", context.Canceled},
+		{"context canceled", context.Canceled},
 		{"wrapped context deadline", fmt.Errorf("ssl: %w", context.DeadlineExceeded)},
 
 		{"dns nxdomain", &net.DNSError{Err: "no such host", Name: "x.invalid", IsNotFound: true}},
@@ -111,7 +111,7 @@ func TestIsExpectedError_CertificateVerificationIsNotExpected(t *testing.T) {
 	for _, tt := range certErrors {
 		t.Run(tt.name, func(t *testing.T) {
 			if !certificateVerificationError(tt.err) {
-				t.Fatalf("test setup is wrong: %v is not recognised as a cert verification error", tt.err)
+				t.Fatalf("test setup is wrong: %v is not recognized as a cert verification error", tt.err)
 			}
 			if IsExpectedError(tt.err) {
 				t.Errorf("IsExpectedError(%v) = true; certificate verification failures must alert — "+

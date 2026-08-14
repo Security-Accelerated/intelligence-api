@@ -85,7 +85,7 @@ func TestNewExternalResolver_RespectsContextCancellation(t *testing.T) {
 
 	_, err := r.LookupHost(ctx, "example.com")
 	if err == nil {
-		t.Error("expected error with cancelled context")
+		t.Error("expected error with canceled context")
 	}
 }
 

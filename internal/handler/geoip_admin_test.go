@@ -43,7 +43,7 @@ func TestRefreshGeoIP_Success(t *testing.T) {
 
 	r := newGeoIPAdminRouter(&mockGeoRefresher{}, cfg)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -54,7 +54,7 @@ func TestRefreshGeoIP_Success(t *testing.T) {
 func TestRefreshGeoIP_NoRefresher(t *testing.T) {
 	r := newGeoIPAdminRouter(nil, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusServiceUnavailable {
@@ -68,7 +68,7 @@ func TestRefreshGeoIP_NoLicenseKey(t *testing.T) {
 
 	r := newGeoIPAdminRouter(&mockGeoRefresher{}, cfg)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
@@ -83,7 +83,7 @@ func TestRefreshGeoIP_RefreshError(t *testing.T) {
 
 	r := newGeoIPAdminRouter(&mockGeoRefresher{err: errors.New("download failed")}, cfg)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusInternalServerError {

@@ -152,7 +152,7 @@ func TestOpenAPIMatchesCorrelationIDContract(t *testing.T) {
 			specAccepts := len(id) <= p.Schema.MaxLength && specPattern.MatchString(id)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.Header.Set(middleware.ClientRequestIDHeader, id)
 			r.ServeHTTP(w, req)
 			apiAccepts := w.Header().Get(middleware.ClientRequestIDHeader) != ""

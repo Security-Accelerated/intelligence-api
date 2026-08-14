@@ -64,7 +64,7 @@ func TestCaptureScreenshot_CannotReachLoopback(t *testing.T) {
 		t.Fatalf("listen: %v", err)
 	}
 	srv := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			hits.Add(1)
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = w.Write([]byte("<html><body><h1>INTERNAL SERVICE</h1></body></html>"))

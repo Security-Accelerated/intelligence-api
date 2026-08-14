@@ -69,7 +69,7 @@ func IsPrivateIP(ip net.IP) bool {
 // DialControl is a net.Dialer.Control function that rejects connections to
 // private/reserved IP addresses. It fires after DNS resolution but before the
 // TCP handshake, eliminating TOCTOU races between resolve and connect.
-func DialControl(network, address string, _ syscall.RawConn) error {
+func DialControl(_, address string, _ syscall.RawConn) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return fmt.Errorf("safenet: invalid address %q: %w", address, err)
