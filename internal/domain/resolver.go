@@ -163,8 +163,7 @@ func (c *failoverConn) Read(b []byte) (int, error) {
 	defer c.mu.Unlock()
 
 	for {
-		c.conn.SetReadDeadline(c.attemptDeadline())
-		n, err := c.conn.Read(b)
+		n, err := c.readOnce(b)
 		if err == nil {
 			return n, nil
 		}
@@ -185,6 +184,21 @@ func (c *failoverConn) Read(b []byte) (int, error) {
 			}
 		}
 	}
+}
+
+// readOnce gives the current server its bounded turn and reads one reply.
+//
+// A deadline that cannot be set is returned as an error rather than ignored.
+// The Read below has no timeout of its own, so continuing past a failed
+// SetReadDeadline would block on a blackholed server for the caller's entire
+// budget — the exact failure attemptDeadline exists to prevent. Reporting it
+// instead routes the connection through canFailOver like any other read
+// failure, so the next server still gets its turn.
+func (c *failoverConn) readOnce(b []byte) (int, error) {
+	if err := c.conn.SetReadDeadline(c.attemptDeadline()); err != nil {
+		return 0, err
+	}
+	return c.conn.Read(b)
 }
 
 // attemptDeadline bounds one server's chance to answer: the per-server timeout,

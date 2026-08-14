@@ -182,12 +182,17 @@ func envKeyReplacer() *strings.Replacer {
 	return strings.NewReplacer(".", "_")
 }
 
+// charsToString renders a NUL-terminated C character array from uname(2) as a
+// Go string. The source is ASCII kernel/release metadata, so every element is
+// in 0-127 and the int8 -> byte conversion cannot change a value; a negative
+// element would mean uname returned non-ASCII, which it does not.
 func charsToString(ca []int8) string {
 	b := make([]byte, 0, len(ca))
 	for _, c := range ca {
 		if c == 0 {
 			break
 		}
+		//nolint:gosec // G115: uname fields are ASCII, so c is always 0-127.
 		b = append(b, byte(c))
 	}
 	return string(b)

@@ -132,7 +132,10 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 	placeholders := make([]string, cols)
 
 	now := time.Now().UTC()
-	for i, e := range entries {
+	// Indexed rather than ranged by value: a UsageEntry is 136 bytes and this
+	// loop runs once per buffered entry on every flush.
+	for i := range entries {
+		e := &entries[i]
 		base := i * cols
 		for j := range placeholders {
 			placeholders[j] = fmt.Sprintf("$%d", base+j+1)
@@ -154,6 +157,9 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 		args = append(args, now)
 	}
 
+	// G201 is a false positive: `columns` is the fixed package-level list and
+	// `valueStrings` is generated $N placeholders. Every value is in args.
+	//nolint:gosec // G201: no caller-supplied text reaches the statement.
 	query := fmt.Sprintf(`INSERT INTO request_log (%s) VALUES %s`,
 		strings.Join(columns, ", "), strings.Join(valueStrings, ","))
 

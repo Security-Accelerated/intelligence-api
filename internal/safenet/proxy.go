@@ -40,6 +40,18 @@ func newProxy(dialer *net.Dialer) (*http.Server, net.Listener, error) {
 				handleHTTP(w, r, dialer)
 			}
 		}),
+
+		// Bounds how long a connection may take to send its request headers.
+		// Without it a client that opens a socket and dribbles headers holds a
+		// goroutine indefinitely. The listener is on 127.0.0.1 and the only
+		// intended client is our own headless Chrome, so this is defense in
+		// depth rather than an exposed hole — but the cost is one field.
+		//
+		// It bounds the header read only, never the body or a CONNECT tunnel,
+		// so a long-running screenshot capture is unaffected. Matched to the
+		// dial timeout above rather than made configurable: nothing operational
+		// tunes this, and a second knob for a loopback proxy earns nothing.
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	go func() {

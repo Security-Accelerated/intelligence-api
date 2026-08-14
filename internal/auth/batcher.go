@@ -148,6 +148,9 @@ func (b *LastUsedBatcher) flush(ids map[int]struct{}) {
 		i++
 	}
 
+	// G201 is a false positive: the only interpolation is the generated $N
+	// placeholder list; every id travels in args.
+	//nolint:gosec // G201: placeholders only, ids are parameterised.
 	query := fmt.Sprintf(
 		`UPDATE api_keys SET last_used_at = now() WHERE id IN (%s)`,
 		strings.Join(placeholders, ","),

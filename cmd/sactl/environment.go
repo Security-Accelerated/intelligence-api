@@ -23,6 +23,12 @@ const (
 
 // localDatabaseURL matches the credentials in docker-compose.yaml. sslmode is
 // disabled because the local container serves plaintext, unlike Neon.
+//
+// These are not a secret: they are the same fixed values docker-compose.yaml
+// puts in the repo, they only ever reach a container on localhost, and no
+// deployed environment uses them — production credentials come from .env.
+//
+//nolint:gosec // G101: local docker-compose credentials, not a real secret.
 const localDatabaseURL = "postgres://intelligence:intelligence@localhost:5432/intelligence_api?sslmode=disable"
 
 func environments() []environment {

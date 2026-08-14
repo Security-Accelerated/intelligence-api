@@ -19,11 +19,10 @@ func newHealthRouter(h *Handler) *gin.Engine {
 	return r
 }
 
-func doHealthRequest(r *gin.Engine) (*httptest.ResponseRecorder, map[string]any) {
+func doHealthRequest(r *gin.Engine) (rec *httptest.ResponseRecorder, body map[string]any) {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/health", http.NoBody)
 	r.ServeHTTP(w, req)
-	var body map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &body)
 	return w, body
 }

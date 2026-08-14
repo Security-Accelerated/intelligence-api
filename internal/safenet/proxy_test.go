@@ -264,8 +264,11 @@ func TestSafeProxy_BlocksCONNECTToPrivate(t *testing.T) {
 	proxyURL, _ := url.Parse("http://" + ln.Addr().String())
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 
-	_, err = client.Get("https://10.0.0.1/")
+	resp, err := client.Get("https://10.0.0.1/")
 	if err == nil {
+		// Only reachable when the block has regressed, but leaking the body
+		// here would leak a connection to the very host we refuse to talk to.
+		resp.Body.Close()
 		t.Fatal("expected CONNECT to private IP to fail, but request succeeded")
 	}
 }

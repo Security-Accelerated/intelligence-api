@@ -289,7 +289,7 @@ func classifyZENResponse(addr string) string {
 }
 
 // ScoreReputation computes a risk score (0–100) and risk level from provider results.
-func ScoreReputation(providers []*ProviderResult) (int, string) {
+func ScoreReputation(providers []*ProviderResult) (score int, risk string) {
 	total := 0
 	for _, p := range providers {
 		if !p.Listed {
@@ -301,7 +301,6 @@ func ScoreReputation(providers []*ProviderResult) (int, string) {
 		total = 100
 	}
 
-	var risk string
 	switch {
 	case total == 0:
 		risk = "clean"
