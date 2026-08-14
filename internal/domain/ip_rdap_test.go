@@ -2,6 +2,49 @@ package domain
 
 import "testing"
 
+// TestRIREndpointForIP covers the first-octet table: one address per RIR, the
+// boundaries of a multi-octet range, and every fallback to ARIN. The mapping
+// had no test when it was a switch, so a transcription slip in the table that
+// replaced it would have been invisible.
+func TestRIREndpointForIP(t *testing.T) {
+	tests := []struct {
+		name string
+		ip   string
+		want string
+	}{
+		{"ripe", "62.0.0.1", rirEndpoints["ripe"]},
+		{"apnic", "103.0.0.1", rirEndpoints["apnic"]},
+		{"lacnic", "200.0.0.1", rirEndpoints["lacnic"]},
+		{"afrinic", "41.0.0.1", rirEndpoints["afrinic"]},
+		{"arin by allocation", "8.8.8.8", rirEndpoints["arin"]},
+
+		{"range low boundary", "77.0.0.1", rirEndpoints["ripe"]},
+		{"range high boundary", "95.0.0.1", rirEndpoints["ripe"]},
+		{"below range", "76.0.0.1", rirEndpoints["arin"]},
+		{"above range", "96.0.0.1", rirEndpoints["arin"]},
+
+		// Shadowed entries: an earlier, broader range claims these octets, so
+		// the later per-octet entry never matches. Both answers disagree with
+		// IANA — 27.0.0.0/8 is APNIC's and 181.0.0.0/8 is LACNIC's — and both
+		// predate the table. Pinned so that correcting the ranges has to change
+		// a test that says why, rather than passing unnoticed.
+		{"27 shadowed by RIPE 25-31", "27.0.0.1", rirEndpoints["ripe"]},
+		{"181 shadowed by APNIC 180-183", "181.0.0.1", rirEndpoints["apnic"]},
+
+		{"unallocated octet falls back", "0.0.0.1", rirEndpoints["arin"]},
+		{"ipv6 falls back", "2001:db8::1", rirEndpoints["arin"]},
+		{"unparseable falls back", "not-an-ip", rirEndpoints["arin"]},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rirEndpointForIP(tt.ip); got != tt.want {
+				t.Errorf("rirEndpointForIP(%q) = %q, want %q", tt.ip, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractEmailFromVCard_Valid(t *testing.T) {
 	// Standard jCard: ["vcard", [["version", {}, "text", "4.0"], ["email", {}, "text", "abuse@example.com"]]]
 	vcard := []any{

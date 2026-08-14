@@ -15,7 +15,7 @@ import (
 // --- Success-path tests (plain dialer, proves forwarding logic) ---
 
 func TestProxy_ForwardsHTTPSuccessfully(t *testing.T) {
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Test", "proxied")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("hello from target"))
@@ -51,7 +51,7 @@ func TestProxy_ForwardsHTTPSuccessfully(t *testing.T) {
 }
 
 func TestProxy_ForwardsCONNECTSuccessfully(t *testing.T) {
-	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("hello via TLS"))
 	}))
@@ -120,7 +120,7 @@ func TestProxy_StripsHopByHopHeaders(t *testing.T) {
 	proxyURL, _ := url.Parse("http://" + ln.Addr().String())
 	transport := &http.Transport{Proxy: http.ProxyURL(proxyURL)}
 
-	req, _ := http.NewRequest(http.MethodGet, target.URL, nil)
+	req, _ := http.NewRequest(http.MethodGet, target.URL, http.NoBody)
 	req.Header.Set("Proxy-Connection", "keep-alive")
 	req.Header.Set("Proxy-Authorization", "Basic secret")
 	req.Header.Set("Connection", "X-Secret-Hop")
@@ -151,7 +151,7 @@ func TestProxy_StripsHopByHopHeaders(t *testing.T) {
 
 func TestProxy_CONNECTWriteFailure_CleansUp(t *testing.T) {
 	// Start a TLS target that we can successfully dial
-	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
 	}))
 	defer target.Close()
@@ -205,7 +205,7 @@ func TestSafeProxy_BlocksLocalhostHTTP(t *testing.T) {
 	}
 	defer proxy.Close()
 
-	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
 	}))
 	defer target.Close()

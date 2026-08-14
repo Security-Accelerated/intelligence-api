@@ -51,8 +51,8 @@ func (p *ChromiumProvider) Capture(ctx context.Context, target string, opts Scre
 		return nil, fmt.Errorf("screenshot capture: %w", err)
 	}
 
-	if max := opts.maxBytes(); len(png) > max {
-		return nil, fmt.Errorf("screenshot too large: %d bytes exceeds %d byte limit", len(png), max)
+	if limit := opts.maxBytes(); len(png) > limit {
+		return nil, fmt.Errorf("screenshot too large: %d bytes exceeds %d byte limit", len(png), limit)
 	}
 
 	return &ScreenshotInfo{
@@ -78,14 +78,14 @@ func probeURL(ctx context.Context, domain string) (string, int, error) {
 	client := &http.Client{
 		Timeout:   10 * time.Second,
 		Transport: safeTransport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 
 	for _, scheme := range []string{"https", "http"} {
 		u := scheme + "://" + domain
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 		if err != nil {
 			continue
 		}

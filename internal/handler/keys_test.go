@@ -39,7 +39,7 @@ func newKeysRouter(svc KeyRotationService, customerID any) *gin.Engine {
 
 func doRotateRequest(r *gin.Engine) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/keys/rotate", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/keys/rotate", http.NoBody)
 	r.ServeHTTP(w, req)
 	return w
 }

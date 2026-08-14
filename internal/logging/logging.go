@@ -15,7 +15,7 @@ import (
 var appLogger *zap.Logger
 
 const (
-	// environments
+	// Environments.
 	production = "production"
 	docker     = "docker"
 )

@@ -55,7 +55,7 @@ func newInfoRouter(version string, rc *cache.RedisCache, cr AuthCacheStats) *gin
 
 func doInfoRequest(r *gin.Engine) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/info", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
 	r.ServeHTTP(w, req)
 	return w
 }
@@ -205,7 +205,7 @@ func TestInfo_NoStatusConfigured(t *testing.T) {
 	r.GET("/v1/info", h.Info)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/info", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/info", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusServiceUnavailable {

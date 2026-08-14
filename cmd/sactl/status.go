@@ -16,7 +16,7 @@ type checker struct {
 	pass, fail int
 }
 
-func (c *checker) report(ok bool, desc string, detail string) {
+func (c *checker) report(ok bool, desc, detail string) {
 	mark := "\033[32m✓\033[0m"
 	if ok {
 		c.pass++
@@ -62,7 +62,7 @@ func statusCommand() command {
 
 // getJSONUnauthenticated fetches an endpoint that needs no API key.
 func (f *apiFlags) getJSONUnauthenticated(ctx context.Context, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, trimHost(f.host)+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, trimHost(f.host)+path, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func (f *apiFlags) getJSONUnauthenticated(ctx context.Context, path string, out 
 }
 
 func trimHost(h string) string {
-	for len(h) > 0 && h[len(h)-1] == '/' {
+	for h != "" && h[len(h)-1] == '/' {
 		h = h[:len(h)-1]
 	}
 	return h

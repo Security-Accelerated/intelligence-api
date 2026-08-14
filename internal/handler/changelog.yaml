@@ -8,6 +8,18 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.71.0
+  date: 2026-08-13
+  changes:
+    - text: "Cleared the mechanical half of the golangci-lint backlog: 255 findings down to 36. The remainder are judgment calls — gosec suppressions that need a stated reason, two duplicated fan-out blocks, and a handful of by-value copies — and are being handled separately"
+      audience: internal
+    - text: "The RIR lookup behind an IP's abuse contact was a fifty-eight-branch switch of `first >= n && first <= n`, which is a table written as control flow. It is now a table. All 256 first-octets were diffed before and after to prove the mapping is unchanged, and it has a regression test for the first time"
+      audience: internal
+    - text: "make lint and the CI gate now pass --max-issues-per-linter=0 --max-same-issues=0. golangci-lint caps output at 50 per linter and 3 per identical message by default and says nothing about it, which is why the backlog was first recorded as 112. On the gate that cap could let a PR pass having been shown only part of what it introduced"
+      audience: internal
+    - text: "British spellings in comments and strings are now American, matching the fleet lint config's locale. This changed one user-visible string: the Pushover notification title for a canceled subscription is now 'Subscription Canceled'"
+      audience: internal
+
 - version: v0.70.0
   date: 2026-08-11
   changes:

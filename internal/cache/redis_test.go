@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -68,8 +69,8 @@ func TestSetThenGet_RoundTrip(t *testing.T) {
 	if got == nil {
 		t.Fatal("expected non-nil data after Set")
 	}
-	if string(got) != string(original) {
-		t.Errorf("data = %q, want %q", string(got), string(original))
+	if !bytes.Equal(got, original) {
+		t.Errorf("data = %q, want %q", got, original)
 	}
 }
 

@@ -34,7 +34,7 @@ func TestGenerateAPIKey_HexEncoded(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	for _, c := range key {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("key contains non-hex character: %c", c)
 		}
 	}

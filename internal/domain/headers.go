@@ -11,7 +11,7 @@ func LookupHeaders(ctx context.Context, domain string) (*HeadersInfo, error) {
 	client := &http.Client{
 		Timeout:   10 * time.Second,
 		Transport: safeTransport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
@@ -19,7 +19,7 @@ func LookupHeaders(ctx context.Context, domain string) (*HeadersInfo, error) {
 	var resp *http.Response
 	var err error
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+domain, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+domain, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -27,7 +27,7 @@ func LookupHeaders(ctx context.Context, domain string) (*HeadersInfo, error) {
 
 	resp, err = client.Do(req)
 	if err != nil {
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, "http://"+domain, nil)
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, "http://"+domain, http.NoBody)
 		if err != nil {
 			return nil, fmt.Errorf("create request: %w", err)
 		}

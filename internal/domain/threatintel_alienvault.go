@@ -37,7 +37,7 @@ func (p *AlienVaultProvider) Query(ctx context.Context, domain string) (*ThreatI
 	}
 
 	url := "https://otx.alienvault.com/api/v1/indicators/domain/" + domain + "/general"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("alienvault_otx: build request: %w", err)
 	}

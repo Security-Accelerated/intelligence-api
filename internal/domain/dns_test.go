@@ -17,10 +17,10 @@ func TestLookupDNS_CancelledContext(t *testing.T) {
 
 	info, err := LookupDNS(ctx, "example.com")
 	if err == nil {
-		t.Fatal("expected error for cancelled context, got nil")
+		t.Fatal("expected error for canceled context, got nil")
 	}
 	if info != nil {
-		t.Errorf("expected nil info for cancelled context, got %+v", info)
+		t.Errorf("expected nil info for canceled context, got %+v", info)
 	}
 }
 

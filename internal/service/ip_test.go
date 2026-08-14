@@ -422,7 +422,9 @@ func TestIPLookup_PanickingLookupDegradesToError(t *testing.T) {
 	}
 }
 
-func TestIPLookup_ConcurrentSafety(t *testing.T) {
+// TestIPLookup_ConcurrentSafety asserts nothing directly: the race detector is
+// the assertion, so the test never uses its *testing.T.
+func TestIPLookup_ConcurrentSafety(_ *testing.T) {
 	svc := newTestIPService(newMockCache())
 
 	var wg sync.WaitGroup

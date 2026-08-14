@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/likexian/whois"
-	whoisparser "github.com/likexian/whois-parser"
 	"net"
 	"net/netip"
 	"testing"
 
+	"github.com/likexian/whois"
+	whoisparser "github.com/likexian/whois-parser"
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 

@@ -22,26 +22,16 @@ type mockIPService struct {
 	resp     *domain.IPResponse
 	stats    domain.CacheStats
 	lastOpts domain.IPLookupOptions
-	seen     []string
 }
 
 func (m *mockIPService) Lookup(_ context.Context, ip string, opts domain.IPLookupOptions) (*domain.IPResponse, domain.CacheStats) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastOpts = opts
-	m.seen = append(m.seen, ip)
 	if m.resp != nil {
 		return m.resp, m.stats
 	}
 	return &domain.IPResponse{IP: ip}, m.stats
-}
-
-func (m *mockIPService) ips() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := slices.Clone(m.seen)
-	slices.Sort(out)
-	return out
 }
 
 func (m *mockIPService) opts() domain.IPLookupOptions {

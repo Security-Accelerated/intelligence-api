@@ -13,7 +13,7 @@ func TestNotFound_HTMLPageForBrowserPaths(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			r := docsRouter()
 			w := httptest.NewRecorder()
-			r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, http.NoBody))
 
 			if w.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
@@ -52,7 +52,7 @@ func TestNotFound_JSONForAPIPaths(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			r := docsRouter()
 			w := httptest.NewRecorder()
-			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, nil))
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, http.NoBody))
 
 			if w.Code != http.StatusNotFound {
 				t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
@@ -83,7 +83,7 @@ func TestNotFound_DoesNotEchoRequestedPath(t *testing.T) {
 
 	r := docsRouter()
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+marker, nil))
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+marker, http.NoBody))
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
@@ -101,7 +101,7 @@ func TestNotFound_KnownRoutesUnaffected(t *testing.T) {
 
 	for _, path := range append([]string{"/docs/styles.css", "/docs/openapi.yaml"}, docsPagePaths...) {
 		w := httptest.NewRecorder()
-		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, http.NoBody))
 		if w.Code != http.StatusOK {
 			t.Errorf("%s: status = %d, want 200", path, w.Code)
 		}

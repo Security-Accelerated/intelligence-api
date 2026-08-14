@@ -31,7 +31,7 @@ var crtShRetryDelay = time.Second
 // shows up as a lookup that fails on a cold cache and passes on the retry —
 // which reads as flaky tooling rather than a flaky upstream.
 //
-// Two behaviours follow from that:
+// Two behaviors follow from that:
 //
 //   - A fast failure (404 or 5xx) is retried once. Both are cheap to repeat,
 //     and one retry converts most of crt.sh's noise into a usable answer.
@@ -55,7 +55,7 @@ func fetchCrtSh(ctx context.Context, client *http.Client, url, userAgent string,
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 		if err != nil {
 			return nil, fmt.Errorf("create request: %w", err)
 		}

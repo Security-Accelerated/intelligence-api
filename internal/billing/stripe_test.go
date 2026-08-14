@@ -90,7 +90,7 @@ func TestStripeService_NotifyMultiple(t *testing.T) {
 	svc := &StripeService{notifier: n}
 
 	svc.notify(context.Background(), "New Subscriber", "user@example.com signed up for basic")
-	svc.notify(context.Background(), "Subscription Cancelled", "Customer cus_123 cancelled")
+	svc.notify(context.Background(), "Subscription Canceled", "Customer cus_123 canceled")
 
 	calls := n.waitForCalls(t, 2)
 	if len(calls) != 2 {
@@ -116,7 +116,7 @@ type provisionCall struct {
 	name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string
 }
 
-func (m *mockBillingRepo) CustomerExistsByStripeID(_ context.Context, stripeID string) (bool, error) {
+func (m *mockBillingRepo) CustomerExistsByStripeID(_ context.Context, _ string) (bool, error) {
 	return m.customerExists, m.customerExistsErr
 }
 func (m *mockBillingRepo) ProvisionCustomer(_ context.Context, name, email, plan, stripeCustomerID, keyHash, sessionID, rawKey string) (int, error) {
@@ -299,8 +299,8 @@ func TestHandleSubscriptionDeleted_HappyPath(t *testing.T) {
 	}
 
 	calls := notifier.waitForCalls(t, 1)
-	if len(calls) != 1 || calls[0].title != "Subscription Cancelled" {
-		t.Errorf("notify = %v, want title %q", calls, "Subscription Cancelled")
+	if len(calls) != 1 || calls[0].title != "Subscription Canceled" {
+		t.Errorf("notify = %v, want title %q", calls, "Subscription Canceled")
 	}
 }
 
@@ -420,10 +420,10 @@ func mockSession(id, customerID, email, name string, lineItems []*stripe.LineIte
 	return sess
 }
 
-func newCheckoutTestService(repo *mockBillingRepo, sess *stripe.CheckoutSession, expandedSess *stripe.CheckoutSession) *StripeService {
+func newCheckoutTestService(repo *mockBillingRepo, sess, expandedSess *stripe.CheckoutSession) *StripeService {
 	callCount := 0
 	svc := newTestStripeService(repo, &mockAuthCache{}, newMockNotifier())
-	svc.fetchSession = func(id string, params *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
+	svc.fetchSession = func(_ string, _ *stripe.CheckoutSessionParams) (*stripe.CheckoutSession, error) {
 		callCount++
 		if callCount == 1 {
 			return sess, nil

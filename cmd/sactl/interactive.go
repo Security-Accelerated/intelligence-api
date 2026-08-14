@@ -22,7 +22,7 @@ import (
 var errQuit = errors.New("quit")
 
 // shell is the interactive front end. It calls the same run* functions the
-// flag interface does, so the two cannot drift in behaviour — only in how the
+// flag interface does, so the two cannot drift in behavior — only in how the
 // arguments are gathered.
 type shell struct {
 	in  *bufio.Reader
@@ -399,7 +399,7 @@ func (s *shell) customerCreateAction(ctx context.Context) error {
 		return err
 	}
 	if !ok {
-		s.printf("  Cancelled.\n")
+		s.printf("  Canceled.\n")
 		return nil
 	}
 
@@ -442,7 +442,7 @@ func (s *shell) customerPlanAction(ctx context.Context) error {
 	ok, err := s.askYesNo(fmt.Sprintf("  Move customer %d to %s, in %s?",
 		id, plan, database.Describe(s.db.viperFor())))
 	if err != nil || !ok {
-		s.printf("  Cancelled.\n")
+		s.printf("  Canceled.\n")
 		return err
 	}
 
@@ -483,7 +483,7 @@ func (s *shell) customerRenameAction(ctx context.Context) error {
 	ok, err := s.askYesNo(fmt.Sprintf("  Rename customer %d to %q, in %s?",
 		id, name, database.Describe(s.db.viperFor())))
 	if err != nil || !ok {
-		s.printf("  Cancelled.\n")
+		s.printf("  Canceled.\n")
 		return err
 	}
 
@@ -524,7 +524,7 @@ func (s *shell) customerActiveAction(ctx context.Context) error {
 	ok, err := s.askYesNo(fmt.Sprintf("  Set customer %d to %s, in %s?",
 		id, state, database.Describe(s.db.viperFor())))
 	if err != nil || !ok {
-		s.printf("  Cancelled.\n")
+		s.printf("  Canceled.\n")
 		return err
 	}
 
@@ -579,7 +579,7 @@ func (s *shell) keyRotateAction(ctx context.Context) error {
 		"  Rotate customer %d's key in %s? Existing keys stop working after %s.",
 		id, database.Describe(s.db.viperFor()), grace))
 	if err != nil || !ok {
-		s.printf("  Cancelled.\n")
+		s.printf("  Canceled.\n")
 		return err
 	}
 

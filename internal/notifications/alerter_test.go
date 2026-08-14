@@ -218,8 +218,9 @@ func TestAlerter_WindowExpiry(t *testing.T) {
 	}
 }
 
-func TestNoopRecorder(t *testing.T) {
+// TestNoopRecorder pins that the no-op path is safe to call. Not panicking is
+// the whole assertion, so the test never uses its *testing.T.
+func TestNoopRecorder(_ *testing.T) {
 	r := &NoopRecorder{}
-	// Should not panic
 	r.RecordLookupError("whois")
 }

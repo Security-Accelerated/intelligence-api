@@ -58,7 +58,7 @@ func TestGetFingerprints_ReturnsRules(t *testing.T) {
 	r := newFingerprintRouter(fpSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -85,7 +85,7 @@ func TestGetFingerprints_EmptyRules(t *testing.T) {
 	r := newFingerprintRouter(fpSvc)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/fingerprints", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {

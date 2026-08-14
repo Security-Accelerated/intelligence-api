@@ -35,7 +35,7 @@ var expectedWhoisErrors = []error{
 //
 // Everything here is matched by type or sentinel. The previous implementation
 // matched substrings of err.Error(), which meant a dependency rewording its
-// messages would silently change paging behaviour with no compile error and no
+// messages would silently change paging behavior with no compile error and no
 // failing test.
 func IsExpectedError(err error) bool {
 	if err == nil {

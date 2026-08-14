@@ -251,7 +251,7 @@ func TestShell_SwitchToLocalMovesEverything(t *testing.T) {
 }
 
 // TestShell_SwitchBackToProductionClearsLocalURL guards the direction that
-// fails silently: a stale local URL would leave a session labelled production
+// fails silently: a stale local URL would leave a session labeled production
 // while still reading the container.
 func TestShell_SwitchBackToProductionClearsLocalURL(t *testing.T) {
 	var out strings.Builder

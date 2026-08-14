@@ -35,7 +35,7 @@ func TestDocs_InteractiveControlsAreInjected(t *testing.T) {
 
 // TestDocs_CopyUsesTextContent guards the one way the copy button can be subtly
 // wrong: the blocks are marked up with <span class="str"> and friends for
-// syntax colour, so innerHTML would put a page of markup on the clipboard and
+// syntax color, so innerHTML would put a page of markup on the clipboard and
 // look fine to anyone who does not paste it.
 func TestDocs_CopyUsesTextContent(t *testing.T) {
 	if strings.Contains(docsJS, "innerHTML") {
@@ -111,7 +111,7 @@ func searchSection(t *testing.T) string {
 // TestDocs_StylesheetHonoursReducedMotion covers the smooth scroll shared by
 // the sidebar links and the search results: both move the whole document, and
 // the preference has to be answered in the stylesheet because that is where the
-// scroll behaviour is set.
+// scroll behavior is set.
 func TestDocs_StylesheetHonoursReducedMotion(t *testing.T) {
 	if !strings.Contains(docsCSS, "@media (prefers-reduced-motion: reduce)") {
 		t.Error("stylesheet has no prefers-reduced-motion block")

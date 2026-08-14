@@ -203,7 +203,7 @@ func (s *StripeService) handleSubscriptionDeleted(ctx context.Context, event *st
 		zap.String("stripe_customer_id", stripeCustomerID),
 	)
 
-	s.notify(ctx, "Subscription Cancelled", fmt.Sprintf("Customer %s cancelled their subscription", stripeCustomerID))
+	s.notify(ctx, "Subscription Canceled", fmt.Sprintf("Customer %s canceled their subscription", stripeCustomerID))
 
 	return nil
 }

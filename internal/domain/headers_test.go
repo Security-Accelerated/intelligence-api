@@ -19,18 +19,8 @@ func swapTransport(t *testing.T, tr http.RoundTripper) {
 	t.Cleanup(func() { safeTransport = orig })
 }
 
-// testTransportFor returns an *http.Transport that routes all requests to
-// the given httptest.Server, skipping TLS verification.
-func testTransportFor(srv *httptest.Server) *http.Transport {
-	return &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		// Override DialContext so that any host:port resolves to the test server.
-		DialContext: srv.Client().Transport.(*http.Transport).DialContext,
-	}
-}
-
 func TestLookupHeaders_Success(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Custom", "hello")
 		w.Header().Set("Content-Type", "text/html")
 		w.WriteHeader(http.StatusOK)
@@ -62,7 +52,7 @@ func TestLookupHeaders_Success(t *testing.T) {
 }
 
 func TestLookupHeaders_SecurityHeaders(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -110,7 +100,7 @@ func TestLookupHeaders_SecurityHeaders(t *testing.T) {
 func TestLookupHeaders_HTTPFallback(t *testing.T) {
 	// Start a plain HTTP server (no TLS). LookupHeaders tries HTTPS first,
 	// which will fail, then falls back to HTTP.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("X-Fallback", "yes")
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -142,10 +132,10 @@ func TestLookupHeaders_CancelledContext(t *testing.T) {
 
 	info, err := LookupHeaders(ctx, "example.com")
 	if err == nil {
-		t.Fatal("expected error for cancelled context, got nil")
+		t.Fatal("expected error for canceled context, got nil")
 	}
 	if info != nil {
-		t.Errorf("expected nil info for cancelled context, got %+v", info)
+		t.Errorf("expected nil info for canceled context, got %+v", info)
 	}
 }
 

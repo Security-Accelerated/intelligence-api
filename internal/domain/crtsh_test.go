@@ -23,7 +23,7 @@ func fastCrtShRetries(t *testing.T) {
 func crtShStub(t *testing.T, responses ...func(w http.ResponseWriter)) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		n := int(calls.Add(1)) - 1
 		if n >= len(responses) {
 			n = len(responses) - 1
@@ -58,7 +58,7 @@ func TestFetchCrtSh_Success(t *testing.T) {
 	}
 }
 
-// TestFetchCrtSh_DoubleNotFoundMeansNoCertificates is the behaviour the fix
+// TestFetchCrtSh_DoubleNotFoundMeansNoCertificates is the behavior the fix
 // exists for: crt.sh answers 404 with an empty body for a name it holds no
 // certificates for, and that must surface as the sentinel — which the lookups
 // turn into a successful empty result — rather than as a failure. A freshly
@@ -66,6 +66,8 @@ func TestFetchCrtSh_Success(t *testing.T) {
 // is exactly a name with no certificates yet.
 func TestFetchCrtSh_DoubleNotFoundMeansNoCertificates(t *testing.T) {
 	fastCrtShRetries(t)
+	// Both 404s are the point of the test — the retry must also see one.
+	//nolint:gocritic // dupOption: the duplicate response is deliberate.
 	srv, calls := crtShStub(t, respondStatus(404), respondStatus(404))
 
 	_, err := fetchCrtSh(context.Background(), srv.Client(), srv.URL, "IntelligenceAPI/1.0", 1<<20)

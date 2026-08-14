@@ -118,7 +118,7 @@ func renderUsage(s usageSummary, f *usageFlags) {
 	// a fraction — scaling it again here produced "7922.3%".
 	//
 	// Hits and misses count individual lookups, not requests, so they do not
-	// sum to TotalRequests. Labelling them makes that visible rather than
+	// sum to TotalRequests. Labeling them makes that visible rather than
 	// looking like an arithmetic error.
 	fmt.Printf("  cache      %.1f%% hit rate (%d hits, %d misses, counted per lookup)\n",
 		s.CacheHitRate, s.CacheHits, s.CacheMisses)

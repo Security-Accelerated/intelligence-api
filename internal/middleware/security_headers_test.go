@@ -17,7 +17,7 @@ func TestSecurityHeaders(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	tests := []struct {

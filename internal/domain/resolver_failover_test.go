@@ -113,7 +113,7 @@ func TestFailover_UndialableFirstServer(t *testing.T) {
 
 	addrs, err := r.LookupHost(ctx, "example.com.")
 	if err != nil {
-		t.Fatalf("a server that cannot be dialled must not fail the lookup: %v", err)
+		t.Fatalf("a server that cannot be dialed must not fail the lookup: %v", err)
 	}
 	if len(addrs) == 0 || addrs[0] != "203.0.113.20" {
 		t.Errorf("addrs = %v, want the second server's answer", addrs)
@@ -124,7 +124,7 @@ func TestFailover_UndialableFirstServer(t *testing.T) {
 }
 
 // TestFailover_UndialableServerMidCascade covers the second dial site: a server
-// that cannot be dialled sitting between a dead one and a working one. Read's
+// that cannot be dialed sitting between a dead one and a working one. Read's
 // failover has to walk past it rather than surfacing its dial error.
 func TestFailover_UndialableServerMidCascade(t *testing.T) {
 	prev := DefaultDNSPerServerTimeout
@@ -159,7 +159,7 @@ func TestFailover_AllServersUndialable(t *testing.T) {
 	defer cancel()
 
 	if _, err := r.LookupHost(ctx, "example.com."); err == nil {
-		t.Fatal("expected an error when no server can be dialled")
+		t.Fatal("expected an error when no server can be dialed")
 	}
 }
 

@@ -37,7 +37,7 @@ func TestClientRequestID_Valid(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 			req.Header.Set(ClientRequestIDHeader, tt.value)
 			r.ServeHTTP(w, req)
 
@@ -65,7 +65,7 @@ func TestClientRequestID_StripsWhitespace(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	req.Header.Set(ClientRequestIDHeader, "  req-123  ")
 	r.ServeHTTP(w, req)
 
@@ -107,7 +107,7 @@ func TestClientRequestID_Ignored(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 			req.Header.Set(ClientRequestIDHeader, tt.value)
 			r.ServeHTTP(w, req)
 
@@ -133,7 +133,7 @@ func TestClientRequestID_Missing(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if found {
@@ -144,7 +144,7 @@ func TestClientRequestID_Missing(t *testing.T) {
 	}
 }
 
-// TestClientRequestID_SurvivesAbortedResponses pins the behaviour the OpenAPI
+// TestClientRequestID_SurvivesAbortedResponses pins the behavior the OpenAPI
 // spec publishes: both correlation headers are present on failures, not just on
 // success.
 //
@@ -172,7 +172,7 @@ func TestClientRequestID_SurvivesAbortedResponses(t *testing.T) {
 			})
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req.Header.Set(ClientRequestIDHeader, "req-001")
 			r.ServeHTTP(w, req)
 

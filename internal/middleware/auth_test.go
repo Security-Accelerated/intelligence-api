@@ -41,7 +41,7 @@ func setupAuthRouter(repo auth.Repository, logLevel zapcore.Level) (*gin.Engine,
 
 func doAuthRequest(r *gin.Engine, apiKey string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	if apiKey != "" {
 		req.Header.Set("X-API-Key", apiKey)
 	}
@@ -212,7 +212,7 @@ func setupAdminRouter(plan string) *gin.Engine {
 func TestRequireAdmin_AdminAllowed(t *testing.T) {
 	r := setupAdminRouter("admin")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -223,7 +223,7 @@ func TestRequireAdmin_AdminAllowed(t *testing.T) {
 func TestRequireAdmin_ProForbidden(t *testing.T) {
 	r := setupAdminRouter("pro")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
@@ -240,7 +240,7 @@ func TestRequireAdmin_ProForbidden(t *testing.T) {
 func TestRequireAdmin_BasicForbidden(t *testing.T) {
 	r := setupAdminRouter("basic")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
@@ -251,7 +251,7 @@ func TestRequireAdmin_BasicForbidden(t *testing.T) {
 func TestRequireAdmin_MissingPlanForbidden(t *testing.T) {
 	r := setupAdminRouter("")
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {

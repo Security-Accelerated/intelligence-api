@@ -54,7 +54,7 @@ func LookupAbuseContact(ctx context.Context, ip string) (*AbuseContactInfo, erro
 	endpoint := rirEndpointForIP(ip)
 	client := &http.Client{Transport: trustedTransport}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+ip, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+ip, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build rdap request: %w", err)
 	}
@@ -89,94 +89,75 @@ func LookupAbuseContact(ctx context.Context, ip string) (*AbuseContactInfo, erro
 	return info, nil
 }
 
+// rirOctetRanges approximates the IANA allocation table by first octet, as an
+// ordered list of inclusive ranges. It is data rather than control flow
+// because it is a table: written as a switch it was fifty-eight branches of
+// `first >= n && first <= n`, which said nothing the numbers do not.
+//
+// Order is significant: the first match wins, exactly as the switch's case
+// order did. Two entries are shadowed by an earlier broader range and are
+// therefore unreachable, which is pre-existing and is preserved here rather
+// than fixed, so that this change stays a provable no-op:
+//
+//	27  is claimed by RIPE's 25-31, though IANA allocated 27.0.0.0/8 to APNIC
+//	181 is claimed by APNIC's 180-183, though 181.0.0.0/8 belongs to LACNIC
+//
+// Correcting them changes which RIR is queried for an abuse contact in those
+// two /8s, so it belongs in its own change with its own reasoning. See the
+// collision cases in TestRIREndpointForIP, which pin today's answers.
+var rirOctetRanges = []struct {
+	lo, hi byte
+	rir    string
+}{
+	// RIPE NCC (Europe, Middle East, Central Asia)
+	{2, 2, "ripe"}, {5, 5, "ripe"}, {25, 31, "ripe"}, {37, 37, "ripe"},
+	{46, 46, "ripe"}, {51, 51, "ripe"}, {62, 62, "ripe"}, {77, 95, "ripe"},
+	{141, 141, "ripe"}, {145, 145, "ripe"}, {151, 151, "ripe"},
+	{176, 176, "ripe"}, {178, 178, "ripe"}, {185, 185, "ripe"},
+	{188, 188, "ripe"}, {193, 195, "ripe"}, {212, 213, "ripe"},
+	{217, 217, "ripe"},
+
+	// APNIC (Asia Pacific)
+	{1, 1, "apnic"}, {14, 14, "apnic"}, {27, 27, "apnic"}, {36, 36, "apnic"},
+	{39, 39, "apnic"}, {42, 43, "apnic"}, {49, 49, "apnic"}, {58, 61, "apnic"},
+	{101, 101, "apnic"}, {103, 103, "apnic"}, {106, 106, "apnic"},
+	{110, 126, "apnic"}, {133, 133, "apnic"}, {150, 150, "apnic"},
+	{153, 153, "apnic"}, {163, 163, "apnic"}, {175, 175, "apnic"},
+	{180, 183, "apnic"}, {202, 203, "apnic"}, {210, 211, "apnic"},
+	{218, 223, "apnic"},
+
+	// LACNIC (Latin America, Caribbean)
+	{177, 177, "lacnic"}, {179, 179, "lacnic"}, {181, 181, "lacnic"},
+	{186, 187, "lacnic"}, {189, 191, "lacnic"}, {200, 201, "lacnic"},
+
+	// AFRINIC (Africa)
+	{41, 41, "afrinic"}, {102, 102, "afrinic"}, {105, 105, "afrinic"},
+	{154, 154, "afrinic"}, {196, 197, "afrinic"},
+}
+
 // rirEndpointForIP returns the RDAP endpoint URL for the RIR responsible for
 // the given IP address. Uses a simplified first-octet heuristic based on IANA
-// allocations. Falls back to ARIN for unrecognized ranges.
+// allocations. Falls back to ARIN for unrecognized ranges, for IPv6, and for
+// anything that does not parse.
 func rirEndpointForIP(ip string) string {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
 		return rirEndpoints["arin"]
 	}
 
-	// IPv6 — simplified mapping
-	if parsed.To4() == nil {
+	v4 := parsed.To4()
+	if v4 == nil {
 		return rirEndpoints["arin"]
 	}
 
-	first := parsed.To4()[0]
-
-	// Approximate IANA allocation by first octet.
-	// These cover the major ranges; edge cases fall back to ARIN.
-	switch {
-	// RIPE NCC (Europe, Middle East, Central Asia)
-	case first == 2,
-		first >= 5 && first <= 5,
-		first >= 25 && first <= 31,
-		first >= 37 && first <= 37,
-		first >= 46 && first <= 46,
-		first >= 51 && first <= 51,
-		first >= 62 && first <= 62,
-		first >= 77 && first <= 95,
-		first >= 141 && first <= 141,
-		first >= 145 && first <= 145,
-		first >= 151 && first <= 151,
-		first >= 176 && first <= 176,
-		first >= 178 && first <= 178,
-		first >= 185 && first <= 185,
-		first >= 188 && first <= 188,
-		first >= 193 && first <= 195,
-		first >= 212 && first <= 213,
-		first >= 217 && first <= 217:
-		return rirEndpoints["ripe"]
-
-	// APNIC (Asia Pacific)
-	case first == 1,
-		first >= 14 && first <= 14,
-		first >= 27 && first <= 27,
-		first >= 36 && first <= 36,
-		first >= 39 && first <= 39,
-		first >= 42 && first <= 42,
-		first >= 43 && first <= 43,
-		first >= 49 && first <= 49,
-		first >= 58 && first <= 58,
-		first >= 59 && first <= 61,
-		first >= 101 && first <= 101,
-		first >= 103 && first <= 103,
-		first >= 106 && first <= 106,
-		first >= 110 && first <= 112,
-		first >= 113 && first <= 126,
-		first >= 133 && first <= 133,
-		first >= 150 && first <= 150,
-		first >= 153 && first <= 153,
-		first >= 163 && first <= 163,
-		first >= 175 && first <= 175,
-		first >= 180 && first <= 183,
-		first >= 202 && first <= 203,
-		first >= 210 && first <= 211,
-		first >= 218 && first <= 223:
-		return rirEndpoints["apnic"]
-
-	// LACNIC (Latin America, Caribbean)
-	case first >= 177 && first <= 177,
-		first >= 179 && first <= 179,
-		first >= 181 && first <= 181,
-		first >= 186 && first <= 187,
-		first >= 189 && first <= 191,
-		first >= 200 && first <= 201:
-		return rirEndpoints["lacnic"]
-
-	// AFRINIC (Africa)
-	case first >= 41 && first <= 41,
-		first >= 102 && first <= 102,
-		first >= 105 && first <= 105,
-		first >= 154 && first <= 154,
-		first >= 196 && first <= 197:
-		return rirEndpoints["afrinic"]
-
-	// Default to ARIN (North America, some others)
-	default:
-		return rirEndpoints["arin"]
+	first := v4[0]
+	for _, r := range rirOctetRanges {
+		if first >= r.lo && first <= r.hi {
+			return rirEndpoints[r.rir]
+		}
 	}
+
+	return rirEndpoints["arin"]
 }
 
 // findAbuseEmail recursively searches RDAP entities for one with the "abuse"

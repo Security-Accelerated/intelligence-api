@@ -89,7 +89,7 @@ func TestStripeWebhook_Success(t *testing.T) {
 func TestCheckoutSuccess_MissingSessionID(t *testing.T) {
 	r := newBillingTestRouter(&mockBillingService{}, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -107,7 +107,7 @@ func TestCheckoutSuccess_KeyRetrieved(t *testing.T) {
 	}
 	r := newBillingTestRouter(svc, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -131,7 +131,7 @@ func TestCheckoutSuccess_KeyAlreadyRetrieved(t *testing.T) {
 	}
 	r := newBillingTestRouter(svc, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -147,7 +147,7 @@ func TestCheckoutSuccess_NoStoreHeader(t *testing.T) {
 	svc := &mockBillingService{provisionedKey: "testkey123"}
 	r := newBillingTestRouter(svc, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	cc := w.Header().Get("Cache-Control")
@@ -160,7 +160,7 @@ func TestCheckoutSuccess_PageCSPHeader(t *testing.T) {
 	svc := &mockBillingService{provisionedKey: "testkey123"}
 	r := newBillingTestRouter(svc, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if got := w.Header().Get("Content-Security-Policy"); got != htmlPageCSP {
@@ -172,7 +172,7 @@ func TestCheckoutSuccess_NoInlineScripts(t *testing.T) {
 	svc := &mockBillingService{provisionedKey: "testkey123"}
 	r := newBillingTestRouter(svc, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	body := w.Body.String()
@@ -193,7 +193,7 @@ func TestCheckoutSuccess_PortalLinkShown(t *testing.T) {
 	cfg.Set("stripe.portal_link", "https://billing.stripe.com/p/login/test_abc")
 	r := newBillingTestRouter(svc, cfg)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	body := w.Body.String()
@@ -209,7 +209,7 @@ func TestCheckoutSuccess_PortalLinkHiddenWhenEmpty(t *testing.T) {
 	svc := &mockBillingService{provisionedKey: "testkey123"}
 	r := newBillingTestRouter(svc, nil)
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/billing/success?session_id=cs_test_123", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	body := w.Body.String()

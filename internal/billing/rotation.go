@@ -12,7 +12,7 @@ import (
 
 // StartProvisionedKeyCleanup launches a background goroutine that deletes
 // expired provisioned keys (including retrieved-and-blanked rows) every
-// interval until ctx is cancelled. Without it, never-retrieved plaintext keys
+// interval until ctx is canceled. Without it, never-retrieved plaintext keys
 // would sit in the database forever.
 func StartProvisionedKeyCleanup(ctx context.Context, repo *Repository, interval time.Duration) {
 	if interval <= 0 {

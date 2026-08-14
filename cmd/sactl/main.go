@@ -236,7 +236,7 @@ func groupUsage(w *os.File, g group) {
 }
 
 // newTabWriter returns the writer every command uses for tabular output, so
-// column behaviour is identical across the CLI.
+// column behavior is identical across the CLI.
 func newTabWriter() *tabwriter.Writer {
 	return tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 }

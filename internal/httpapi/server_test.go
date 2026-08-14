@@ -19,7 +19,7 @@ func testLogger() (*zap.Logger, *observer.ObservedLogs) {
 func TestServe_ShutdownOnSignal(t *testing.T) {
 	logger, _ := testLogger()
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	server := NewServer(mux, ServerConfig{
@@ -32,10 +32,10 @@ func TestServe_ShutdownOnSignal(t *testing.T) {
 
 	sigCh := make(chan os.Signal, 1)
 	done := make(chan error, 1)
-	cancelled := false
+	canceled := false
 
 	go func() {
-		done <- Serve(server, sigCh, func() { cancelled = true }, logger, 5*time.Second)
+		done <- Serve(server, sigCh, func() { canceled = true }, logger, 5*time.Second)
 	}()
 
 	// Give the server time to start
@@ -53,7 +53,7 @@ func TestServe_ShutdownOnSignal(t *testing.T) {
 		t.Fatal("Serve did not return within timeout")
 	}
 
-	if !cancelled {
+	if !canceled {
 		t.Error("appCancel was not called")
 	}
 }

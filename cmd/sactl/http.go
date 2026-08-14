@@ -70,7 +70,7 @@ func (f *apiFlags) getJSON(ctx context.Context, path string, out any) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(f.host, "/")+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(f.host, "/")+path, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (f *apiFlags) getJSON(ctx context.Context, path string, out any) error {
 // probe issues an unauthenticated request and returns the status code, for the
 // reachability checks in `sactl status`.
 func (f *apiFlags) probe(ctx context.Context, method, path string) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(f.host, "/")+path, nil)
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimSuffix(f.host, "/")+path, http.NoBody)
 	if err != nil {
 		return 0, err
 	}
@@ -174,7 +174,7 @@ func (f *apiFlags) postNoBody(ctx context.Context, path string) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, trimHost(f.host)+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, trimHost(f.host)+path, http.NoBody)
 	if err != nil {
 		return err
 	}

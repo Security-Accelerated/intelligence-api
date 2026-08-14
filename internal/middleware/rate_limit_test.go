@@ -41,7 +41,7 @@ func setupRateLimit(t *testing.T, cfg RateLimitConfig) (*gin.Engine, *miniredis.
 
 func doRequest(r *gin.Engine) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)
 	return w
 }
