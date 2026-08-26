@@ -16,7 +16,7 @@ Nothing about a release touches production until that PR merges.
 
 - On `main`, clean tree, up to date with `origin/main`.
 - The feature PR that motivated the release is **merged**, not merely approved.
-- `make test-all` passes (unit + race + integration).
+- `make verify` passes (gofmt, vet, lint on new findings, unit + race, integration).
 
 Any of these failing stops the release. Do not release around a dirty tree.
 
