@@ -1,6 +1,9 @@
 package handler
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestEmbeddedChangelogParses guards the embedded changelog.yaml itself.
 //
@@ -38,6 +41,13 @@ func TestEmbeddedChangelogParses(t *testing.T) {
 			// an entry from customers instead of failing.
 			if c.Audience != "public" && c.Audience != "internal" {
 				t.Errorf("%s change %d has audience %q, want public or internal", v.Version, i, c.Audience)
+			}
+			// renderChangelogText turns backtick spans into inline <code> and
+			// falls back to printing the text as-is when they do not pair up.
+			// The fallback is deliberate, but reaching it puts a literal
+			// backtick on the public page, so catch it here instead.
+			if c.Audience == "public" && strings.Count(c.Text, "`")%2 != 0 {
+				t.Errorf("%s change %d has an unpaired backtick, which renders literally: %q", v.Version, i, c.Text)
 			}
 		}
 	}

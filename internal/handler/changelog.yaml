@@ -8,6 +8,12 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.74.0
+  date: 2026-08-27
+  changes:
+    - text: "Release notes on the docs page now show field and parameter names as inline code instead of printing the backticks around them. 17 public entries were affected, including the BREAKING notes about `lookups`, `results`, and `cache_hit`"
+      audience: public
+
 - version: v0.73.0
   date: 2026-08-27
   changes:

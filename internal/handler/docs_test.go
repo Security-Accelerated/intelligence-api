@@ -302,6 +302,79 @@ func TestDocs_ChangelogExcludesAllInternalVersions(t *testing.T) {
 	}
 }
 
+func TestDocs_ChangelogRendersBackticksAsCode(t *testing.T) {
+	changelog := []ChangelogVersion{
+		{
+			Version: "v1.0.0",
+			Date:    "2026-01-01",
+			Changes: []ChangelogChange{
+				{Text: "`errors` is omitted from a successful response — it is never `[]`.", Audience: "public"},
+			},
+		},
+	}
+
+	r := docsRouterWithData(changelog, nil, nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/changelog", http.NoBody)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "`") {
+		t.Error("changelog page renders a literal backtick; identifiers should become inline <code>")
+	}
+	if !strings.Contains(body, "<code>errors</code>") {
+		t.Error("expected the backtick span to render as inline <code>")
+	}
+}
+
+// renderChangelogText hands the template pre-escaped HTML, so the escaping it
+// does by hand is the only escaping left. This is the case that catches it
+// being dropped.
+func TestRenderChangelogText(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "code span",
+			in:   "`errors` is omitted",
+			want: "<code>errors</code> is omitted",
+		},
+		{
+			name: "markup in prose is escaped",
+			in:   "a < b & c",
+			want: "a &lt; b &amp; c",
+		},
+		{
+			name: "markup inside a code span is escaped",
+			in:   "use `<script>alert(1)</script>` here",
+			want: "use <code>&lt;script&gt;alert(1)&lt;/script&gt;</code> here",
+		},
+		{
+			name: "unpaired backtick stays literal",
+			in:   "an unclosed `span and <b>markup</b>",
+			want: "an unclosed `span and &lt;b&gt;markup&lt;/b&gt;",
+		},
+		{
+			name: "no backticks",
+			in:   "plain prose",
+			want: "plain prose",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := string(renderChangelogText(tt.in)); got != tt.want {
+				t.Errorf("renderChangelogText(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDocs_RendersVersion(t *testing.T) {
 	status := &config.StatusSnapshot{
 		System: config.SystemStatus{Version: "v99.0.0-test"},
