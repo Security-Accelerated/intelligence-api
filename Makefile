@@ -3,7 +3,7 @@ CLI_NAME := sactl
 BUILD_DIR := bin
 VERSION := $(shell git describe --tags --always --dirty)
 
-.PHONY: all build build-cli install-cli clean deps lint lint-new test test-integration test-all run release deploy docker-reset
+.PHONY: all build build-cli install-cli clean deps lint lint-new verify test test-integration test-all run release deploy docker-reset
 
 all: test build build-cli
 
@@ -42,6 +42,46 @@ lint:
 # pre-existing backlog does not block unrelated work.
 lint-new:
 	golangci-lint run $(LINT_FLAGS) --new-from-rev=origin/main ./...
+
+# The one command that answers "did it work?". Every repo in the fleet has a
+# `verify` target with the same three properties, whatever the language, so
+# nobody — human or agent — has to work out the incantation for this repo:
+#
+#   1. Non-destructive. No containers, no volumes, no network mutation, and no
+#      writes to tracked files. Safe on a cold clone and safe in CI.
+#   2. Exits non-zero on any failure.
+#   3. Runs everything before reporting, so one run shows every problem rather
+#      than the first one.
+#
+# Deliberately does NOT run `go mod tidy` the way `test` does. A target that
+# rewrites go.mod while claiming to verify can turn a passing run into a dirty
+# tree, which is a rude surprise in CI and a confusing one locally.
+#
+# Uses `lint-new`, not `lint`: the tree carries a known backlog of pre-existing
+# findings, and a gate that fails the day it lands is a gate people learn to
+# skip. This matches what CI actually enforces.
+verify:
+	@failed=0; \
+	printf '\033[2m→ gofmt\033[0m\n'; \
+	unformatted="$$(gofmt -l . | grep -v '^vendor/' || true)"; \
+	if [ -n "$$unformatted" ]; then \
+		printf '\033[31m✗ needs gofmt:\033[0m\n%s\n' "$$unformatted"; failed=1; \
+	fi; \
+	printf '\033[2m→ go vet\033[0m\n'; \
+	go vet ./... || failed=1; \
+	printf '\033[2m→ golangci-lint (new findings vs main)\033[0m\n'; \
+	golangci-lint run $(LINT_FLAGS) --new-from-rev=origin/main ./... || failed=1; \
+	printf '\033[2m→ go test -race\033[0m\n'; \
+	go test -race -count=1 ./... || failed=1; \
+	printf '\033[2m→ integration\033[0m\n'; \
+	go test -race -count=1 -tags=integration . || failed=1; \
+	echo ""; \
+	if [ $$failed -eq 0 ]; then \
+		printf "\033[32m✓ verify passed\033[0m\n"; \
+	else \
+		printf "\033[31m✗ verify failed\033[0m\n"; \
+		exit 1; \
+	fi
 
 test:
 	go mod tidy
