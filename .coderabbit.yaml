@@ -6,6 +6,13 @@ reviews:
     base_branches:
       - main
 
+  # Review progress is reported as a check run (review_progress, on by
+  # default), so the "review in progress" fortune and the "review skipped"
+  # status comments only add PR comments — and every bot comment is a GitHub
+  # notification email. The walkthrough and inline findings are unaffected.
+  review_status: false
+  in_progress_fortune: false
+
   pre_merge_checks:
     # The docstring check counts every function, and test functions are the bulk
     # of this repo (1044 functions total, 740 of them tests). Go convention
