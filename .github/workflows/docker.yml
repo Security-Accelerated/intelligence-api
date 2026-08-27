@@ -57,8 +57,15 @@ jobs:
       # the apk and go mod download steps are restored rather than rerun.
       # mode=max includes the intermediate build stage, which the default
       # (final image layers only) would drop for a multi-stage Dockerfile. The
-      # go build layer is not cacheable: COPY . . invalidates it on any source
-      # change, so it still runs cold every time.
+      # go build layer is cacheable in principle but never hits here: a push to
+      # main changes the source under COPY . ., and a tag changes VERSION, so in
+      # practice it reruns on every build.
+      #
+      # ignore-error: the cache is an optimization, and a failed export must
+      # not fail a job whose purpose is publishing the image. The Actions cache
+      # API rate-limits and has outages; without this the image would push and
+      # the job would then go red for a cache write. A failed export just means
+      # the next build is cold, and buildx still logs a warning.
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -69,4 +76,4 @@ jobs:
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
