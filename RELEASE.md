@@ -34,9 +34,10 @@ Any of these failing stops the release. Do not release around a dirty tree.
    page shows an older version than the tag you thought you pushed. Confirm the real latest
    with `git tag | sort -V | tail -3`.
 
-2. **Add the changelog entry, then commit it to `main`.** `changelog.yaml` at the root is a
-   symlink to `internal/handler/changelog.yaml`; edit it from the root. Copy the shape of
-   the entry above it. Every change carries an `audience`:
+2. **Add the changelog entry and land it on `main` by PR** — the same way as any other
+   change; there are no direct pushes to `main`. `changelog.yaml` at the root is a symlink
+   to `internal/handler/changelog.yaml`; edit it from the root. Copy the shape of the
+   entry above it. Every change carries an `audience`:
    - `public` — renders in "What's New" on `/docs`, `/docs/domain`, `/docs/ip`
    - `internal` — admin endpoint only (`GET /v1/admin/changelog`)
 
