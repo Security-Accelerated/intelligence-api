@@ -50,8 +50,15 @@ jobs:
       # third-party actions running in a job that holds a repository token. The
       # version is pinned so CI cannot start failing because upstream enabled a
       # new check — bump it deliberately.
+      #
+      # Moved off v2.12.2 with the Go 1.27 bump. That release vendors
+      # honnef.co/go/tools v0.7.0, whose IR builder cannot handle the 1.27
+      # standard library: it panics with `buildir: unexpected expr:
+      # *ast.KeyValueExpr` on package "poll", which takes goanalysis_metalinter
+      # down with it. The job dies without reporting a single finding, so the
+      # gate silently stops gating rather than failing loudly.
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.1
 
       # Diffed against the base commit by SHA rather than by branch name. The
       # name would have to be fetched, and persist-credentials: false above

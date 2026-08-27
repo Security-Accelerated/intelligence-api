@@ -8,6 +8,14 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.74.1
+  date: 2026-08-27
+  changes:
+    - text: "Built with Go 1.27. The go directive, the builder image, and the documented prerequisite move together; both setup-go steps read go-version-file: go.mod, so CI follows without a workflow edit"
+      audience: internal
+    - text: "golangci-lint moves from v2.12.2 to v2.13.1, because v2.12.2 cannot lint Go 1.27 at all. It vendors honnef.co/go/tools v0.7.0, whose IR builder panics on the 1.27 standard library and takes goanalysis_metalinter with it — the lint job then exits without reporting a finding, so the gate stops gating instead of failing loudly. Bumping the pin is part of the toolchain bump, not a separate upgrade"
+      audience: internal
+
 - version: v0.73.0
   date: 2026-08-27
   changes:

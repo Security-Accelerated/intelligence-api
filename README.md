@@ -839,7 +839,7 @@ Cache problems never appear in the response `errors` array — those are reserve
 
 ### Prerequisites
 
-- Go 1.26+
+- Go 1.27+
 - Redis (or use the included Docker Compose)
 - PostgreSQL (or use the included Docker Compose)
 - Chromium or Google Chrome (for page screenshot feature; Docker image includes it)
