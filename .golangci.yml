@@ -77,6 +77,24 @@ linters:
       disabled-checks:
         - ifElseChain      # fights readable error handling
         - singleCaseSwitch
+      settings:
+        hugeParam:
+          # 192 is loose on purpose, and this block exists so the number is
+          # chosen rather than inherited: the performance tag turns hugeParam
+          # on, and its default of 80 flagged seven sites across the Go repos
+          # this config governs — six in intelligence-api and one in
+          # intelligence-recon — none of them a performance problem. They were
+          # dependency-injection structs built once per process, test fixtures,
+          # and signatures fixed by an exported interface — where "pass a
+          # pointer" means changing a method set or an API, not saving a copy.
+          #
+          # The largest legitimate by-value argument is a 160-byte constructor
+          # struct, so this clears it with a few words of headroom instead of
+          # sitting right on top of it, where adding a field would re-trip it.
+          #
+          # Tighten toward 128 once no by-value type that size is passed on a
+          # hot path; that is where the next five sites sit.
+          sizeThreshold: 192
 
     gosec:
       excludes:
