@@ -6,23 +6,18 @@ the `Makefile` or the workflows.
 
 ## Shape
 
-Tag `main`, then open a PR from `main` to `release`. **Merging that PR is what deploys.**
-`.github/workflows/fly-deploy.yml` runs the test workflow and then `flyctl deploy` on every
-push to `release`, baking the version in via `git describe --tags --abbrev=0`.
+**A release is a tag, and the tag is the deploy.** `make release V=vX.Y.Z` pushes the
+tag; `.github/workflows/fly-deploy.yml` fires on any `v*` tag, runs the test workflow,
+and then `flyctl deploy` with the tag name baked in as the version. There is no `release`
+branch and no second PR.
 
-Every PR in this repo lands as a **merge commit — never squash, never rebase** (see
-`AGENTS.md`). Here it is load-bearing, not just tidy: both alternatives rewrite the
-commits onto `release`, so the tagged commit is no longer in its history and
-`git describe` walks back to the previous tag. The pipeline goes green and deploys the new
-code labelled with the old version. That is the failure behind "I don't see the new tag on
-the live page."
-
-Nothing about a release touches production until that PR merges.
+The human decision is `make release`. Everything before it has already been reviewed on
+its way into `main`; everything after it is automatic.
 
 ## Preconditions
 
 - On `main`, clean tree, up to date with `origin/main`.
-- The feature PR that motivated the release is **merged**, not merely approved.
+- The PR that motivated the release is **merged**, not merely approved.
 - `make verify` passes (gofmt, vet, lint on new findings, unit + race, integration).
 
 Any of these failing stops the release. Do not release around a dirty tree.
@@ -30,9 +25,8 @@ Any of these failing stops the release. Do not release around a dirty tree.
 ## Steps
 
 1. **`git fetch --tags --prune`.** Local tags go stale. A release cut against a stale list
-   silently reuses or skips a version, and nothing reports it — you find out when the docs
-   page shows an older version than the tag you thought you pushed. Confirm the real latest
-   with `git tag | sort -V | tail -3`.
+   silently reuses or skips a version — and here the tag is the deploy, so a wrong
+   version is a wrong deploy. Confirm the real latest with `git tag | sort -V | tail -3`.
 
 2. **Add the changelog entry and land it on `main` by PR** — the same way as any other
    change; there are no direct pushes to `main`. `changelog.yaml` at the root is a symlink
@@ -47,47 +41,47 @@ Any of these failing stops the release. Do not release around a dirty tree.
    The entry goes in before the tag. Tag first and the deploy builds a version whose notes
    do not exist yet.
 
-3. **`make release V=vX.Y.Z`.** Creates an annotated tag and pushes **the tag only**. It
-   does not deploy and does not write to `release`.
+3. **`make release V=vX.Y.Z`.** Creates an annotated tag and pushes it. **This is the
+   deploy.** Report the version and stop; the rest is the pipeline's.
 
-4. **`gh pr create --base release --head main --title "Release vX.Y.Z"`.**
-
-   **Stop here.** Report the PR number and wait. Conflicts on this PR are a stop, not a
-   step — reconciling `main` and `release` is a decision, not a mechanical fix.
+   Branch names must not start with `release/` — git cannot hold a `release` ref and a
+   `release/…` ref at once, and the old branch may still exist in some clones.
 
 ## Verify
 
-Only after the user confirms the PR is merged; the merge is what triggers the deploy.
+After the tag push, in this order:
 
-1. **The tag is in `release`'s history** — `git fetch --tags origin release`, then
-   `git describe --tags --abbrev=0 origin/release` must print the tag just cut. If it
-   prints the previous one, the merge rewrote history (see Shape) and the deploy is
-   mislabelled; stop and report before anything else.
-2. **The pipeline passed for *this* merge, not an earlier one** —
-   `gh run list --branch release --commit $(git rev-parse origin/release) --json databaseId,conclusion`,
-   then `gh run view <id> --exit-status`. A bare `gh run list` shows recent runs, and an
-   older green one can sit above today's failure.
-3. **The service is up** — `GET https://api.securityaccelerated.com/v1/health` returns 200
-   (unauthenticated; reports Postgres, Redis, and GeoIP state)
-4. **The new version is actually live** — the version pill on
-   `https://api.securityaccelerated.com/docs` matches the tag just cut
+1. **The deploy run for *this tag* passed** —
+   `gh run list --workflow fly-deploy.yml --branch vX.Y.Z --json databaseId,conclusion`,
+   then `gh run view <id> --exit-status`. Filter by the tag; a bare `gh run list` can show
+   an older green run above today's failure.
+2. **The service is up** — `GET https://api.securityaccelerated.com/v1/health` returns 200
+   (unauthenticated; reports Postgres, Redis, and GeoIP state).
+3. **The new version is actually live** — the version pill on
+   `https://api.securityaccelerated.com/docs` equals the tag just pushed.
 
-Check 4 is the one that gets skipped and the one that matters. A green pipeline is not
-proof the new version is serving: the deploy reads its version from `git describe`, so a
-tag that did not reach the remote — or was rewritten out of `release` — produces a
-successful deploy of an older version.
+Check 3 is the one that matters. The version is the tag name by construction, so a
+mismatch here means the deploy did not happen, not that it was mislabelled.
 
 `./scripts/status.sh` covers machine state and endpoint reachability in one command.
 
+## Rollback
+
+Redeploy an earlier tag: **Actions → Fly Deploy → Run workflow → tag** (or
+`gh workflow run fly-deploy.yml -f tag=vX.Y.Z`). The workflow refuses anything that is not
+exactly a release tag. Then run the Verify section against that tag.
+
+A rollback is a deploy, not a release: no changelog entry, no new tag. If the fix is a
+code change, that is a new release.
+
 ## Never
 
-- **Never push to `release`.** It is reached through a reviewed PR from `main`. A fleet
-  `PreToolUse` hook blocks every spelling of this; if you are looking for one that gets
-  past it, stop and ask.
-- **Never merge the release PR.** Opening it is the deliverable.
-- **Never `fly deploy` or `make deploy` by hand** to route around a failed pipeline. Report
-  the failure.
-- **Never re-tag to fix a bad release.** That is a new release, and Jason's call.
+- **Never delete or move a tag.** A tag is a deployed version; rewriting one rewrites what
+  production claims to be. A bad release is a new release.
+- **Never `fly deploy` or `make deploy` by hand** to route around a failed pipeline.
+  Report the failure; use the rollback path if production is broken.
+- **Never push a `v*` tag by any route other than `make release`.** The Makefile target is
+  the one place the version is chosen.
 
 ## Not automated
 

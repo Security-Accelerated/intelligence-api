@@ -1,10 +1,26 @@
-# See https://fly.io/docs/app-guides/continuous-deployment-with-github-actions/
+# Deploys on a release tag. `make release V=vX.Y.Z` pushes the tag, and that push
+# is the deploy — there is no release branch and no second PR.
+#
+# The version baked into the binary is the tag name itself, so it cannot drift
+# from what was tagged. (The previous flow read it with `git describe` on a
+# release branch, which walked back to the wrong tag whenever that branch was
+# squash- or rebase-merged.)
+#
+# Rollback is redeploying an earlier tag: Actions → Fly Deploy → Run workflow →
+# tag. The checkout is verified to sit exactly on a release tag before anything
+# runs, so a typo in that box fails fast rather than deploying a random commit.
 
 name: Fly Deploy
 on:
   push:
-    branches:
-      - release
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to (re)deploy, e.g. v0.72.0'
+        required: true
+        type: string
+
 jobs:
   test:
     uses: ./.github/workflows/test.yml
@@ -15,20 +31,39 @@ jobs:
     name: Deploy app
     needs: test
     runs-on: ubuntu-latest
+    environment: production
     concurrency: deploy-group
     permissions:
       contents: read
+    # The tag reaches the shell only through this env var, quoted. Expanding
+    # ${{ }} inside a run: line would let a tag like `v;id` execute with the
+    # Fly token in scope.
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so `git describe` can find the release tag. No remote
-          # access is needed after checkout, so the token is not persisted.
-          fetch-depth: 0
+          # refs/tags/ is explicit so a *branch* named v-something can't be
+          # checked out here: checkout accepts either for a bare ref.
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          fetch-tags: true
           persist-credentials: false
-      - name: Get version from git
-        id: version
-        run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null || git describe --tags --always)" >> "$GITHUB_OUTPUT"
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only --build-arg VERSION=${{ steps.version.outputs.version }}
+      - name: Confirm HEAD is exactly the selected release tag
+        run: |
+          case "$RELEASE_TAG" in
+            v*) ;;
+            *)  echo "::error::'$RELEASE_TAG' is not a release tag"; exit 1 ;;
+          esac
+          want="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          have="$(git rev-parse HEAD)"
+          if [ "$want" != "$have" ]; then
+            echo "::error::HEAD $have is not tag $RELEASE_TAG ($want)"; exit 1
+          fi
+          echo "deploying $RELEASE_TAG at $have"
+      # Pinned to a commit, not @master: this action runs one step before the
+      # Fly token is in scope, so a mutable ref is a supply-chain door. Bump by
+      # changing the SHA deliberately. (v1 / 1.6 as of 2026-04-08.)
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+      - run: flyctl deploy --remote-only --build-arg "VERSION=$RELEASE_TAG"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

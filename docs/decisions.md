@@ -274,6 +274,28 @@ select.
 
 ## Operations
 
+### 2026-08-27 — Deploys trigger on a release tag, not a release branch
+
+**Decision.** `fly-deploy.yml` fires on any `v*` tag. `make release V=` pushes the tag and
+that is the deploy. The version baked into the binary is the tag name. Rollback is
+`workflow_dispatch` with an earlier tag. There is no `release` branch.
+
+**Why.** The previous flow — PR from `main` to `release`, deploy on push to `release`,
+version from `git describe --tags --abbrev=0` — mislabelled a deploy whenever that PR
+was squash- or rebase-merged: the tagged commit dropped out of `release`'s history and
+`describe` walked back to the previous tag, so production ran new code under the old
+version. Guarding it took a repo setting, a rule in two files, and a verification step.
+The tag-triggered form has nothing to guard: the checkout *is* the tag.
+
+**Instead of.** Keeping the release branch and enforcing merge commits, which we did first
+(#90). It worked, but it protected a mechanism whose only remaining value — a human click
+before production — `make release` already provides. The release PR also re-reviewed code
+that had already been reviewed into `main`; CodeRabbit had nothing to say on #94 and never
+would have.
+
+**Revisit if.** A second person needs to approve deploys. Then add required reviewers to
+the `production` environment rather than bringing the branch back.
+
 ### `feature_usage` counts requested lookups, not served ones
 
 **Decision.** The usage middleware records what the caller asked for, regardless of whether
