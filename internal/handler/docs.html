@@ -335,15 +335,14 @@
       <span class="str">"inputs"</span>: [<span class="str">"example.com"</span>],
       <span class="str">"dns"</span>: {
         <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
-        <span class="str">"a_records"</span>: [<span class="str">"93.184.216.34"</span>],
-        <span class="str">"mx_records"</span>: [<span class="str">"0 ."</span>]
+        <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>],
+        <span class="str">"mx"</span>: [{ <span class="str">"host"</span>: <span class="str">"mail.example.com"</span>, <span class="str">"priority"</span>: <span class="num">10</span> }]
       },
       <span class="str">"ssl"</span>: {
         <span class="str">"cache_hit"</span>: <span class="kw">true</span>,
         <span class="str">"issuer"</span>: <span class="str">"DigiCert Inc"</span>,
         <span class="str">"days_until_expiry"</span>: <span class="num">184</span>
-      },
-      <span class="str">"errors"</span>: []
+      }
     }
   ]
 }</code></pre>
@@ -351,7 +350,7 @@
     <ul>
       <li><code>lookups</code> is required and has no default &mdash; you always name exactly what you want, and you are never charged latency for work you did not ask for.</li>
       <li>Each lookup carries its own <code>cache_hit</code>, so one result can mix cached and freshly fetched fields.</li>
-      <li>A lookup that fails does not fail the request. You get <code>200</code>, the field is absent, and the reason is in <code>errors</code> &mdash; see <a href="/docs/domain#errors-field">partial failures</a>.</li>
+      <li>A lookup that fails does not fail the request. You get <code>200</code>, the field is absent, and the reason is in <code>errors</code>, which is present only when something failed &mdash; see <a href="/docs/domain#errors-field">partial failures</a>.</li>
     </ul>
     <p>Full reference: <a href="/docs/domain">Domain Intelligence</a> and <a href="/docs/ip">IP Intelligence</a>.</p>
   </section>

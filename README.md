@@ -143,7 +143,7 @@ Responses are wrapped in a `{"results": [...]}` envelope. Every API response is 
 }
 ```
 
-Each result contains exactly the lookups you requested — plus `domain`, `inputs`, and `errors` — and nothing else.
+Each result contains exactly the lookups you requested — plus `domain`, `inputs`, and `errors` when a lookup failed — and nothing else.
 
 **Full response example** (every lookup requested):
 ```json
@@ -244,8 +244,7 @@ Each result contains exactly the lookups you requested — plus `domain`, `input
           { "name": "Nginx", "category": "web-server", "version": "1.24.0", "confidence": "header" },
           { "name": "PHP", "category": "language", "version": "8.2", "confidence": "header" }
         ]
-      },
-      "errors": []
+      }
     }
   ]
 }
@@ -652,8 +651,7 @@ The IP and domain catalogs are separate. `threat_intel` appears in both and beha
       "inputs": [" 8.8.8.8 ", "8.8.8.8"],
       "geo": { "cache_hit": false, "country": "United States", "city": "Mountain View" },
       "asn": { "cache_hit": false, "asn": 15169, "organization": "GOOGLE" },
-      "reverse_dns": { "cache_hit": true, "hostnames": ["dns.google"] },
-      "errors": []
+      "reverse_dns": { "cache_hit": true, "hostnames": ["dns.google"] }
     }
   ]
 }
