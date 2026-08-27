@@ -1,0 +1,9 @@
+# Folds every historical author identity into one, for git log / shortlog /
+# blame. GitHub already attributes all of these to jasonnorch by verified
+# email; this only fixes what git itself displays. No commit is rewritten.
+#
+# "Security Accelerated" was the company's GitHub user account, used as the
+# author on ~54 early commits before it became an organization (2026-08-26).
+Jason Norch <development@norch.com> Security Accelerated <development@securityaccelerated.com>
+Jason Norch <development@norch.com> jasonnorch <online@norch.com>
+Jason Norch <development@norch.com> Jason Norch <online@norch.com>
