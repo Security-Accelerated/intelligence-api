@@ -21,6 +21,20 @@
       audience: internal
     - text: "Smoke suite drops SMOKE_BASIC_KEY; assertions that duplicated a free or pro twin were removed and the rest moved to the pro key. The seed no longer creates a basic customer"
       audience: internal
+    - text: "The quickstart's example response described a shape the API does not return: the DNS fields are `a` and `mx`, not `a_records` and `mx_records`, and `mx` is an array of {host, priority} objects rather than strings. The quickstart is the first thing a new customer copies, so it was the one example most likely to be pasted into a client"
+      audience: public
+    - text: "`errors` is omitted from a fully successful response — it is never `[]`. Six examples showed an empty array and two sentences promised the field was always present; the success examples drop it and the prose now says it appears only when a lookup failed. The OpenAPI spec already had this right"
+      audience: public
+    - text: "The overview no longer says each result contains exactly the lookups you requested. That reads as a guarantee that n requested lookups produce n fields, and a lookup that fails outright has its field omitted with the reason in `errors`. Both documents said so correctly further down; the summary sentence a reader skims first was the one place contradicting them"
+      audience: public
+    - text: "Deploying is now a `v*` tag rather than a push to a release branch, and the release branch is retired. The version baked into the binary is the tag name, so it cannot drift from what was tagged — the old flow read it with `git describe` and mislabelled any deploy whose release PR was squashed or rebased. workflow_dispatch with a tag input is the rollback path, which did not exist before"
+      audience: internal
+    - text: "Hardening on that workflow: the tag reaches the shell through a job-level env var rather than template expansion inside a run line, the checkout names refs/tags/ explicitly so a branch cannot pose as a release tag, and setup-flyctl is pinned to a commit — it ran one step before the Fly token entered scope on a mutable @master ref"
+      audience: internal
+    - text: "The GHCR publish caches build layers in the Actions cache, turning `apk add chromium` and `go mod download` into cache hits. The 90s go build layer still misses, because every trigger changes one of its inputs. Cache export failures are ignored rather than failing a job whose image already pushed"
+      audience: internal
+    - text: "CodeRabbit no longer posts its review-in-progress and skip-status comments. Both carried no review content and each one was a notification email; progress is already a check run. The walkthrough and inline findings are untouched"
+      audience: internal
 
 - version: v0.72.1
   date: 2026-08-27
