@@ -12,5 +12,51 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(make verify)",
+      "Bash(make test:*)",
+      "Bash(make test-integration:*)",
+      "Bash(make test-all:*)",
+      "Bash(make lint:*)",
+      "Bash(make lint-new:*)",
+      "Bash(make build:*)",
+      "Bash(make build-cli:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go list:*)",
+      "Bash(go doc:*)",
+      "Bash(go tool:*)",
+      "Bash(go version:*)",
+      "Bash(gofmt:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git tag:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh api:*)",
+      "Bash(docker compose:*)",
+      "Bash(coderabbit review:*)",
+      "Bash(./scripts/smoke-test.sh)",
+      "Bash(./scripts/status.sh:*)",
+      "Bash(./scripts/info.sh:*)"
+    ]
   }
 }
