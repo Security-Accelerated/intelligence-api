@@ -141,7 +141,7 @@ Responses are wrapped in a `{"results": [...]}` envelope. Every API response is 
 }
 ```
 
-Each result contains exactly the lookups you requested — plus `domain`, `inputs`, and `errors` when a lookup failed — and nothing else.
+Each result contains only the lookups you requested — never any you did not — plus `domain`, `inputs`, and `errors` when a lookup failed. A lookup that failed is omitted rather than returned empty, so you can get fewer fields than you asked for.
 
 **Full response example** (every lookup requested):
 ```json
