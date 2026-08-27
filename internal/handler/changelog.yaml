@@ -8,6 +8,18 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.72.1
+  date: 2026-08-27
+  changes:
+    - text: "One API machine now stays running at all times. Previously the service stopped after ten idle minutes and the next request paid a cold start; the first call after a quiet period is now as fast as any other"
+      audience: public
+    - text: "Machine memory raised from 512 MB to 1 GB. Headless Chromium wants roughly half a gigabyte per capture, so the screenshot lookup was one request from the ceiling; screenshot.max_concurrent stays at 1, it just has room now"
+      audience: internal
+    - text: "Repo instructions restructured for coding agents: AGENTS.md as the always-on file, package rules under .claude/rules/ that load by path, docs/decisions.md for the load-bearing choices, RELEASE.md as the declared release flow, and a make verify target (#90)"
+      audience: internal
+    - text: "v0.71.0 and v0.72.0 were written here but never tagged or deployed; production ran v0.70.0 until this release, which ships all of it. The releasing skill now fetches tags before choosing a version so this cannot recur silently"
+      audience: internal
+
 - version: v0.72.0
   date: 2026-08-14
   changes:
