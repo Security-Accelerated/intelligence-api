@@ -10,6 +10,12 @@ Tag `main`, then open a PR from `main` to `release`. **Merging that PR is what d
 `.github/workflows/fly-deploy.yml` runs the test workflow and then `flyctl deploy` on every
 push to `release`, baking the version in via `git describe --tags --abbrev=0`.
 
+That `git describe` is why the release PR must land as a **merge commit — never squash,
+never rebase.** Both rewrite the commits onto `release`, so the tagged commit is no longer
+in its history and `describe` walks back to the previous tag: the pipeline goes green and
+deploys the new code labelled with the old version. That is the failure behind "I don't
+see the new tag on the live page."
+
 Nothing about a release touches production until that PR merges.
 
 ## Preconditions
@@ -51,15 +57,23 @@ Any of these failing stops the release. Do not release around a dirty tree.
 
 Only after the user confirms the PR is merged; the merge is what triggers the deploy.
 
-1. **The pipeline passed** — `gh run list --branch release --limit 3`
-2. **The service is up** — `GET https://api.securityaccelerated.com/v1/health` returns 200
+1. **The tag is in `release`'s history** — `git fetch --tags origin release`, then
+   `git describe --tags --abbrev=0 origin/release` must print the tag just cut. If it
+   prints the previous one, the merge rewrote history (see Shape) and the deploy is
+   mislabelled; stop and report before anything else.
+2. **The pipeline passed for *this* merge, not an earlier one** —
+   `gh run list --branch release --commit $(git rev-parse origin/release) --json databaseId,conclusion`,
+   then `gh run view <id> --exit-status`. A bare `gh run list` shows recent runs, and an
+   older green one can sit above today's failure.
+3. **The service is up** — `GET https://api.securityaccelerated.com/v1/health` returns 200
    (unauthenticated; reports Postgres, Redis, and GeoIP state)
-3. **The new version is actually live** — the version pill on
+4. **The new version is actually live** — the version pill on
    `https://api.securityaccelerated.com/docs` matches the tag just cut
 
-Check 3 is the one that gets skipped and the one that matters. A green pipeline is not
+Check 4 is the one that gets skipped and the one that matters. A green pipeline is not
 proof the new version is serving: the deploy reads its version from `git describe`, so a
-tag that did not reach the remote produces a successful deploy of an older version.
+tag that did not reach the remote — or was rewritten out of `release` — produces a
+successful deploy of an older version.
 
 `./scripts/status.sh` covers machine state and endpoint reachability in one command.
 

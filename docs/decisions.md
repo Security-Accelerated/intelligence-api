@@ -73,8 +73,10 @@ structurally impossible rather than merely avoided.
 
 ### Cache keys are flat and never re-normalized
 
-**Decision.** `lookup:<domain>:<name>`, built by `cache.LookupKey()`. The builder does not
-normalize; normalization is the handler's job.
+**Decision.** Two namespaces, one shape: `lookup:<domain>:<name>` from `cache.LookupKey()`
+and `ip:<ip>:<name>` from `cache.IPLookupKey()`, with the prefixes as constants beside
+them. Neither builder normalizes; normalization is the handler's job. The separate `ip:`
+prefix is what keeps `threat_intel` on the two endpoints from colliding.
 
 **Why.** A missed normalization step surfaces as a distinct key — visibly wrong — rather
 than being silently papered over at the cache layer.

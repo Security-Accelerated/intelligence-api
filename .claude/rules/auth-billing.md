@@ -15,8 +15,10 @@ paths:
 
 ## API keys
 
-Stored as `hex(sha256(key))`, never plaintext. The auth middleware hashes the incoming key
-and looks it up. `CachedRepository` wraps PostgreSQL with an in-memory TTL cache keyed by
+`api_keys` stores `hex(sha256(key))` only — the table that authenticates never holds
+plaintext. The one deliberate exception is `provisioned_keys` (below), which holds the raw
+key briefly so a Stripe customer can collect it once; it is blanked on retrieval and swept
+on expiry. The auth middleware hashes the incoming key and looks it up. `CachedRepository` wraps PostgreSQL with an in-memory TTL cache keyed by
 hash (`RWMutex`); the admin endpoint invalidates it after plan changes. `last_used_at` is
 updated on cache-miss lookups, batched by `auth.LastUsedBatcher`.
 

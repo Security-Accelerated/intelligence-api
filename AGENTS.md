@@ -13,7 +13,7 @@ OpenAPI 3.1 at `/docs/openapi.yaml`.
 
 ## Where things are
 
-```
+```text
 cmd/api/main.go          entry point, version via ldflags
 cmd/sactl/               operator CLI: interactive menu with no args, flags otherwise
 internal/app/            dependency wiring, bootstrap, shutdown
