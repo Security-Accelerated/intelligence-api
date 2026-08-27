@@ -35,20 +35,32 @@ jobs:
     concurrency: deploy-group
     permissions:
       contents: read
+    # The tag reaches the shell only through this env var, quoted. Expanding
+    # ${{ }} inside a run: line would let a tag like `v;id` execute with the
+    # Fly token in scope.
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref_name }}
+          # refs/tags/ is explicit so a *branch* named v-something can't be
+          # checked out here: checkout accepts either for a bare ref.
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
           fetch-tags: true
           persist-credentials: false
-      - name: Confirm this is exactly a release tag
+      - name: Confirm HEAD is exactly the selected release tag
         run: |
-          tag="$(git describe --tags --exact-match)"
-          case "$tag" in
-            v*) echo "deploying $tag" ;;
-            *)  echo "::error::$tag is not a release tag"; exit 1 ;;
+          case "$RELEASE_TAG" in
+            v*) ;;
+            *)  echo "::error::'$RELEASE_TAG' is not a release tag"; exit 1 ;;
           esac
+          want="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          have="$(git rev-parse HEAD)"
+          if [ "$want" != "$have" ]; then
+            echo "::error::HEAD $have is not tag $RELEASE_TAG ($want)"; exit 1
+          fi
+          echo "deploying $RELEASE_TAG at $have"
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only --build-arg VERSION=${{ inputs.tag || github.ref_name }}
+      - run: flyctl deploy --remote-only --build-arg "VERSION=$RELEASE_TAG"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
