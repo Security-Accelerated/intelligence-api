@@ -16,6 +16,12 @@
     - text: "golangci-lint moves from v2.12.2 to v2.13.1, because v2.12.2 cannot lint Go 1.27 at all. It vendors honnef.co/go/tools v0.7.0, whose IR builder panics on the 1.27 standard library and takes goanalysis_metalinter with it — the lint job then exits without reporting a finding, so the gate stops gating instead of failing loudly. Bumping the pin is part of the toolchain bump, not a separate upgrade"
       audience: internal
 
+- version: v0.74.0
+  date: 2026-08-27
+  changes:
+    - text: "Release notes on the docs page now show field and parameter names as inline code instead of printing the backticks around them. 17 public entries were affected, including the BREAKING notes about `lookups`, `results`, and `cache_hit`"
+      audience: public
+
 - version: v0.73.0
   date: 2026-08-27
   changes:
