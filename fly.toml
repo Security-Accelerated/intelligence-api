@@ -13,7 +13,12 @@ primary_region = 'iad'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  # One machine stays warm. With zero, every request after ten idle minutes
+  # paid a cold start — VM boot, GeoIP open, Neon and Upstash connects — and
+  # the five-minute uptime ping occasionally lost that race and reported the
+  # service down when it was only waking up. The second machine still stops
+  # when idle and starts under load.
+  min_machines_running = 1
   processes = ['app']
 
 # Persists the MaxMind GeoIP databases across restarts. Machine filesystems are
@@ -27,4 +32,8 @@ primary_region = 'iad'
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 512
+  # Headless Chromium wants roughly half a gigabyte per capture. At 512 the
+  # process was one screenshot away from the memory ceiling, which is why
+  # screenshot.max_concurrent defaults to 1. 1 GB gives that lookup room
+  # without changing the cap.
+  memory_mb = 1024
