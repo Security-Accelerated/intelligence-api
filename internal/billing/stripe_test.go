@@ -89,7 +89,7 @@ func TestStripeService_NotifyMultiple(t *testing.T) {
 	n := newMockNotifier()
 	svc := &StripeService{notifier: n}
 
-	svc.notify(context.Background(), "New Subscriber", "user@example.com signed up for basic")
+	svc.notify(context.Background(), "New Subscriber", "user@example.com signed up for pro")
 	svc.notify(context.Background(), "Subscription Canceled", "Customer cus_123 canceled")
 
 	calls := n.waitForCalls(t, 2)
@@ -145,7 +145,7 @@ func (m *mockAuthCache) InvalidateAll() {
 
 func newTestStripeService(repo *mockBillingRepo, authCache *mockAuthCache, notifier *mockNotifier) *StripeService {
 	return &StripeService{
-		priceToplan:    map[string]string{"price_basic": "basic", "price_pro": "pro"},
+		priceToplan:    map[string]string{"price_pro": "pro"},
 		repo:           repo,
 		authCache:      authCache,
 		notifier:       notifier,
@@ -258,7 +258,7 @@ func TestHandleSubscriptionUpdated_RepoError(t *testing.T) {
 					"data": []interface{}{
 						map[string]interface{}{
 							"price": map[string]interface{}{
-								"id": "price_basic",
+								"id": "price_pro",
 							},
 						},
 					},
@@ -385,7 +385,7 @@ func TestHandlePaymentFailed_RepoError(t *testing.T) {
 
 func TestNewStripeService_SetsNotifier(t *testing.T) {
 	n := newMockNotifier()
-	svc := NewStripeService("sk_test_123", "whsec_123", map[string]string{"price_1": "basic"}, nil, nil, n)
+	svc := NewStripeService("sk_test_123", "whsec_123", map[string]string{"price_1": "pro"}, nil, nil, n)
 
 	if svc.notifier == nil {
 		t.Fatal("notifier should not be nil")
@@ -393,8 +393,8 @@ func TestNewStripeService_SetsNotifier(t *testing.T) {
 	if svc.webhookSecret != "whsec_123" {
 		t.Errorf("webhookSecret = %q, want %q", svc.webhookSecret, "whsec_123")
 	}
-	if svc.priceToplan["price_1"] != "basic" {
-		t.Errorf("priceToplan[price_1] = %q, want %q", svc.priceToplan["price_1"], "basic")
+	if svc.priceToplan["price_1"] != "pro" {
+		t.Errorf("priceToplan[price_1] = %q, want %q", svc.priceToplan["price_1"], "pro")
 	}
 }
 
@@ -473,7 +473,7 @@ func TestHandleCheckoutCompleted_UsesEmailAsNameWhenEmpty(t *testing.T) {
 	repo := &mockBillingRepo{provisionID: 1}
 	sess := mockSession("cs_123", "cus_abc", "user@example.com", "", nil)
 	expanded := mockSession("cs_123", "cus_abc", "user@example.com", "",
-		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_basic"}}},
+		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_pro"}}},
 	)
 	svc := newCheckoutTestService(repo, sess, expanded)
 
@@ -583,7 +583,7 @@ func TestHandleCheckoutCompleted_ProvisionError_ReturnsError(t *testing.T) {
 	repo := &mockBillingRepo{provisionErr: errors.New("db down")}
 	sess := mockSession("cs_123", "cus_abc", "user@example.com", "Jane", nil)
 	expanded := mockSession("cs_123", "cus_abc", "user@example.com", "Jane",
-		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_basic"}}},
+		[]*stripe.LineItem{{Price: &stripe.Price{ID: "price_pro"}}},
 	)
 	svc := newCheckoutTestService(repo, sess, expanded)
 

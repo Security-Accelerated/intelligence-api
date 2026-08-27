@@ -393,16 +393,16 @@
     <p>Plans control request volume, batch size, and access to premium lookups such as screenshots, reputation, and threat intelligence.</p>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Feature</th><th>Free</th><th>Basic</th><th>Pro</th></tr></thead>
+        <thead><tr><th>Feature</th><th>Free</th><th>Pro</th></tr></thead>
         <tbody>
-          <tr><td>Rate limit</td><td>5 req/min</td><td>30 req/min</td><td>120 req/min</td></tr>
-          <tr><td>Domains per request</td><td>1</td><td>5</td><td>20</td></tr>
-          <tr><td>IPs per request</td><td>1</td><td>5</td><td>20</td></tr>
-          <tr><td>Core lookups (WHOIS, DNS, SSL, headers, GeoIP, ASN, RDNS)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-          <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, DNS security, abuse contact</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-          <tr><td>Aggregate risk score (computed on every domain lookup)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-          <tr><td>Usage statistics + self-service key rotation</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-          <tr><td>Screenshot, reputation, threat intelligence</td><td>-</td><td>-</td><td>Yes</td></tr>
+          <tr><td>Rate limit</td><td>5 req/min</td><td>120 req/min</td></tr>
+          <tr><td>Domains per request</td><td>1</td><td>20</td></tr>
+          <tr><td>IPs per request</td><td>1</td><td>20</td></tr>
+          <tr><td>Core lookups (WHOIS, DNS, SSL, headers, GeoIP, ASN, RDNS)</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, DNS security, abuse contact</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Aggregate risk score (computed on every domain lookup)</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Usage statistics + self-service key rotation</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Screenshot, reputation, threat intelligence</td><td>-</td><td>Yes</td></tr>
         </tbody>
       </table>
     </div>
@@ -420,11 +420,6 @@
             <td><strong>Free</strong></td>
             <td>5 req/min, 1 target per request, every lookup except screenshot, reputation, and threat intelligence</td>
             <td>Included with any API key</td>
-          </tr>
-          <tr>
-            <td><strong>Basic</strong></td>
-            <td>30 req/min, 5 targets per request, same lookups as Free</td>
-            <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
           </tr>
           <tr>
             <td><strong>Pro</strong></td>

@@ -21,7 +21,7 @@ func TestProvisionCustomer_HappyPath(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO customers").
-		WithArgs("acme", "acme@example.com", "cus_123", "basic").
+		WithArgs("acme", "acme@example.com", "cus_123", "pro").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
 	mock.ExpectExec("INSERT INTO api_keys").
 		WithArgs(42, "hashvalue").
@@ -32,7 +32,7 @@ func TestProvisionCustomer_HappyPath(t *testing.T) {
 	mock.ExpectCommit()
 
 	repo := NewRepository(db)
-	id, err := repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
+	id, err := repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "pro", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestProvisionCustomer_BeginTxError(t *testing.T) {
 	mock.ExpectBegin().WillReturnError(errors.New("connection refused"))
 
 	repo := NewRepository(db)
-	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "pro", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -72,12 +72,12 @@ func TestProvisionCustomer_InsertCustomerError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO customers").
-		WithArgs("acme", "acme@example.com", "cus_123", "basic").
+		WithArgs("acme", "acme@example.com", "cus_123", "pro").
 		WillReturnError(errors.New("duplicate key"))
 	mock.ExpectRollback()
 
 	repo := NewRepository(db)
-	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "pro", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -95,7 +95,7 @@ func TestProvisionCustomer_InsertKeyError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO customers").
-		WithArgs("acme", "acme@example.com", "cus_123", "basic").
+		WithArgs("acme", "acme@example.com", "cus_123", "pro").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
 	mock.ExpectExec("INSERT INTO api_keys").
 		WithArgs(42, "hashvalue").
@@ -103,7 +103,7 @@ func TestProvisionCustomer_InsertKeyError(t *testing.T) {
 	mock.ExpectRollback()
 
 	repo := NewRepository(db)
-	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "pro", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -121,7 +121,7 @@ func TestProvisionCustomer_InsertProvisionedKeyError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO customers").
-		WithArgs("acme", "acme@example.com", "cus_123", "basic").
+		WithArgs("acme", "acme@example.com", "cus_123", "pro").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
 	mock.ExpectExec("INSERT INTO api_keys").
 		WithArgs(42, "hashvalue").
@@ -132,7 +132,7 @@ func TestProvisionCustomer_InsertProvisionedKeyError(t *testing.T) {
 	mock.ExpectRollback()
 
 	repo := NewRepository(db)
-	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "pro", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -150,7 +150,7 @@ func TestProvisionCustomer_CommitError(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("INSERT INTO customers").
-		WithArgs("acme", "acme@example.com", "cus_123", "basic").
+		WithArgs("acme", "acme@example.com", "cus_123", "pro").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
 	mock.ExpectExec("INSERT INTO api_keys").
 		WithArgs(42, "hashvalue").
@@ -161,7 +161,7 @@ func TestProvisionCustomer_CommitError(t *testing.T) {
 	mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
 
 	repo := NewRepository(db)
-	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "basic", "cus_123", "hashvalue", "sess_abc", "rawkey123")
+	_, err = repo.ProvisionCustomer(context.Background(), "acme", "acme@example.com", "pro", "cus_123", "hashvalue", "sess_abc", "rawkey123")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

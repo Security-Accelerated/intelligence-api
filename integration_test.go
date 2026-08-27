@@ -38,7 +38,7 @@ type stubRepo struct {
 func newStubRepo() *stubRepo {
 	return &stubRepo{keys: map[string]*auth.Customer{
 		"test-admin-key":  {ID: 1, APIKeyID: 100, Name: "Test Admin", Active: true, Plan: "admin"},
-		"test-lookup-key": {ID: 2, APIKeyID: 200, Name: "Test Lookup User", Active: true, Plan: "basic"},
+		"test-lookup-key": {ID: 2, APIKeyID: 200, Name: "Test Lookup User", Active: true, Plan: "free"},
 		"test-pro-key":    {ID: 3, APIKeyID: 300, Name: "Test Pro User", Active: true, Plan: "pro"},
 		"test-free-key":   {ID: 4, APIKeyID: 400, Name: "Test Free User", Active: true, Plan: "free"},
 	}}
@@ -108,17 +108,14 @@ func testConfig() *viper.Viper {
 	cfg.Set("auth.cache_ttl", "5m")
 	cfg.Set("screenshot.timeout", "15s")
 	cfg.Set("rate_limit.free", 5)
-	cfg.Set("rate_limit.basic", 30)
 	cfg.Set("rate_limit.pro", 120)
 	cfg.Set("postgres.host", "localhost")
 	cfg.Set("postgres.port", 5432)
 	cfg.Set("postgres.dbname", "test_db")
 	cfg.Set("postgres.sslmode", "disable")
 	cfg.Set("domain.max_domains.free", 1)
-	cfg.Set("domain.max_domains.basic", 5)
 	cfg.Set("domain.max_domains.pro", 20)
 	cfg.Set("ip.max_ips.free", 1)
-	cfg.Set("ip.max_ips.basic", 5)
 	cfg.Set("ip.max_ips.pro", 20)
 	return cfg
 }
@@ -352,7 +349,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	cfg := testConfig()
 	nop := zap.NewNop()
 
-	rlCfg := middleware.RateLimitConfig{Free: 5, Basic: 30, Pro: 120}
+	rlCfg := middleware.RateLimitConfig{Free: 5, Pro: 120}
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -749,21 +746,6 @@ func TestIntegration_Screenshot_ProCanScreenshot(t *testing.T) {
 	}
 }
 
-func TestIntegration_Screenshot_BasicGets403(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","screenshot"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-lookup-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-}
-
 func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
 	r, _ := setupRouter(t)
 
@@ -820,21 +802,6 @@ func TestIntegration_Reputation_ProCanAccess(t *testing.T) {
 	dbl := resp[0].Reputation.Providers[0]
 	if !dbl.Listed || dbl.Category != "phishing" || dbl.Provider != "spamhaus_dbl" {
 		t.Errorf("first provider = %+v, want listed phishing from spamhaus_dbl", dbl)
-	}
-}
-
-func TestIntegration_Reputation_BasicGets403(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","reputation"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-lookup-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
 	}
 }
 
@@ -952,7 +919,7 @@ func TestIntegration_AdminCacheInvalidate_NoKeyUnauthorized(t *testing.T) {
 func TestIntegration_EmailSecurity_AllPlansCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	// Basic plan can request email_security (no premium gate)
+	// Free plan can request email_security (no premium gate)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
 		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","email_security"]}`))
@@ -1062,7 +1029,7 @@ func TestIntegration_Subdomain_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_Subdomain_BasicPlanCanAccess(t *testing.T) {
+func TestIntegration_Subdomain_FreePlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
@@ -1081,7 +1048,7 @@ func TestIntegration_Subdomain_BasicPlanCanAccess(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].Subdomains == nil {
-		t.Fatal("expected subdomains to be populated for basic plan")
+		t.Fatal("expected subdomains to be populated for free plan")
 	}
 }
 
@@ -1139,7 +1106,7 @@ func TestIntegration_CTLogs_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_CTLogs_BasicPlanCanAccess(t *testing.T) {
+func TestIntegration_CTLogs_FreePlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
@@ -1158,7 +1125,7 @@ func TestIntegration_CTLogs_BasicPlanCanAccess(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].CTLogs == nil {
-		t.Fatal("expected ct_logs to be populated for basic plan")
+		t.Fatal("expected ct_logs to be populated for free plan")
 	}
 }
 
@@ -1219,7 +1186,7 @@ func TestIntegration_BGP_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_BGP_BasicPlanCanAccess(t *testing.T) {
+func TestIntegration_BGP_FreePlanCanAccess(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
@@ -1238,7 +1205,7 @@ func TestIntegration_BGP_BasicPlanCanAccess(t *testing.T) {
 		t.Fatalf("len(resp) = %d, want 1", len(resp))
 	}
 	if resp[0].BGP == nil {
-		t.Fatal("expected bgp to be populated for basic plan")
+		t.Fatal("expected bgp to be populated for free plan")
 	}
 }
 
@@ -1304,13 +1271,13 @@ func TestIntegration_ClientRequestID_EchoedBack(t *testing.T) {
 
 // --- Middleware: Rate Limiting ---
 
-func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
+func TestIntegration_RateLimit_FreeExceeded(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	body := `{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`
 
-	// Send 31 requests — basic limit is 30
-	for i := 0; i < 30; i++ {
+	// Send 6 requests — the free limit is 5
+	for i := 0; i < 5; i++ {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -1321,7 +1288,7 @@ func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
 		}
 	}
 
-	// Request 31 should be rate limited
+	// Request 6 should be rate limited
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1329,7 +1296,7 @@ func TestIntegration_RateLimit_BasicExceeded(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusTooManyRequests {
-		t.Fatalf("request 31: status = %d, want %d", w.Code, http.StatusTooManyRequests)
+		t.Fatalf("request 6: status = %d, want %d", w.Code, http.StatusTooManyRequests)
 	}
 	if w.Header().Get("Retry-After") == "" {
 		t.Error("expected Retry-After header on 429 response")
@@ -1667,7 +1634,7 @@ func TestIntegration_AdminUsage_NonAdminForbidden(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/usage", nil)
-	req.Header.Set("X-API-Key", "test-lookup-key") // basic plan
+	req.Header.Set("X-API-Key", "test-lookup-key") // free plan
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
@@ -1697,21 +1664,6 @@ func TestIntegration_ThreatIntel_FreeGets403(t *testing.T) {
 		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","threat_intel"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-free-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
-	}
-}
-
-func TestIntegration_ThreatIntel_BasicGets403(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","threat_intel"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
@@ -1867,7 +1819,7 @@ func TestIntegration_MyUsage_Authenticated(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/v1/usage", nil)
-	req.Header.Set("X-API-Key", "test-lookup-key") // basic plan — no admin needed
+	req.Header.Set("X-API-Key", "test-lookup-key") // free plan — no admin needed
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -2098,16 +2050,16 @@ func TestIntegration_IPLookup_KeyspaceSeparateFromDomains(t *testing.T) {
 func TestIntegration_IPLookup_ThreatIntelProOnly(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	// Basic plan — should be forbidden
+	// Free plan — should be forbidden
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
 		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["threat_intel"]}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-lookup-key") // basic plan
+	req.Header.Set("X-API-Key", "test-lookup-key") // free plan
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
-		t.Fatalf("basic plan with threat_intel: status = %d, want %d", w.Code, http.StatusForbidden)
+		t.Fatalf("free plan with threat_intel: status = %d, want %d", w.Code, http.StatusForbidden)
 	}
 
 	// Pro plan — should succeed
@@ -2245,13 +2197,13 @@ func TestIntegration_GeoIPRefresh_AdminOnly(t *testing.T) {
 		t.Fatalf("no auth: status = %d, want %d", w1.Code, http.StatusUnauthorized)
 	}
 
-	// Basic plan — 403
+	// Free plan — 403
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", nil)
 	req2.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusForbidden {
-		t.Fatalf("basic plan: status = %d, want %d", w2.Code, http.StatusForbidden)
+		t.Fatalf("free plan: status = %d, want %d", w2.Code, http.StatusForbidden)
 	}
 }
 
@@ -2539,9 +2491,9 @@ func TestIntegration_Lookups_PlanGatingPerLookup(t *testing.T) {
 		{"test-free-key", "reputation", http.StatusForbidden},
 		{"test-free-key", "threat_intel", http.StatusForbidden},
 		{"test-free-key", "dns", http.StatusOK},
-		{"test-lookup-key", "screenshot", http.StatusForbidden},   // basic
-		{"test-lookup-key", "reputation", http.StatusForbidden},   // basic
-		{"test-lookup-key", "threat_intel", http.StatusForbidden}, // basic
+		{"test-lookup-key", "screenshot", http.StatusForbidden},   // free
+		{"test-lookup-key", "reputation", http.StatusForbidden},   // free
+		{"test-lookup-key", "threat_intel", http.StatusForbidden}, // free
 		{"test-lookup-key", "dns", http.StatusOK},
 		{"test-lookup-key", "subdomains", http.StatusOK},
 		{"test-pro-key", "screenshot", http.StatusOK},

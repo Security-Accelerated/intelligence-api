@@ -131,21 +131,21 @@
   <p>Feature access and limits are determined by your API key's plan.</p>
   <div class="table-scroll">
     <table>
-      <thead><tr><th></th><th>Free</th><th>Basic</th><th>Pro</th></tr></thead>
+      <thead><tr><th></th><th>Free</th><th>Pro</th></tr></thead>
       <tbody>
-        <tr><td><strong>Rate limit</strong></td><td>5 req/min</td><td>30 req/min</td><td>120 req/min</td></tr>
-        <tr><td><strong>Max domains per request</strong></td><td>1</td><td>5</td><td>20</td></tr>
-        <tr><td><strong>WHOIS, DNS, SSL, Headers</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>Email Security</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>Subdomains</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>CT Logs</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>BGP / ASN</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>DNS Security (DNSSEC / CAA)</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>Aggregate Risk Score</strong></td><td>Included</td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>Screenshot</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
-        <tr><td><strong>Reputation</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
-        <tr><td><strong>Threat Intelligence</strong></td><td>--</td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+        <tr><td><strong>Rate limit</strong></td><td>5 req/min</td><td>120 req/min</td></tr>
+        <tr><td><strong>Max domains per request</strong></td><td>1</td><td>20</td></tr>
+        <tr><td><strong>WHOIS, DNS, SSL, Headers</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Email Security</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Subdomains</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>CT Logs</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>BGP / ASN</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>DNS Security (DNSSEC / CAA)</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Aggregate Risk Score</strong></td><td>Included</td><td>Included</td></tr>
+        <tr><td><strong>Screenshot</strong></td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+        <tr><td><strong>Reputation</strong></td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
+        <tr><td><strong>Threat Intelligence</strong></td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -161,11 +161,6 @@
           <td><strong>Free</strong></td>
           <td>5 req/min, 1 domain/request, all lookups except screenshot, reputation, and threat intel</td>
           <td>Included with any API key</td>
-        </tr>
-        <tr>
-          <td><strong>Basic</strong></td>
-          <td>30 req/min, 5 domains/request, all lookups except screenshot, reputation, and threat intel</td>
-          <td>{{if .BasicPaymentLink}}<a href="{{.BasicPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
         </tr>
         <tr>
           <td><strong>Pro</strong></td>
@@ -256,7 +251,6 @@
       <thead><tr><th>Plan</th><th>Domains per request</th><th>With <code>subdomains</code> requested</th></tr></thead>
       <tbody>
         <tr><td>Free</td><td>1</td><td>1</td></tr>
-        <tr><td>Basic</td><td>5</td><td>3</td></tr>
         <tr><td>Pro</td><td>20</td><td>5</td></tr>
       </tbody>
     </table>

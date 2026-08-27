@@ -31,10 +31,15 @@ and invalidates the auth cache after rotating.
 
 ## Plans
 
-One `plan` column on `customers`: `free`, `basic`, `pro`, `admin`. It controls rate limits
-(free 5/min, basic 30/min, pro 120/min, admin unlimited), premium lookups (screenshot,
-reputation, threat_intel), and admin routes via `RequireAdmin()`. Free plan: 1 domain per
-request. The lookup→plan tables live with the handlers (see the lookups rule), not here.
+One `plan` column on `customers`: `free`, `pro`, `admin`. It controls rate limits
+(free 5/min, pro 120/min, admin unlimited), premium lookups (screenshot, reputation,
+threat_intel), and admin routes via `RequireAdmin()`. Free plan: 1 domain per request; pro:
+20. The lookup→plan tables live with the handlers (see the lookups rule), not here.
+
+Free is also the fallback: an unrecognized plan gets free limits in the rate limiter and
+free gating in the handlers, so a bad value fails closed rather than granting anything.
+Migration 017 merged the old `basic` tier into `pro` and reset the column default from
+`basic` to `free` — nothing in the code answers to `basic` any more.
 
 ## Stripe — `internal/billing`
 
@@ -50,8 +55,8 @@ retrieved, and a startup goroutine sweeps expired rows every `billing.cleanup_in
 (10m). Auth cache is invalidated on any plan change. Billing events fan out to the
 `Notifier` asynchronously. The Customer Portal link (`STRIPE_PORTAL_LINK`) is shown on the
 docs and success pages. Config: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
-`STRIPE_PRICES_BASIC_MONTHLY`, `STRIPE_PRICES_PRO_MONTHLY`, `STRIPE_PAYMENT_LINK_BASIC`,
-`STRIPE_PAYMENT_LINK_PRO`, `STRIPE_PORTAL_LINK`, `BILLING_STALE_KEY_DAYS`.
+`STRIPE_PRICES_PRO_MONTHLY`, `STRIPE_PAYMENT_LINK_PRO`, `STRIPE_PORTAL_LINK`,
+`BILLING_STALE_KEY_DAYS`.
 
 ## Usage — `internal/usage`
 

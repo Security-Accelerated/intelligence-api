@@ -5,7 +5,7 @@
 
 @host = http://localhost:8080
 @adminKey = test-admin-key
-@lookupKey = test-basic-key
+@lookupKey = test-free-key
 @proKey = test-pro-key
 @freeKey = test-free-key
 
@@ -42,10 +42,10 @@ X-Client-Request-ID: test-admin-001
   "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
-### Domain lookup (basic key)
+### Domain lookup, two domains (pro key — free allows one)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
-X-API-Key: {{lookupKey}}
+X-API-Key: {{proKey}}
 X-Client-Request-ID: test-lookup-001
 
 {
@@ -105,7 +105,7 @@ X-API-Key: {{adminKey}}
   "lookups": ["screenshot"]
 }
 
-### Domain lookup with screenshot - should return 403 (basic key)
+### Domain lookup with screenshot - should return 403 (free key)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
@@ -125,7 +125,7 @@ X-API-Key: {{adminKey}}
   "lookups": ["reputation"]
 }
 
-### Domain lookup with reputation - should return 403 (basic key)
+### Domain lookup with reputation - should return 403 (free key)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
@@ -145,7 +145,7 @@ X-API-Key: {{adminKey}}
   "lookups": ["screenshot", "reputation"]
 }
 
-### Domain lookup with email security (basic key - all plans)
+### Domain lookup with email security (free key - all plans)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
@@ -165,7 +165,7 @@ X-API-Key: {{adminKey}}
   "lookups": ["subdomains"]
 }
 
-### Domain lookup with subdomains (basic key - all plans)
+### Domain lookup with subdomains (free key - all plans)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
@@ -185,7 +185,7 @@ X-API-Key: {{adminKey}}
   "lookups": ["ct_logs"]
 }
 
-### Domain lookup with CT logs (basic key - all plans)
+### Domain lookup with CT logs (free key - all plans)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
@@ -205,7 +205,7 @@ X-API-Key: {{adminKey}}
   "lookups": ["bgp"]
 }
 
-### Domain lookup with BGP/ASN (basic key - all plans)
+### Domain lookup with BGP/ASN (free key - all plans)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}
@@ -224,7 +224,7 @@ Content-Type: application/json
   "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
-### Info - should return 403 (basic key, admin only)
+### Info - should return 403 (free key, admin only)
 GET {{host}}/v1/info
 X-API-Key: {{lookupKey}}
 
@@ -238,7 +238,7 @@ X-API-Key: {{adminKey}}
   "lookups": ["fingerprint"]
 }
 
-### Domain lookup with fingerprint (basic key - all plans)
+### Domain lookup with fingerprint (free key - all plans)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
 X-API-Key: {{lookupKey}}

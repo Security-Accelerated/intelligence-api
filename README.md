@@ -16,11 +16,10 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 | Plan | Capabilities |
 |------|-------------|
 | `free` | All lookups except `screenshot`, `reputation`, and `threat_intel`. 1 domain per request. |
-| `basic` | All free capabilities, up to 5 domains per request |
-| `pro` | All basic capabilities + page screenshots + reputation checks + threat intelligence, up to 20 domains per request |
+| `pro` | All free capabilities + page screenshots + reputation checks + threat intelligence, up to 20 domains per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
-The plan is stored in the `customers` table. New customers provisioned via Stripe checkout receive the plan they purchased (basic or pro).
+The plan is stored in the `customers` table, defaulting to `free`. New customers provisioned via Stripe checkout receive the plan they purchased. An unrecognized plan value is treated as `free` by both the rate limiter and lookup gating, so a bad value fails closed.
 
 Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Requests naming a lookup outside the caller's plan (`screenshot`, `reputation`, `threat_intel` require pro) receive `403 Forbidden`. The `/v1/hello` and `/v1/health` checks require no authentication. Self-service endpoints (`GET /v1/usage`, `POST /v1/keys/rotate`) are available to every plan.
 
@@ -31,7 +30,6 @@ All authenticated endpoints are rate-limited per API key using a sliding-window 
 | Plan | Default Limit |
 |------|---------------|
 | `free` | 5 requests/minute |
-| `basic` | 30 requests/minute |
 | `pro` | 120 requests/minute |
 | `admin` | No limit |
 
@@ -272,8 +270,8 @@ Errors are returned as `{"error": "..."}`. Validation runs in a fixed order: the
 | `400` | Body is not valid JSON, or `domains` is missing/empty | `invalid request: domains field is required and must be a non-empty array` |
 | `400` | `lookups` missing, or empty after normalization (`[]`, `[""]`, `[" "]`) | `lookups is required, e.g. ["dns", "ssl"]` |
 | `400` | Unrecognized lookup name | `invalid lookup "banana"; valid lookups: whois, dns, ssl, ...` |
-| `400` | More domains than the plan allows | `too many domains: maximum 5 allowed for basic plan` |
-| `400` | More domains than the tighter subdomain cap allows | `too many domains: maximum 3 allowed for basic plan when subdomains is requested` |
+| `400` | More domains than the plan allows | `too many domains: maximum 20 allowed for pro plan` |
+| `400` | More domains than the tighter subdomain cap allows | `too many domains: maximum 5 allowed for pro plan when subdomains is requested` |
 | `400` | The single submitted domain is invalid | `invalid domain name` / `raw IP addresses are not accepted; provide a domain name` |
 | `401` | Missing or invalid API key | `invalid API key` |
 | `403` | Lookup not included in the caller's plan | `screenshot requires a pro plan` |
@@ -905,17 +903,13 @@ Config values:
 | `maxmind.max_age` | `168h` | Re-download databases older than this at startup; `0` pins whatever is on disk |
 | `ip.lookup_timeout` | `30s` | Overall timeout for all concurrent IP lookups |
 | `ip.max_ips.free` | `1` | Maximum IPs per request for free plan |
-| `ip.max_ips.basic` | `5` | Maximum IPs per request for basic plan |
 | `ip.max_ips.pro` | `20` | Maximum IPs per request for pro plan |
 | `domain.lookup_timeout` | `30s` | Overall timeout for all concurrent lookups per domain |
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
-| `domain.max_domains.basic` | `5` | Maximum domains per request for basic plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
 | `subdomain.max_domains.free` | `1` | Maximum domains per request when `subdomains: true` (free plan) |
-| `subdomain.max_domains.basic` | `3` | Maximum domains per request when `subdomains: true` (basic plan) |
 | `subdomain.max_domains.pro` | `5` | Maximum domains per request when `subdomains: true` (pro plan) |
 | `rate_limit.free` | `5` | Requests per minute for free plan customers |
-| `rate_limit.basic` | `30` | Requests per minute for basic plan customers |
 | `rate_limit.pro` | `120` | Requests per minute for pro plan customers |
 | `postgres.host` | `localhost` | PostgreSQL host |
 | `postgres.port` | `5432` | PostgreSQL port |
@@ -938,9 +932,7 @@ Config values:
 | `alerts.max_window_size` | `1000` | Maximum error timestamps tracked per sliding window |
 | `stripe.secret_key` | `""` | Stripe secret key (enables billing) |
 | `stripe.webhook_secret` | `""` | Stripe webhook signing secret |
-| `stripe.prices.basic_monthly` | `""` | Stripe Price ID for basic monthly plan |
 | `stripe.prices.pro_monthly` | `""` | Stripe Price ID for pro monthly plan |
-| `stripe.payment_link.basic` | `""` | Stripe Payment Link URL for basic plan |
 | `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
 | `stripe.portal_link` | `""` | Stripe Customer Portal URL for subscription management |
 | `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
@@ -957,7 +949,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `003_hash_api_keys.sql` — replaces the plaintext `key` column with `key_hash` (SHA-256, hex-encoded)
 - `004_rename_roles_to_features.sql` — renames `customer_roles` to `customer_features`
 - `005_fingerprint_rules.sql` — creates the `fingerprint_rules` table (append-only, JSONB rules column)
-- `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column (`free`/`basic`/`pro`/`admin`)
+- `006_features_to_plan.sql` — replaces `tier` + `customer_features` with a single `plan` column
 - `007_billing.sql` — adds `email`, `stripe_customer_id` to customers; `last_used_at` to api_keys; creates `provisioned_keys` table
 - `008_request_log.sql` — creates the `request_log` table for usage tracking (indexed on `created_at`, `customer_id`, `api_key_id`)
 - `009_request_log_threat_intel.sql` — adds `threat_intel` column to the `request_log` table
@@ -968,7 +960,8 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `014_request_log_cache_metrics.sql` — replaces the per-request `cache_hit` boolean with `cache_hits`/`cache_misses` counts, and adds `whois`/`dns`/`ssl`/`headers`/`risk` columns now that the base lookups and the risk score are individually selectable
 - `015_request_log_ip_lookups.sql` — adds `geo`/`asn`/`reverse_dns`/`abuse_contact` columns now that IP lookups are individually selectable
 - `016_drop_request_log_cache_hit.sql` — drops the superseded `cache_hit` column. **Apply only after a build that no longer writes it (v0.55.0+) is deployed** — see below
-- `seed.sql` — inserts test customers (admin, basic, pro, free) with hashed keys
+- `017_merge_basic_into_pro.sql` — moves any `basic` customer to `pro` and resets the `plan` column default from `basic` to `free`
+- `seed.sql` — inserts test customers (admin, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
 
@@ -1109,9 +1102,7 @@ git push origin main:release      # trigger Fly deploy
 | `ALERTS_COOLDOWN` | Cooldown between duplicate alerts (default: 15m) |
 | `STRIPE_SECRET_KEY` | Stripe secret key (enables billing) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
-| `STRIPE_PRICES_BASIC_MONTHLY` | Stripe Price ID for basic monthly plan |
 | `STRIPE_PRICES_PRO_MONTHLY` | Stripe Price ID for pro monthly plan |
-| `STRIPE_PAYMENT_LINK_BASIC` | Stripe Payment Link URL for basic plan |
 | `STRIPE_PAYMENT_LINK_PRO` | Stripe Payment Link URL for pro plan |
 | `STRIPE_PORTAL_LINK` | Stripe Customer Portal URL for subscription management |
 | `USAGE_BUFFER_SIZE` | Channel buffer size for async usage logging (default: 256) |
@@ -1122,7 +1113,6 @@ git push origin main:release      # trigger Fly deploy
 | `MAXMIND_DB_PATH` | Directory for MaxMind .mmdb files (default: `/data/maxmind`) |
 | `IP_LOOKUP_TIMEOUT` | Timeout for IP intelligence lookups (default: 30s) |
 | `IP_MAX_IPS_FREE` | Max IPs per request for free plan (default: 1) |
-| `IP_MAX_IPS_BASIC` | Max IPs per request for basic plan (default: 5) |
 | `IP_MAX_IPS_PRO` | Max IPs per request for pro plan (default: 20) |
 
 ### Admin CLI (`sactl`)
@@ -1148,7 +1138,7 @@ sactl lookup domain example.com --lookups dns,ssl,risk
 sactl lookup ip 8.8.8.8 --lookups all
 sactl customer list
 sactl customer create --name "Acme" --plan pro --email ops@acme.com
-sactl customer plan --id 12 --plan basic
+sactl customer plan --id 12 --plan pro
 sactl customer rename --id 12 --name "Acme Corp"
 sactl key list --customer 12
 sactl key rotate --customer 12
@@ -1183,7 +1173,7 @@ minutes waiting out windows. Numbered siblings are picked up automatically:
 
 | Variable | Purpose |
 |---|---|
-| `SMOKE_ADMIN_KEY` / `SMOKE_BASIC_KEY` / `SMOKE_PRO_KEY` / `SMOKE_FREE_KEY` | One per plan |
+| `SMOKE_ADMIN_KEY` / `SMOKE_PRO_KEY` / `SMOKE_FREE_KEY` | One per plan |
 | `SMOKE_FREE_KEY_2`, `_3`, … | Extra free keys, pooled round-robin |
 | `SMOKE_FREE_KEYS` | Comma-separated alternative to the numbered form |
 | `SMOKE_RATELIMIT_KEY` | A free key **reserved** for the rate limit check and held out of the pool |
@@ -1251,7 +1241,7 @@ Self-service billing via Stripe. Customers click a Stripe Payment Link on the do
 
 ### Flow
 
-1. Customer visits docs at `/`, clicks a Payment Link for basic or pro
+1. Customer visits docs at `/`, clicks the Pro Payment Link
 2. Stripe hosts the checkout — no card numbers touch our servers
 3. On payment, Stripe sends a `checkout.session.completed` webhook to `POST /billing/webhook`
 4. Webhook handler creates customer + API key in DB, stores raw key temporarily in `provisioned_keys`
@@ -1276,7 +1266,7 @@ Customers can manage their subscription (cancel, update payment method) via the 
 
 ### Configuration
 
-Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to enable. Without them, the app starts with a noop billing service. Map Stripe Price IDs to plans via `STRIPE_PRICES_BASIC_MONTHLY` and `STRIPE_PRICES_PRO_MONTHLY`. Configure Payment Link URLs via `STRIPE_PAYMENT_LINK_BASIC` and `STRIPE_PAYMENT_LINK_PRO` to show subscribe buttons on the docs page. Set `STRIPE_PORTAL_LINK` to show a "Manage subscription" link on the docs and success pages.
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to enable. Without them, the app starts with a noop billing service. Map Stripe Price IDs to plans via `STRIPE_PRICES_PRO_MONTHLY`. Configure the Payment Link URL via `STRIPE_PAYMENT_LINK_PRO` to show the subscribe button on the docs page. Set `STRIPE_PORTAL_LINK` to show a "Manage subscription" link on the docs and success pages.
 
 ## Testing
 

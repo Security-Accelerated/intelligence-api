@@ -419,7 +419,7 @@ func TestDomainLookup_PlanGating(t *testing.T) {
 		domain.LookupCTLogsName, domain.LookupBGPName, domain.LookupFingerprintName,
 	}
 
-	for _, plan := range []string{planFree, planBasic, planPro, planAdmin} {
+	for _, plan := range []string{planFree, planPro, planAdmin} {
 		allowed := plan == planPro || plan == planAdmin
 		for _, name := range gated {
 			t.Run(plan+"/"+name, func(t *testing.T) {
@@ -561,9 +561,9 @@ func TestDomainLookup_MaxDomains_CountsSubmittedEntriesNotUniqueDomains(t *testi
 
 func TestDomainLookup_MaxDomains_WithinLimit(t *testing.T) {
 	cfg := viper.New()
-	cfg.Set("domain.max_domains.basic", 2)
+	cfg.Set("domain.max_domains.pro", 2)
 
-	w := post(newTestRouterWithConfig(&mockService{}, planBasic, cfg),
+	w := post(newTestRouterWithConfig(&mockService{}, planPro, cfg),
 		`{"domains":["example.com","example.org"],"lookups":["dns"]}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
@@ -572,17 +572,17 @@ func TestDomainLookup_MaxDomains_WithinLimit(t *testing.T) {
 
 func TestDomainLookup_MaxDomains_SubdomainCapTighter(t *testing.T) {
 	cfg := viper.New()
-	cfg.Set("domain.max_domains.basic", 5)
-	cfg.Set("subdomain.max_domains.basic", 2)
+	cfg.Set("domain.max_domains.pro", 5)
+	cfg.Set("subdomain.max_domains.pro", 2)
 
 	body := `{"domains":["a.com","b.com","c.com"],"lookups":["%s"]}`
 
 	// Without subdomains the looser cap applies.
-	if w := post(newTestRouterWithConfig(&mockService{}, planBasic, cfg), fmt.Sprintf(body, "dns")); w.Code != http.StatusOK {
+	if w := post(newTestRouterWithConfig(&mockService{}, planPro, cfg), fmt.Sprintf(body, "dns")); w.Code != http.StatusOK {
 		t.Fatalf("dns-only status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
 	// With subdomains the tighter cap applies.
-	w := post(newTestRouterWithConfig(&mockService{}, planBasic, cfg), fmt.Sprintf(body, "subdomains"))
+	w := post(newTestRouterWithConfig(&mockService{}, planPro, cfg), fmt.Sprintf(body, "subdomains"))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("subdomains status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}

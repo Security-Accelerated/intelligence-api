@@ -134,7 +134,7 @@ func TestCreateCustomer_RollsBackWhenKeyInsertFails(t *testing.T) {
 	// A customer with no key can never authenticate and is invisible to the
 	// CLI's own list output, so a partial commit would strand a row nobody
 	// would think to look for.
-	if _, _, err := s.CreateCustomer(context.Background(), "acme", "", auth.PlanBasic); err == nil {
+	if _, _, err := s.CreateCustomer(context.Background(), "acme", "", auth.PlanPro); err == nil {
 		t.Fatal("expected an error")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

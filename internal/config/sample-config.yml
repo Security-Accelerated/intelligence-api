@@ -54,7 +54,6 @@ domain:
   lookup_timeout: 30s
   max_domains:
     free: 1
-    basic: 5
     pro: 20
 
 screenshot:
@@ -68,7 +67,6 @@ subdomain:
   http_timeout: 15s             # end-to-end crt.sh request cap
   max_domains:
     free: 1
-    basic: 3
     pro: 5
 
 ct_logs:
@@ -77,7 +75,6 @@ ct_logs:
 
 rate_limit:
   free: 5
-  basic: 30
   pro: 120
 
 pushover:
@@ -97,10 +94,8 @@ stripe:
   secret_key: ""
   webhook_secret: ""
   prices:
-    basic_monthly: ""
     pro_monthly: ""
   payment_link:
-    basic: ""
     pro: ""
   portal_link: ""
 
@@ -123,7 +118,6 @@ ip:
   lookup_timeout: 30s
   max_ips:
     free: 1
-    basic: 5
     pro: 20
 
 maxmind:

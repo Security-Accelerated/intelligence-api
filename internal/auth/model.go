@@ -10,14 +10,13 @@ import (
 // sets it and the auth lookup returns it, and neither involves a request.
 const (
 	PlanFree  = "free"
-	PlanBasic = "basic"
 	PlanPro   = "pro"
 	PlanAdmin = "admin"
 )
 
 // Plans lists every valid plan, least privileged first. Callers that rank plans
 // by capability rely on that order.
-var Plans = []string{PlanFree, PlanBasic, PlanPro, PlanAdmin}
+var Plans = []string{PlanFree, PlanPro, PlanAdmin}
 
 // ValidPlan reports whether name is a recognized plan. Plans are rejected at
 // the point they are set rather than silently degrading to the least privileged

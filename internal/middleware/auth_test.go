@@ -237,8 +237,11 @@ func TestRequireAdmin_ProForbidden(t *testing.T) {
 	}
 }
 
-func TestRequireAdmin_BasicForbidden(t *testing.T) {
-	r := setupAdminRouter("basic")
+// An unrecognized plan must not reach admin routes. Plans are validated where
+// they are set, so this only happens with a hand-edited row, which is exactly
+// the case where failing closed matters.
+func TestRequireAdmin_UnknownPlanForbidden(t *testing.T) {
+	r := setupAdminRouter("unknown")
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 	r.ServeHTTP(w, req)

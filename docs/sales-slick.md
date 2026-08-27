@@ -103,21 +103,21 @@ That's it. One request, one comprehensive response.
 
 ## Plans
 
-| Capability | Free | Basic | Pro |
-|-----------|------|-------|-----|
-| Domain lookup (WHOIS, DNS, SSL, headers) | Included | Included | Included |
-| IP lookup (GeoIP, ASN, reverse DNS, abuse contact) | Included | Included | Included |
-| Email security (SPF, DMARC, DKIM) | Included | Included | Included |
-| Subdomain enumeration | Included | Included | Included |
-| Certificate transparency logs | Included | Included | Included |
-| BGP/ASN enrichment | Included | Included | Included |
-| Technology fingerprinting | Included | Included | Included |
-| Page screenshots | — | — | Included |
-| Domain reputation scoring | — | — | Included |
-| Threat intelligence (domain + IP) | — | — | Included |
-| Rate limit | 5 req/min | 30 req/min | 120 req/min |
-| Batch size (domains) | 1 | 5 | 20 |
-| Batch size (IPs) | 1 | 5 | 20 |
+| Capability | Free | Pro |
+|-----------|------|-----|
+| Domain lookup (WHOIS, DNS, SSL, headers) | Included | Included |
+| IP lookup (GeoIP, ASN, reverse DNS, abuse contact) | Included | Included |
+| Email security (SPF, DMARC, DKIM) | Included | Included |
+| Subdomain enumeration | Included | Included |
+| Certificate transparency logs | Included | Included |
+| BGP/ASN enrichment | Included | Included |
+| Technology fingerprinting | Included | Included |
+| Page screenshots | — | Included |
+| Domain reputation scoring | — | Included |
+| Threat intelligence (domain + IP) | — | Included |
+| Rate limit | 5 req/min | 120 req/min |
+| Batch size (domains) | 1 | 20 |
+| Batch size (IPs) | 1 | 20 |
 
 ---
 

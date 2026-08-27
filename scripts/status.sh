@@ -103,7 +103,6 @@ if [ -n "$ADMIN_KEY" ]; then
         auth_size=$(echo "$info" | jq -r '.cache.auth_cache_size // "unknown"')
 
         rl_free=$(echo "$info" | jq -r '.lookups.rate_limit_free // "?"')
-        rl_basic=$(echo "$info" | jq -r '.lookups.rate_limit_basic // "?"')
         rl_pro=$(echo "$info" | jq -r '.lookups.rate_limit_pro // "?"')
 
         fp_rules=$(echo "$info" | jq -r '.services.fingerprint.rule_count // "n/a"')
@@ -136,7 +135,7 @@ if [ -n "$ADMIN_KEY" ]; then
         printf "  %-16s %s entries (TTL: %s)\n" "Auth cache:" "$auth_size" "$auth_ttl"
 
         echo ""
-        printf "  %-16s free=%s, basic=%s, pro=%s req/min\n" "Rate limits:" "$rl_free" "$rl_basic" "$rl_pro"
+        printf "  %-16s free=%s, pro=%s req/min\n" "Rate limits:" "$rl_free" "$rl_pro"
         printf "  %-16s %s rules (%s)\n" "Fingerprints:" "$fp_rules" "$fp_source"
         printf "  %-16s %s\n" "Threat intel:" "$ti_providers"
         printf "  %-16s %s\n" "Pushover:" "$pushover"

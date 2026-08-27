@@ -33,9 +33,8 @@ func Run(logger *zap.Logger, version string) error {
 	status := config.NewStatusSnapshot(version, lookupNames)
 
 	rlCfg := middleware.RateLimitConfig{
-		Free:  cfg.GetInt("rate_limit.free"),
-		Basic: cfg.GetInt("rate_limit.basic"),
-		Pro:   cfg.GetInt("rate_limit.pro"),
+		Free: cfg.GetInt("rate_limit.free"),
+		Pro:  cfg.GetInt("rate_limit.pro"),
 	}
 
 	logger.Info("initializing application",
@@ -208,9 +207,6 @@ func Run(logger *zap.Logger, version string) error {
 	webhookSecret := cfg.GetString("stripe.webhook_secret")
 	if stripeKey != "" && webhookSecret != "" {
 		priceMap := make(map[string]string)
-		if p := cfg.GetString("stripe.prices.basic_monthly"); p != "" {
-			priceMap[p] = "basic"
-		}
 		if p := cfg.GetString("stripe.prices.pro_monthly"); p != "" {
 			priceMap[p] = "pro"
 		}

@@ -28,7 +28,7 @@ func setupRateLimit(t *testing.T, cfg RateLimitConfig) (*gin.Engine, *miniredis.
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("api_key_id", 1)
-		c.Set("api_key_plan", "basic")
+		c.Set("api_key_plan", "free")
 		c.Next()
 	})
 	r.Use(RateLimitWithLogger(client, cfg, logger))
@@ -47,7 +47,7 @@ func doRequest(r *gin.Engine) *httptest.ResponseRecorder {
 }
 
 func TestRateLimit_UnderLimit(t *testing.T) {
-	r, _, _ := setupRateLimit(t, RateLimitConfig{Basic: 5, Pro: 10})
+	r, _, _ := setupRateLimit(t, RateLimitConfig{Free: 5, Pro: 10})
 
 	w := doRequest(r)
 	if w.Code != http.StatusOK {
@@ -62,7 +62,7 @@ func TestRateLimit_UnderLimit(t *testing.T) {
 }
 
 func TestRateLimit_AtLimit(t *testing.T) {
-	r, _, _ := setupRateLimit(t, RateLimitConfig{Basic: 3, Pro: 10})
+	r, _, _ := setupRateLimit(t, RateLimitConfig{Free: 3, Pro: 10})
 
 	// Use up the limit
 	for i := 0; i < 3; i++ {
@@ -97,7 +97,7 @@ func TestRateLimit_ProGetsHigherLimit(t *testing.T) {
 	core, _ := observer.New(zapcore.WarnLevel)
 	logger := zap.New(core)
 
-	cfg := RateLimitConfig{Basic: 2, Pro: 5}
+	cfg := RateLimitConfig{Free: 2, Pro: 5}
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -111,7 +111,7 @@ func TestRateLimit_ProGetsHigherLimit(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	// Basic limit is 2, but premium gets 5 — so 3 requests should succeed
+	// Free limit is 2, but pro gets 5 — so all 5 requests should succeed
 	for i := 0; i < 5; i++ {
 		w := doRequest(r)
 		if w.Code != http.StatusOK {
@@ -135,13 +135,13 @@ func TestRateLimit_RedisDown_FailOpen(t *testing.T) {
 	core, logs := observer.New(zapcore.WarnLevel)
 	logger := zap.New(core)
 
-	cfg := RateLimitConfig{Basic: 1, Pro: 1}
+	cfg := RateLimitConfig{Free: 1, Pro: 1}
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("api_key_id", 1)
-		c.Set("api_key_plan", "basic")
+		c.Set("api_key_plan", "free")
 		c.Next()
 	})
 	r.Use(RateLimitWithLogger(client, cfg, logger))
@@ -168,7 +168,7 @@ func TestRateLimit_AdminPlan_Bypassed(t *testing.T) {
 	core, _ := observer.New(zapcore.WarnLevel)
 	logger := zap.New(core)
 
-	cfg := RateLimitConfig{Basic: 1, Pro: 1}
+	cfg := RateLimitConfig{Free: 1, Pro: 1}
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -201,14 +201,14 @@ func TestRateLimit_ContextKeysSet(t *testing.T) {
 	core, _ := observer.New(zapcore.WarnLevel)
 	logger := zap.New(core)
 
-	cfg := RateLimitConfig{Basic: 10, Pro: 20}
+	cfg := RateLimitConfig{Free: 10, Pro: 20}
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	var gotLimit, gotRemaining int
 	r.Use(func(c *gin.Context) {
 		c.Set("api_key_id", 1)
-		c.Set("api_key_plan", "basic")
+		c.Set("api_key_plan", "free")
 		c.Next()
 		if v, ok := c.Get("rate_limit"); ok {
 			gotLimit = v.(int)
@@ -240,7 +240,7 @@ func TestRateLimit_FreePlanGetsFreelimit(t *testing.T) {
 	core, _ := observer.New(zapcore.WarnLevel)
 	logger := zap.New(core)
 
-	cfg := RateLimitConfig{Free: 3, Basic: 10, Pro: 20}
+	cfg := RateLimitConfig{Free: 3, Pro: 20}
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -272,13 +272,13 @@ func TestRateLimit_FreePlanGetsFreelimit(t *testing.T) {
 	}
 }
 
-func TestRateLimit_UnknownPlan_GetsBasicLimit(t *testing.T) {
+func TestRateLimit_UnknownPlan_GetsFreeLimit(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	core, _ := observer.New(zapcore.WarnLevel)
 	logger := zap.New(core)
 
-	cfg := RateLimitConfig{Basic: 2, Pro: 10}
+	cfg := RateLimitConfig{Free: 2, Pro: 10}
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -292,7 +292,7 @@ func TestRateLimit_UnknownPlan_GetsBasicLimit(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	// Should use basic limit (2), not pro limit (10)
+	// Should fall back to the free limit (2), not the pro limit (10)
 	for i := 0; i < 2; i++ {
 		w := doRequest(r)
 		if w.Code != http.StatusOK {
@@ -312,13 +312,13 @@ func TestRateLimit_PreviousBucketWeight(t *testing.T) {
 	core, _ := observer.New(zapcore.WarnLevel)
 	logger := zap.New(core)
 
-	cfg := RateLimitConfig{Free: 3, Basic: 5, Pro: 10}
+	cfg := RateLimitConfig{Free: 5, Pro: 10}
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set("api_key_id", 1)
-		c.Set("api_key_plan", "basic")
+		c.Set("api_key_plan", "free")
 		c.Next()
 	})
 	r.Use(RateLimitWithLogger(client, cfg, logger))
@@ -354,7 +354,7 @@ func TestRateLimit_NoAuthContext_Passthrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	// No auth middleware — api_key_id not set
-	r.Use(RateLimitWithLogger(client, RateLimitConfig{Basic: 1, Pro: 1}, logger))
+	r.Use(RateLimitWithLogger(client, RateLimitConfig{Free: 1, Pro: 1}, logger))
 	r.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})

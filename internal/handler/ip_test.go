@@ -250,27 +250,14 @@ func TestIPLookup_ThreatIntel_FreeForbidden(t *testing.T) {
 	}
 }
 
-func TestIPLookup_ThreatIntel_BasicForbidden(t *testing.T) {
-	r := newIPTestRouterWithPlan(&mockIPService{}, "basic")
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["threat_intel"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
-	}
-}
-
 // --- Max IPs per plan ---
 
 func TestIPLookup_MaxIPs_ExceedsLimit(t *testing.T) {
 	cfg := testCfg(map[string]any{
-		"ip.max_ips.basic": 2,
+		"ip.max_ips.pro": 2,
 	})
 
-	r := newIPTestRouterWithCfg(&mockIPService{}, "basic", cfg)
+	r := newIPTestRouterWithCfg(&mockIPService{}, "pro", cfg)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
 		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1","9.9.9.9"],"lookups":["geo","asn"]}`))
@@ -284,10 +271,10 @@ func TestIPLookup_MaxIPs_ExceedsLimit(t *testing.T) {
 
 func TestIPLookup_MaxIPs_AtLimit(t *testing.T) {
 	cfg := testCfg(map[string]any{
-		"ip.max_ips.basic": 2,
+		"ip.max_ips.pro": 2,
 	})
 
-	r := newIPTestRouterWithCfg(&mockIPService{}, "basic", cfg)
+	r := newIPTestRouterWithCfg(&mockIPService{}, "pro", cfg)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
 		strings.NewReader(`{"ips":["8.8.8.8","1.1.1.1"],"lookups":["geo","asn"]}`))
@@ -422,7 +409,7 @@ func TestIPLookup_PlanGating(t *testing.T) {
 		domain.LookupGeoName, domain.LookupASNName,
 		domain.LookupReverseDNSName, domain.LookupAbuseContactName,
 	}
-	for _, plan := range []string{planFree, planBasic, planPro, planAdmin} {
+	for _, plan := range []string{planFree, planPro, planAdmin} {
 		allowed := plan == planPro || plan == planAdmin
 
 		t.Run(plan+"/threat_intel", func(t *testing.T) {
