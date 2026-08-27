@@ -106,6 +106,8 @@ test-all:
 run: build
 	./$(BUILD_DIR)/$(APP_NAME)
 
+# Tags and pushes the tag — and the tag push is the deploy (fly-deploy.yml fires
+# on v*). This is the one place a version is chosen; see RELEASE.md.
 release:
 	@test -n "$(V)" || (echo "usage: make release V=v0.1.0" && exit 1)
 	git tag -a $(V) -m "Release $(V)"

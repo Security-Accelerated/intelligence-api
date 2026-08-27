@@ -79,13 +79,12 @@ open the file.
 ## Conventions
 
 - Feature branch → PR into `main`. No direct pushes to `main`. Open the PR, do not merge
-  it. `release` is reached only by PR from `main` — see `RELEASE.md`.
+  it. A release is a `v*` tag on `main`, and the tag is the deploy — see `RELEASE.md`.
+  Never push one except through `make release`.
 - **Every PR merges as a merge commit. Never squash, never rebase.** Squash and rebase
   replace the branch's commits with new ones: SHAs referenced in comments and changelogs
-  stop existing, the `Assisted-by:` trailers the fleet audit reads get flattened into one
-  body, and on `release` the tagged commit drops out of history so deploys ship with the
-  previous version's label. For the one-line-per-PR view, use
-  `git log --first-parent main`.
+  stop existing, and the `Assisted-by:` trailers the fleet audit reads get flattened into
+  one body. For the one-line-per-PR view, use `git log --first-parent main`.
 - No `Co-Authored-By` trailers. Fleet attribution rules apply (`Assisted-by:`).
 - `go mod tidy` before committing. `gofmt` is not optional.
 - Keep `README.md` in sync when a change touches endpoints, config, make targets, or
@@ -115,8 +114,9 @@ Docker Compose locally (API + Redis + Postgres). Production on Fly.io (iad, auto
 Neon Postgres and Upstash Redis. A Fly volume `maxmind_data` at `/data/maxmind` persists
 the GeoIP databases; `docker-entrypoint.sh` chowns it as root then drops to `appuser`.
 Version is baked in via `-ldflags "-X main.version=..."`. GitHub Actions: `test.yml`,
-`docker.yml` (GHCR on push to `main`/tags), `fly-deploy.yml` (deploys on push to
-`release`), `uptime.yml` (pings `/v1/hello` every 5 min, Pushover on failure). `.env`
+`docker.yml` (GHCR on push to `main`/tags), `fly-deploy.yml` (deploys on a `v*` tag;
+`workflow_dispatch` with a tag redeploys it — that is the rollback path), `uptime.yml`
+(pings `/v1/hello` every 5 min, Pushover on failure). `.env`
 (gitignored) holds keys for the scripts.
 
 ## Session start
