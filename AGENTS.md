@@ -80,6 +80,12 @@ open the file.
 
 - Feature branch → PR into `main`. No direct pushes to `main`. Open the PR, do not merge
   it. `release` is reached only by PR from `main` — see `RELEASE.md`.
+- **Every PR merges as a merge commit. Never squash, never rebase.** Squash and rebase
+  replace the branch's commits with new ones: SHAs referenced in comments and changelogs
+  stop existing, the `Assisted-by:` trailers the fleet audit reads get flattened into one
+  body, and on `release` the tagged commit drops out of history so deploys ship with the
+  previous version's label. For the one-line-per-PR view, use
+  `git log --first-parent main`.
 - No `Co-Authored-By` trailers. Fleet attribution rules apply (`Assisted-by:`).
 - `go mod tidy` before committing. `gofmt` is not optional.
 - Keep `README.md` in sync when a change touches endpoints, config, make targets, or

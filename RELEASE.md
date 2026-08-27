@@ -10,11 +10,12 @@ Tag `main`, then open a PR from `main` to `release`. **Merging that PR is what d
 `.github/workflows/fly-deploy.yml` runs the test workflow and then `flyctl deploy` on every
 push to `release`, baking the version in via `git describe --tags --abbrev=0`.
 
-That `git describe` is why the release PR must land as a **merge commit — never squash,
-never rebase.** Both rewrite the commits onto `release`, so the tagged commit is no longer
-in its history and `describe` walks back to the previous tag: the pipeline goes green and
-deploys the new code labelled with the old version. That is the failure behind "I don't
-see the new tag on the live page."
+Every PR in this repo lands as a **merge commit — never squash, never rebase** (see
+`AGENTS.md`). Here it is load-bearing, not just tidy: both alternatives rewrite the
+commits onto `release`, so the tagged commit is no longer in its history and
+`git describe` walks back to the previous tag. The pipeline goes green and deploys the new
+code labelled with the old version. That is the failure behind "I don't see the new tag on
+the live page."
 
 Nothing about a release touches production until that PR merges.
 

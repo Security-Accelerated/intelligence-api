@@ -97,7 +97,7 @@ client that does not use those transports is a bug.
 ## Error text
 
 `sanitizeErr()` strips internals before anything reaches a response. `safenet.BlockedError`
-gets a specific friendly message; others are truncated to the final `: ` segment. The
+gets a specific friendly message; others are truncated to the final colon-space segment. The
 full error chain is logged server-side for diagnosis — the error, never the request
 payload, response body, or any credential it may have carried.
 
