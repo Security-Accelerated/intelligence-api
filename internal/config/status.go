@@ -83,14 +83,11 @@ type LookupConfig struct {
 	CTLogsMaxEntries        int    `json:"ct_logs_max_entries"`
 	CTLogsHTTPTimeout       string `json:"ct_logs_http_timeout"`
 	RateLimitFree           int    `json:"rate_limit_free"`
-	RateLimitBasic          int    `json:"rate_limit_basic"`
 	RateLimitPro            int    `json:"rate_limit_pro"`
 	MaxDomainsFree          int    `json:"max_domains_free"`
-	MaxDomainsBasic         int    `json:"max_domains_basic"`
 	MaxDomainsPro           int    `json:"max_domains_pro"`
 	IPTimeout               string `json:"ip_timeout"`
 	MaxIPsFree              int    `json:"max_ips_free"`
-	MaxIPsBasic             int    `json:"max_ips_basic"`
 	MaxIPsPro               int    `json:"max_ips_pro"`
 }
 
@@ -201,14 +198,11 @@ func NewStatusSnapshot(version string, lookupNames []string) *StatusSnapshot {
 			CTLogsMaxEntries:        cfg.GetInt("ct_logs.max_entries"),
 			CTLogsHTTPTimeout:       cfg.GetDuration("ct_logs.http_timeout").String(),
 			RateLimitFree:           cfg.GetInt("rate_limit.free"),
-			RateLimitBasic:          cfg.GetInt("rate_limit.basic"),
 			RateLimitPro:            cfg.GetInt("rate_limit.pro"),
 			MaxDomainsFree:          cfg.GetInt("domain.max_domains.free"),
-			MaxDomainsBasic:         cfg.GetInt("domain.max_domains.basic"),
 			MaxDomainsPro:           cfg.GetInt("domain.max_domains.pro"),
 			IPTimeout:               cfg.GetDuration("ip.lookup_timeout").String(),
 			MaxIPsFree:              cfg.GetInt("ip.max_ips.free"),
-			MaxIPsBasic:             cfg.GetInt("ip.max_ips.basic"),
 			MaxIPsPro:               cfg.GetInt("ip.max_ips.pro"),
 		},
 	}

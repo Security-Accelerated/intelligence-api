@@ -137,7 +137,6 @@ check_header() {
 
 # Keys (override via .env or env vars for production)
 ADMIN="${SMOKE_ADMIN_KEY:-test-admin-key}"
-BASIC="${SMOKE_BASIC_KEY:-test-basic-key}"
 PRO="${SMOKE_PRO_KEY:-test-pro-key}"
 
 # Free-plan keys are pooled and rotated: the rate limiter is per key per minute
@@ -207,14 +206,12 @@ echo ""
 echo "=== App Info ==="
 get 200 "GET /info (admin)"             "/v1/info" "$ADMIN"
 get 403 "GET /info (pro — not admin)"   "/v1/info" "$PRO"
-get 403 "GET /info (basic — not admin)" "/v1/info" "$BASIC"
 get 401 "GET /info (no key)"            "/v1/info" ""
 
 echo ""
 echo "=== Domain Lookup — Auth ==="
 post 200 "lookup (admin)"      "/v1/domain/lookup" "$ADMIN" "$DOMAIN"
 post 200 "lookup (pro)"        "/v1/domain/lookup" "$PRO"   "$DOMAIN"
-post 200 "lookup (basic)"      "/v1/domain/lookup" "$BASIC" "$DOMAIN"
 free_key; post 200 "lookup (free)"       "/v1/domain/lookup" "$FK"  "$DOMAIN"
 free_key; post 400 "free plan max domains" "/v1/domain/lookup" "$FK" '{"domains":["a.com","b.com"],"lookups":["dns"]}'
 post 401 "lookup (no key)"     "/v1/domain/lookup" ""       "$DOMAIN"
@@ -224,34 +221,29 @@ echo ""
 echo "=== Domain Lookup — Pro Options ==="
 post 200 "screenshot (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot"]}'
 post 200 "screenshot (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["screenshot"]}'
-post 403 "screenshot (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["screenshot"]}'
 free_key; post 403 "screenshot (free — pro only)"  "/v1/domain/lookup" "$FK"  '{"domains":["example.com"],"lookups":["screenshot"]}'
 post 200 "reputation (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["reputation"]}'
 post 200 "reputation (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["reputation"]}'
-post 403 "reputation (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["reputation"]}'
 free_key; post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["reputation"]}'
 post 200 "screenshot+reputation (admin)" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot","reputation"]}'
 post 200 "threat_intel (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["threat_intel"]}'
 post 200 "threat_intel (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["threat_intel"]}'
-post 403 "threat_intel (basic — pro only)" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["threat_intel"]}'
 free_key; post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["threat_intel"]}'
 
 echo ""
 echo "=== Domain Lookup — All-Plan Options ==="
 post 200 "email_security (admin)"  "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["email_security"]}'
 post 200 "email_security (pro)"    "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["email_security"]}'
-post 200 "email_security (basic)"  "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["email_security"]}'
 free_key; post 200 "email_security (free)"   "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["email_security"]}'
 post 200 "subdomains (admin)"      "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["subdomains"]}'
-post 200 "subdomains (basic)"      "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["subdomains"]}'
+post 200 "subdomains (pro)"        "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["subdomains"]}'
 post 200 "ct_logs (admin)"         "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["ct_logs"]}'
-post 200 "ct_logs (basic)"         "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["ct_logs"]}'
+post 200 "ct_logs (pro)"           "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["ct_logs"]}'
 post 200 "bgp (admin)"             "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["bgp"]}'
-post 200 "bgp (basic)"             "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["bgp"]}'
+post 200 "bgp (pro)"               "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["bgp"]}'
 post 200 "fingerprint (admin)"     "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["fingerprint"]}'
-post 200 "fingerprint (basic)"     "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["fingerprint"]}'
+post 200 "fingerprint (pro)"       "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["fingerprint"]}'
 post 200 "dns_security (admin)"    "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["dns_security"]}'
-post 200 "dns_security (basic)"    "/v1/domain/lookup" "$BASIC" '{"domains":["example.com"],"lookups":["dns_security"]}'
 free_key; post 200 "dns_security (free)"     "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["dns_security"]}'
 post 200 "risk (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
 free_key; post 200 "risk (free)"             "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["ssl","headers","risk"]}'
@@ -271,28 +263,28 @@ post 200 "lookup names normalized" "/v1/domain/lookup" "$ADMIN" '{"domains":["ex
 echo ""
 echo "=== Admin ==="
 post 200 "cache invalidate (admin)"             "/v1/admin/auth/cache/invalidate" "$ADMIN" ""
-post 403 "cache invalidate (basic — not admin)" "/v1/admin/auth/cache/invalidate" "$BASIC" ""
+post 403 "cache invalidate (pro — not admin)"   "/v1/admin/auth/cache/invalidate" "$PRO"   ""
 post 401 "cache invalidate (no key)"            "/v1/admin/auth/cache/invalidate" ""       ""
 
 echo ""
 echo "=== Admin — Fingerprint Rules ==="
 get  200 "GET fingerprints (admin)"             "/v1/admin/fingerprints" "$ADMIN"
-get  403 "GET fingerprints (basic — not admin)" "/v1/admin/fingerprints" "$BASIC"
+get  403 "GET fingerprints (pro — not admin)"   "/v1/admin/fingerprints" "$PRO"
 get  401 "GET fingerprints (no key)"            "/v1/admin/fingerprints" ""
-post 403 "POST fingerprints (basic — not admin)" "/v1/admin/fingerprints" "$BASIC" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
+post 403 "POST fingerprints (pro — not admin)"   "/v1/admin/fingerprints" "$PRO" '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 post 401 "POST fingerprints (no key)"           "/v1/admin/fingerprints" ""       '[{"name":"TestTech","category":"web-server","headers":{"Server":"test"}}]'
 
 echo ""
 echo "=== Admin — Usage ==="
 get  200 "GET usage (admin)"             "/v1/admin/usage" "$ADMIN"
 get  200 "GET usage ?days=7 (admin)"     "/v1/admin/usage?days=7" "$ADMIN"
-get  403 "GET usage (basic — not admin)" "/v1/admin/usage" "$BASIC"
+get  403 "GET usage (pro — not admin)"   "/v1/admin/usage" "$PRO"
 get  401 "GET usage (no key)"            "/v1/admin/usage" ""
 
 echo ""
 echo "=== My Usage ==="
 get  200 "GET /v1/usage (pro)"        "/v1/usage" "$PRO"
-get  200 "GET /v1/usage ?days=7 (basic)" "/v1/usage?days=7" "$BASIC"
+get  200 "GET /v1/usage ?days=7 (pro)" "/v1/usage?days=7" "$PRO"
 get  401 "GET /v1/usage (no key)"     "/v1/usage" ""
 
 echo ""
@@ -358,13 +350,12 @@ check_json "risk scores over the other requested lookups" \
 
 echo ""
 echo "=== Multi-Domain Batch ==="
-post 200 "basic 3 domains" "/v1/domain/lookup" "$BASIC" '{"domains":["example.com","example.org","example.net"],"lookups":["dns"]}'
-check_json "basic batch returns 3 results" \
+post 200 "pro 3 domains" "/v1/domain/lookup" "$PRO" '{"domains":["example.com","example.org","example.net"],"lookups":["dns"]}'
+check_json "pro batch returns 3 results" \
     '.results | length == 3' \
     -X POST "$HOST/v1/domain/lookup" \
-    -H "Content-Type: application/json" -H "X-API-Key: $BASIC" \
+    -H "Content-Type: application/json" -H "X-API-Key: $PRO" \
     -d '{"domains":["example.com","example.org","example.net"],"lookups":["dns"]}'
-post 200 "pro 3 domains" "/v1/domain/lookup" "$PRO" '{"domains":["example.com","example.org","example.net"],"lookups":["dns"]}'
 
 echo ""
 echo "=== All Features Combined ==="
@@ -431,8 +422,8 @@ check_header "X-Request-ID on authenticated request"   "X-Request-ID" "" \
 
 echo ""
 echo "=== Rate Limit Headers ==="
-check_header "X-RateLimit-Limit on basic request"     "X-RateLimit-Limit"     "" "$HOST/v1/domain/lookup" -X POST -H "Content-Type: application/json" -H "X-API-Key: $BASIC" -d "$DOMAIN"
-check_header "X-RateLimit-Remaining on basic request" "X-RateLimit-Remaining" "" "$HOST/v1/domain/lookup" -X POST -H "Content-Type: application/json" -H "X-API-Key: $BASIC" -d "$DOMAIN"
+check_header "X-RateLimit-Limit on pro request"     "X-RateLimit-Limit"     "" "$HOST/v1/domain/lookup" -X POST -H "Content-Type: application/json" -H "X-API-Key: $PRO" -d "$DOMAIN"
+check_header "X-RateLimit-Remaining on pro request" "X-RateLimit-Remaining" "" "$HOST/v1/domain/lookup" -X POST -H "Content-Type: application/json" -H "X-API-Key: $PRO" -d "$DOMAIN"
 
 echo ""
 echo "=== Rate Limit Enforcement ==="
@@ -528,7 +519,6 @@ fi
 
 IP='{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
 post 200 "admin key" /v1/ip/lookup "$ADMIN" "$IP"
-post 200 "basic key" /v1/ip/lookup "$BASIC" "$IP"
 post 200 "pro key" /v1/ip/lookup "$PRO" "$IP"
 free_key; post 200 "free key" /v1/ip/lookup "$FK" "$IP"
 post 401 "no key" /v1/ip/lookup "" "$IP"
@@ -537,7 +527,6 @@ post 401 "bad key" /v1/ip/lookup "invalid-key" "$IP"
 echo "=== IP Lookup — Pro Options ==="
 post 200 "threat_intel (admin)" /v1/ip/lookup "$ADMIN" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
 post 200 "threat_intel (pro)" /v1/ip/lookup "$PRO" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
-post 403 "threat_intel (basic)" /v1/ip/lookup "$BASIC" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
 free_key; post 403 "threat_intel (free)" /v1/ip/lookup "$FK" '{"ips":["8.8.8.8"],"lookups":["threat_intel"]}'
 
 echo "=== IP Lookup — Validation ==="
@@ -585,7 +574,7 @@ check_json "IP response has abuse_contact" '.results[0].abuse_contact != null' \
 
 echo "=== GeoIP Admin ==="
 # Note: admin success test omitted — refresh downloads from MaxMind (requires real license key)
-post 403 "refresh (basic, forbidden)" /v1/admin/geoip/refresh "$BASIC" '{}'
+post 403 "refresh (pro, forbidden)" /v1/admin/geoip/refresh "$PRO" '{}'
 post 401 "refresh (no key)" /v1/admin/geoip/refresh "" '{}'
 
 # Summary

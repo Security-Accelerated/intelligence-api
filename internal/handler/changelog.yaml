@@ -8,6 +8,20 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.73.0
+  date: 2026-08-27
+  changes:
+    - text: "Plans are now Free and Pro. The Basic tier is gone; its rate limit, batch size, Stripe price, and payment link have been removed, and the plan tables in the docs, OpenAPI spec, and sales material now show two columns"
+      audience: public
+    - text: "Migration 017 moves any remaining basic customer to pro rather than free, so the merge cannot take capability away from an existing key"
+      audience: internal
+    - text: "The customers.plan column defaulted to 'basic' — set by migration 002 and carried through the tier→plan rename in 006. Migration 017 resets it to 'free'. Left alone, any INSERT omitting plan would have kept minting rows on a plan nothing recognizes"
+      audience: internal
+    - text: "RateLimitConfig.Basic was the fallback limit for an unrecognized plan, so an unknown value silently got 30 req/min. The fallback is now Free, matching how lookup gating already treated unknown plans — a bad plan value fails closed"
+      audience: internal
+    - text: "Smoke suite drops SMOKE_BASIC_KEY; assertions that duplicated a free or pro twin were removed and the rest moved to the pro key. The seed no longer creates a basic customer"
+      audience: internal
+
 - version: v0.72.1
   date: 2026-08-27
   changes:

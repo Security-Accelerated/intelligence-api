@@ -15,9 +15,8 @@ import (
 
 // RateLimitConfig holds per-plan request limits (requests per minute).
 type RateLimitConfig struct {
-	Free  int
-	Basic int
-	Pro   int
+	Free int
+	Pro  int
 }
 
 // RateLimit returns middleware that enforces per-API-key, plan-aware rate
@@ -51,12 +50,12 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 			return
 		}
 
-		limit := cfg.Basic
-		switch planStr {
-		case "pro":
+		// Free is both its own plan and the fallback: an unrecognized plan
+		// gets the least privileged limit, matching how lookup gating
+		// treats a plan it does not know.
+		limit := cfg.Free
+		if planStr == "pro" {
 			limit = cfg.Pro
-		case "free":
-			limit = cfg.Free
 		}
 
 		now := time.Now()

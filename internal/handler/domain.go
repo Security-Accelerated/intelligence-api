@@ -18,16 +18,14 @@ import (
 // owns the customer record these are stored on.
 const (
 	planFree  = auth.PlanFree
-	planBasic = auth.PlanBasic
 	planPro   = auth.PlanPro
 	planAdmin = auth.PlanAdmin
 )
 
 var planRank = map[string]int{
 	planFree:  0,
-	planBasic: 1,
-	planPro:   2,
-	planAdmin: 3,
+	planPro:   1,
+	planAdmin: 2,
 }
 
 // lookupMinPlan is the single source of truth for which lookup names are valid

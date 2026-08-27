@@ -323,7 +323,6 @@ func TestDocs_RendersVersion(t *testing.T) {
 
 func TestDocs_RendersPaymentLinks(t *testing.T) {
 	cfg := viper.New()
-	cfg.Set("stripe.payment_link.basic", "https://buy.stripe.com/test_basic")
 	cfg.Set("stripe.payment_link.pro", "https://buy.stripe.com/test_pro")
 	cfg.Set("stripe.portal_link", "https://billing.stripe.com/test_portal")
 
@@ -336,9 +335,6 @@ func TestDocs_RendersPaymentLinks(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "https://buy.stripe.com/test_basic") {
-		t.Error("expected basic payment link in docs")
-	}
 	if !strings.Contains(body, "https://buy.stripe.com/test_pro") {
 		t.Error("expected pro payment link in docs")
 	}

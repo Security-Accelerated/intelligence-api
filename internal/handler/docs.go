@@ -89,11 +89,10 @@ var docsPages = []docsPage{
 }
 
 type docsData struct {
-	BasicPaymentLink string
-	ProPaymentLink   string
-	PortalLink       string
-	Version          string
-	Changelog        []docsChangelogVersion
+	ProPaymentLink string
+	PortalLink     string
+	Version        string
+	Changelog      []docsChangelogVersion
 }
 
 type docsChangelogVersion struct {
@@ -109,7 +108,6 @@ func (h *Handler) buildDocsData() docsData {
 	}
 	data := docsData{Version: version}
 	if h.cfg != nil {
-		data.BasicPaymentLink = h.cfg.GetString("stripe.payment_link.basic")
 		data.ProPaymentLink = h.cfg.GetString("stripe.payment_link.pro")
 		data.PortalLink = h.cfg.GetString("stripe.portal_link")
 	}

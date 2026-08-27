@@ -27,7 +27,7 @@ type StripeService struct {
 // NewStripeService creates a billing service backed by Stripe.
 // secretKey is used to authenticate API calls to Stripe.
 // webhookSecret is used to verify webhook signatures.
-// priceMap maps Stripe Price IDs to plan names (e.g., "price_xxx" -> "basic").
+// priceMap maps Stripe Price IDs to plan names (e.g., "price_xxx" -> "pro").
 func NewStripeService(secretKey, webhookSecret string, priceMap map[string]string, repo BillingRepository, authCache AuthCacheInvalidator, notifier notifications.Notifier) *StripeService {
 	stripe.Key = secretKey
 	return &StripeService{

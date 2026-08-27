@@ -92,7 +92,7 @@ client that does not use those transports is a bug.
   in the background when missing, unreadable, or older than `maxmind.max_age` (168h) — the
   ~80MB download must never block the listener. `planGeoIP` isolates the load/download
   decision so it is testable without network. Config: `MAXMIND_LICENSE_KEY`,
-  `MAXMIND_DB_PATH`, `IP_LOOKUP_TIMEOUT`, `IP_MAX_IPS_FREE` / `_BASIC` / `_PRO`.
+  `MAXMIND_DB_PATH`, `IP_LOOKUP_TIMEOUT`, `IP_MAX_IPS_FREE` / `_PRO`.
 
 ## Error text
 
