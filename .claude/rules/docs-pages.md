@@ -59,6 +59,12 @@ Docs pages render only entries with `audience: public` in "What's New". The admi
 `GET /v1/admin/changelog` returns everything. The release flow in `RELEASE.md` says when
 entries are written and which audience to use.
 
+Entry text is written with one backtick per identifier, like the rest of the docs.
+`renderChangelogText` converts those spans to `<code>` and hands the template
+`template.HTML`, so **it escapes every segment itself** — that escaping is the only
+escaping left, not a duplicate of the template's. The admin endpoint is untouched and
+still returns the raw text.
+
 ## CSP
 
 HTML pages override the API's `default-src 'none'` CSP with `htmlPageCSP`. No inline JS —

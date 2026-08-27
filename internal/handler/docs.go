@@ -98,7 +98,43 @@ type docsData struct {
 type docsChangelogVersion struct {
 	Version string
 	Date    string
-	Changes []string
+	Changes []template.HTML
+}
+
+// renderChangelogText turns the one-backtick-per-identifier style the changelog
+// entries are written in into inline <code>, which is what the rest of the docs
+// uses and what docs_styles.css already handles. Rendering the text verbatim put
+// the backticks on the page, so the spans are converted here rather than taken
+// out of the entries — GET /v1/admin/changelog still returns the source text.
+//
+// The result is template.HTML, which switches off the escaping the template was
+// doing, so every segment is escaped by hand here instead. Both HTMLEscapeString
+// calls are load-bearing: dropping either one turns a changelog entry into an
+// injection point. The entries are repo-controlled and reviewed, so this is
+// defense in depth rather than a live hole, but it is not redundant.
+func renderChangelogText(s string) template.HTML {
+	parts := strings.Split(s, "`")
+	var b strings.Builder
+	if len(parts)%2 == 0 {
+		// An even number of segments means an unpaired backtick. Escaping the
+		// whole string leaves it visible, which beats swallowing the rest of the
+		// sentence into a code span.
+		b.WriteString(template.HTMLEscapeString(s))
+	} else {
+		for i, p := range parts {
+			if i%2 == 1 {
+				b.WriteString("<code>")
+				b.WriteString(template.HTMLEscapeString(p))
+				b.WriteString("</code>")
+				continue
+			}
+			b.WriteString(template.HTMLEscapeString(p))
+		}
+	}
+	// The only markup in the builder is the <code> tags written above; every
+	// segment of the entry itself went through HTMLEscapeString first.
+	//nolint:gosec // G203: escaping is done by hand here, see the comment above.
+	return template.HTML(b.String())
 }
 
 func (h *Handler) buildDocsData() docsData {
@@ -113,10 +149,10 @@ func (h *Handler) buildDocsData() docsData {
 	}
 
 	for _, v := range h.changelog {
-		var publicChanges []string
+		var publicChanges []template.HTML
 		for _, ch := range v.Changes {
 			if ch.Audience == "public" {
-				publicChanges = append(publicChanges, ch.Text)
+				publicChanges = append(publicChanges, renderChangelogText(ch.Text))
 			}
 		}
 		if len(publicChanges) > 0 {
