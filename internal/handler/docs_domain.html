@@ -399,8 +399,7 @@ resp = requests.post(
       <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
       <span class="str">"inputs"</span>: [<span class="str">"HTTPS://Example.COM/"</span>, <span class="str">"example.com"</span>],
       <span class="str">"dns"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">true</span>, <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>] },
-      <span class="str">"ssl"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, ... },
-      <span class="str">"errors"</span>: []
+      <span class="str">"ssl"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, ... }
     }
   ]
 }</code></pre>
@@ -412,7 +411,7 @@ resp = requests.post(
     <li><code>inputs</code> &mdash; the original request entries, verbatim, that mapped to this domain. Use it to reconcile results against your request without reimplementing normalization.</li>
   </ul>
   <p><strong>Array position is not part of the API contract.</strong> Do not assume <code>results[i]</code> corresponds to <code>domains[i]</code> &mdash; duplicates collapse and ordering is not guaranteed.</p>
-  <p>Each result contains exactly the lookups you requested, plus <code>domain</code>, <code>inputs</code>, and <code>errors</code>. Nothing else is included.</p>
+  <p>Each result contains exactly the lookups you requested, plus <code>domain</code> and <code>inputs</code>, and <code>errors</code> when a lookup failed. Nothing else is included.</p>
 
   <h4>Per-Lookup <code>cache_hit</code></h4>
   <p>Every lookup object carries its own <code>cache_hit</code> flag: <code>true</code> when that lookup was served from cache, <code>false</code> when it was fetched live. There is no top-level <code>cache_hit</code> &mdash; different fields in the same result routinely differ, because each lookup is cached separately with its own TTL. See <a href="#caching">Caching</a>.</p>
@@ -1140,7 +1139,7 @@ resp = requests.post(
     {
       <span class="str">"domain"</span>: <span class="str">"example.com"</span>,
       <span class="str">"inputs"</span>: [<span class="str">"example.com"</span>],
-      <span class="str">"dns"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, <span class="str">"a_records"</span>: [<span class="str">"93.184.216.34"</span>], ... },
+      <span class="str">"dns"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, <span class="str">"a"</span>: [<span class="str">"93.184.216.34"</span>], ... },
       <span class="str">"ssl"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">true</span>, <span class="str">"issuer"</span>: <span class="str">"DigiCert Inc"</span>, ... },
       <span class="str">"errors"</span>: [
         { <span class="str">"lookup"</span>: <span class="str">"whois"</span>, <span class="str">"message"</span>: <span class="str">"i/o timeout"</span> }
@@ -1342,8 +1341,7 @@ resp = requests.post(
           { <span class="str">"provider"</span>: <span class="str">"urlhaus"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> },
           { <span class="str">"provider"</span>: <span class="str">"alienvault_otx"</span>, <span class="str">"detected"</span>: <span class="kw">false</span> }
         ]
-      },
-      <span class="str">"errors"</span>: []
+      }
     }
   ]
 }</code></pre>
