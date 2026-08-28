@@ -101,7 +101,7 @@ func testConfig() *viper.Viper {
 	cfg.Set("environment.os", "linux")
 	cfg.Set("environment.kernel", "6.0.0")
 	cfg.Set("environment.architecture", "amd64")
-	cfg.Set("environment.golang.version", "go1.26")
+	cfg.Set("environment.golang.version", "go1.27")
 	cfg.Set("redis.addr", "localhost:6379")
 	cfg.Set("redis.db", 0)
 	cfg.Set("cache.default_ttl", "60m")
