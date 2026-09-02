@@ -37,6 +37,24 @@ func Run(logger *zap.Logger, version string) error {
 		Pro:  cfg.GetInt("rate_limit.pro"),
 	}
 
+	// Everything NewRouter needs that comes from config rather than from a
+	// collaborator. Validated here, before anything is dialed, so a bad edge
+	// configuration fails in milliseconds instead of after a full boot.
+	routerDeps := httpapi.RouterDeps{
+		RateLimit: rlCfg,
+		Origin: middleware.OriginConfig{
+			Header:  cfg.GetString("edge.origin_secret_header"),
+			Secret:  cfg.GetString("edge.origin_secret"),
+			Require: cfg.GetBool("edge.require_origin_secret"),
+		},
+		Mode:           cfg.GetString("application.mode"),
+		BodyLimit:      int64(cfg.GetInt("server.body_limit")),
+		ClientIPHeader: cfg.GetString("edge.client_ip_header"),
+	}
+	if err := routerDeps.Validate(); err != nil {
+		return fmt.Errorf("router config: %w", err)
+	}
+
 	logger.Info("initializing application",
 		zap.Any("system", status.System),
 		zap.Any("lookups", status.Lookups),
@@ -290,7 +308,15 @@ func Run(logger *zap.Logger, version string) error {
 		DB:                 db,
 		Status:             status,
 	})
-	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
+	routerDeps.Handler = h
+	routerDeps.Auth = cachedRepo
+	routerDeps.Redis = redisCache.Client()
+	routerDeps.Usage = usageLogger
+
+	router, err := httpapi.NewRouter(routerDeps)
+	if err != nil {
+		return err
+	}
 	serverCfg := httpapi.ServerConfig{
 		Port:            status.System.Port,
 		ReadTimeout:     cfg.GetDuration("server.read_timeout"),

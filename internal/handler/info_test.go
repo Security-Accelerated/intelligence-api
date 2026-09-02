@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,6 +197,54 @@ func TestInfo_VersionField(t *testing.T) {
 	}
 	if sys["version"] != "2.5.3" {
 		t.Errorf("system.version = %v, want %q", sys["version"], "2.5.3")
+	}
+}
+
+// The system block is an embed of config.SystemStatus, not a hand-written copy
+// of its fields. This asserts every JSON key SystemStatus declares survives the
+// round trip: the copy this replaced dropped anything added to the snapshot,
+// silently, and the edge posture below is what the CDN cutover is verified with.
+func TestInfo_SystemCarriesEveryStatusField(t *testing.T) {
+	status := testStatus("1.0.0")
+	status.System.RequireOriginSecret = true
+	status.System.ClientIPHeader = "CF-Connecting-IP"
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := New(Deps{Status: status})
+	r.GET("/v1/info", h.Info)
+
+	w := doInfoRequest(r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	sys, ok := parseInfoResponse(t, w)["system"].(map[string]any)
+	if !ok {
+		t.Fatal("missing or malformed 'system' section")
+	}
+
+	for _, f := range reflect.VisibleFields(reflect.TypeFor[config.SystemStatus]()) {
+		key, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if key == "" || key == "-" {
+			continue
+		}
+		if _, present := sys[key]; !present {
+			t.Errorf("system.%s is missing from /v1/info", key)
+		}
+	}
+
+	if sys["require_origin_secret"] != true {
+		t.Errorf("system.require_origin_secret = %v, want true", sys["require_origin_secret"])
+	}
+	if sys["client_ip_header"] != "CF-Connecting-IP" {
+		t.Errorf("system.client_ip_header = %v, want %q", sys["client_ip_header"], "CF-Connecting-IP")
+	}
+	if _, leaked := sys["origin_secret"]; leaked {
+		t.Error("/v1/info must never report the origin secret")
+	}
+	if sys["uptime"] == nil {
+		t.Error("system.uptime is missing")
 	}
 }
 

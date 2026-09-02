@@ -868,7 +868,7 @@ Config values:
 | `application.mode` | `""` | `local` or `production` |
 | `application.port` | `8080` | HTTP server port |
 | `server.read_timeout` | `10s` | HTTP server read timeout |
-| `server.write_timeout` | `45s` | HTTP server write timeout |
+| `server.write_timeout` | `45s` | HTTP server write timeout. Keep it under Cloudflare's 100s origin ceiling (error 524) |
 | `server.idle_timeout` | `60s` | HTTP server idle connection timeout |
 | `server.shutdown_timeout` | `15s` | Graceful shutdown deadline |
 | `server.body_limit` | `1048576` | Maximum request body size in bytes (1 MB) |
@@ -902,13 +902,17 @@ Config values:
 | `ip.lookup_timeout` | `30s` | Overall timeout for all concurrent IP lookups |
 | `ip.max_ips.free` | `1` | Maximum IPs per request for free plan |
 | `ip.max_ips.pro` | `20` | Maximum IPs per request for pro plan |
-| `domain.lookup_timeout` | `30s` | Overall timeout for all concurrent lookups per domain |
+| `domain.lookup_timeout` | `30s` | Overall timeout for all concurrent lookups per domain. Cloudflare gives up on an origin response after 100s (error 524), so this and `server.write_timeout` share a hard ceiling below that once the API is proxied |
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
 | `subdomain.max_domains.free` | `1` | Maximum domains per request when `subdomains: true` (free plan) |
 | `subdomain.max_domains.pro` | `5` | Maximum domains per request when `subdomains: true` (pro plan) |
 | `rate_limit.free` | `5` | Requests per minute for free plan customers |
 | `rate_limit.pro` | `120` | Requests per minute for pro plan customers |
+| `edge.origin_secret` | `""` | Shared secret the CDN adds to every request it proxies. Empty disables nothing on its own — `edge.require_origin_secret` is the switch |
+| `edge.origin_secret_header` | `X-Origin-Secret` | Header carrying that secret; must match the CDN transform rule |
+| `edge.require_origin_secret` | `false` | Reject any request arriving without the secret (403). **Turning this on before the CDN is in front rejects all live traffic** |
+| `edge.client_ip_header` | `Fly-Client-IP` | Header `c.ClientIP()` trusts in production. `CF-Connecting-IP` once proxied through Cloudflare — only valid with `edge.require_origin_secret` on, or startup fails |
 | `postgres.host` | `localhost` | PostgreSQL host |
 | `postgres.port` | `5432` | PostgreSQL port |
 | `postgres.user` | `intelligence` | PostgreSQL user |
@@ -1112,6 +1116,9 @@ git push origin main:release      # trigger Fly deploy
 | `IP_LOOKUP_TIMEOUT` | Timeout for IP intelligence lookups (default: 30s) |
 | `IP_MAX_IPS_FREE` | Max IPs per request for free plan (default: 1) |
 | `IP_MAX_IPS_PRO` | Max IPs per request for pro plan (default: 20) |
+| `EDGE_ORIGIN_SECRET` | Shared secret the CDN injects; set before enforcement is turned on |
+| `EDGE_REQUIRE_ORIGIN_SECRET` | Reject requests without it (default: false). Flip at CDN cutover |
+| `EDGE_CLIENT_IP_HEADER` | Client-IP header trusted in production (default: `Fly-Client-IP`). Set to `CF-Connecting-IP` in the same change as `EDGE_REQUIRE_ORIGIN_SECRET` |
 
 ### Admin CLI (`sactl`)
 

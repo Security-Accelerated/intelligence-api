@@ -203,6 +203,14 @@ func setupRouter(t *testing.T) (*gin.Engine, *miniredis.Miniredis) {
 }
 
 func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *recordingRecorder) {
+	return setupRouterWithOrigin(t, middleware.OriginConfig{})
+}
+
+// setupRouterWithOrigin builds the same chain as the running server, with the
+// origin-secret check configurable. This helper mirrors internal/httpapi's
+// NewRouter by hand rather than calling it, so a middleware added there needs
+// adding here too or none of these tests exercise it.
+func setupRouterWithOrigin(t *testing.T, origin middleware.OriginConfig) (*gin.Engine, *miniredis.Miniredis, *recordingRecorder) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -357,6 +365,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	r.Use(middleware.BodyLimit(1 << 20))
 	r.Use(middleware.ClientRequestID())
 	r.Use(middleware.RequestLoggerWithLogger(nop))
+	r.Use(middleware.OriginSecretWithLogger(origin, nop))
 
 	authMW := middleware.APIKeyAuthWithLogger(cachedRepo, nop)
 	rateLimitMW := middleware.RateLimitWithLogger(rc.Client(), rlCfg, nop)
@@ -1870,6 +1879,44 @@ func TestIntegration_MyUsage_NoKeyUnauthorized(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+// --- Origin secret ---
+
+// The check is global: an unauthenticated ops endpoint is rejected the same as
+// anything else, because the CDN adds the header to everything it proxies and
+// nothing is expected to reach the origin without it.
+func TestIntegration_OriginSecret_GatesUnauthenticatedRoutes(t *testing.T) {
+	r, _, _ := setupRouterWithOrigin(t, middleware.OriginConfig{
+		Header:  "X-Origin-Secret",
+		Secret:  "s3cret",
+		Require: true,
+	})
+
+	tests := []struct {
+		name   string
+		header string
+		want   int
+	}{
+		{"no header", "", http.StatusForbidden},
+		{"wrong secret", "nope", http.StatusForbidden},
+		{"correct secret", "s3cret", http.StatusOK},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/v1/health", nil)
+			if tt.header != "" {
+				req.Header.Set("X-Origin-Secret", tt.header)
+			}
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tt.want, w.Body.String())
+			}
+		})
 	}
 }
 

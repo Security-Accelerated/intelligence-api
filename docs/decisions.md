@@ -373,3 +373,29 @@ start. Degrading on it would page someone for normal startup, every time.
 **Instead of.** Treating every dependency uniformly, which reads as more rigorous and
 produces an alert that fires on every deploy until people mute it. A missing GeoIP database
 is also classified in `isExpectedError` for the same reason.
+
+### 2026-09-01 — Both edge settings ship off, and the wrong pair refuses to start
+
+**Decision.** `edge.require_origin_secret` and `edge.client_ip_header` default to off and
+`Fly-Client-IP`. They are in the binary but inert, flipped by an env change at CDN cutover.
+`RouterDeps.Validate()` makes two combinations a **startup error**: enforcement without a
+secret, and a non-`Fly-Client-IP` client-IP header without enforcement.
+
+**Why.** The ordering is the whole difficulty. Enforcement before the CDN is in front
+rejects every live request; the client-IP switch before enforcement is worse — the origin
+still answers on its `.fly.dev` hostname, so anyone reaching it directly picks the IP that
+lands in our logs and alerts. The safe transition needs both flags to move together, at a
+moment when DNS is already changing and a deploy is the last thing anyone wants. Shipping
+them defaulted-off makes the cutover a config change; making the unsafe pair fatal makes
+"together" enforceable rather than a checklist item someone half-completes.
+
+A startup error rather than a warning because the failure is silent otherwise: forged IPs
+look exactly like real ones in a log. This is the same call as an unknown provider name in
+`app.go` — a misconfiguration that would degrade quietly is better as a service that does
+not start.
+
+**Instead of.** One flag doing both, which cannot express "secret staged, not yet
+enforced" — the state where you confirm the header is actually arriving before betting
+production traffic on it. And instead of a path allowlist for the uptime pinger and the
+Stripe webhook: the CDN transform rule adds the header to everything it proxies, so an
+exemption would be a permanent hole to spare two callers that do not need sparing.
