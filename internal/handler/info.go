@@ -8,28 +8,15 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/security-accelerated/intelligence-api/internal/config"
 )
 
 // systemWithUptime embeds SystemStatus and adds the computed uptime field.
+// It embeds rather than restating the fields so a new SystemStatus field
+// reaches /v1/info on its own — the copy this replaced dropped one silently.
 type systemWithUptime struct {
-	Name            string    `json:"name"`
-	Version         string    `json:"version"`
-	Mode            string    `json:"mode"`
-	SessionID       string    `json:"session_id"`
-	StartTime       time.Time `json:"start_time"`
-	Uptime          string    `json:"uptime"`
-	Host            string    `json:"host"`
-	OS              string    `json:"os"`
-	Kernel          string    `json:"kernel"`
-	Architecture    string    `json:"architecture"`
-	GoVersion       string    `json:"golang_version"`
-	GinMode         string    `json:"gin_mode"`
-	Port            int       `json:"port"`
-	ReadTimeout     string    `json:"read_timeout"`
-	WriteTimeout    string    `json:"write_timeout"`
-	IdleTimeout     string    `json:"idle_timeout"`
-	ShutdownTimeout string    `json:"shutdown_timeout"`
-	BodyLimit       int       `json:"body_limit"`
+	config.SystemStatus
+	Uptime string `json:"uptime"`
 }
 
 type runtimeStats struct {
@@ -73,24 +60,8 @@ func (h *Handler) Info(c *gin.Context) {
 
 	// System — static snapshot + computed uptime
 	sys := systemWithUptime{
-		Name:            s.System.Name,
-		Version:         s.System.Version,
-		Mode:            s.System.Mode,
-		SessionID:       s.System.SessionID,
-		StartTime:       s.System.StartTime,
-		Uptime:          time.Since(s.System.StartTime).Truncate(time.Second).String(),
-		Host:            s.System.Host,
-		OS:              s.System.OS,
-		Kernel:          s.System.Kernel,
-		Architecture:    s.System.Architecture,
-		GoVersion:       s.System.GoVersion,
-		GinMode:         s.System.GinMode,
-		Port:            s.System.Port,
-		ReadTimeout:     s.System.ReadTimeout,
-		WriteTimeout:    s.System.WriteTimeout,
-		IdleTimeout:     s.System.IdleTimeout,
-		ShutdownTimeout: s.System.ShutdownTimeout,
-		BodyLimit:       s.System.BodyLimit,
+		SystemStatus: s.System,
+		Uptime:       time.Since(s.System.StartTime).Truncate(time.Second).String(),
 	}
 
 	resp := gin.H{

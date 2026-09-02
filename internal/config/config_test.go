@@ -47,6 +47,11 @@ func TestConfig_Defaults(t *testing.T) {
 		{"maxmind.asn_db", "GeoLite2-ASN.mmdb"},
 		{"postgres.sslmode", "require"},
 		{"screenshot.provider", "chromium"},
+		// Both edge behaviors ship off; flipping them is the cutover step.
+		{"edge.origin_secret", ""},
+		{"edge.origin_secret_header", "X-Origin-Secret"},
+		{"edge.require_origin_secret", false},
+		{"edge.client_ip_header", "Fly-Client-IP"},
 	}
 
 	for _, tt := range tests {

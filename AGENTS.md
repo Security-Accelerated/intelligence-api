@@ -116,7 +116,7 @@ the GeoIP databases; `docker-entrypoint.sh` chowns it as root then drops to `app
 Version is baked in via `-ldflags "-X main.version=..."`. GitHub Actions: `test.yml`,
 `docker.yml` (GHCR on push to `main`/tags), `fly-deploy.yml` (deploys on a `v*` tag;
 `workflow_dispatch` with a tag redeploys it — that is the rollback path), `uptime.yml`
-(pings `/v1/hello` every 5 min, Pushover on failure). `.env`
+(pings `/v1/health` every 5 min, Pushover on failure). `.env`
 (gitignored) holds keys for the scripts.
 
 ## Session start

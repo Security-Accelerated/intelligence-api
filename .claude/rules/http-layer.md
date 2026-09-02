@@ -21,15 +21,35 @@ paths:
 3. `BodyLimit(1MB)`
 4. `ClientRequestID()` — validates/echoes `X-Client-Request-ID`, sets a context key
 5. `RequestLogger()` — structured logging; runs after `c.Next()` returns
-6. *(protected)* `APIKeyAuth()` — sets `customer_id`, `api_key_id`, `api_key_plan`
-7. *(protected)* `RateLimit()` — per-key sliding window in Redis, **fail-open**, admin
+6. `OriginSecret()` — shared-secret header the CDN injects, 403 without it. **Off by
+   default** and a pass-through when off. Here so a rejection is still logged with its
+   request ID, and so it lands before the Neon round trip in auth.
+7. *(protected)* `APIKeyAuth()` — sets `customer_id`, `api_key_id`, `api_key_plan`
+8. *(protected)* `RateLimit()` — per-key sliding window in Redis, **fail-open**, admin
    bypass
-8. *(protected + admin)* `UsageLog()` — records to `usage.Recorder` after the response
-9. *(admin)* `RequireAdmin()` — `plan == "admin"`
+9. *(protected + admin)* `UsageLog()` — records to `usage.Recorder` after the response
+10. *(admin)* `RequireAdmin()` — `plan == "admin"`
 
 Adding middleware means choosing a position in this list, and the position is part of the
 change. Auth must precede rate limiting (the limit is per key); usage logging must follow
 auth (it needs the key) and must be after `c.Next()` so it sees the outcome.
+
+## Router construction — `internal/httpapi`
+
+`NewRouter` takes a single `RouterDeps` struct and **returns an error**, because
+`RouterDeps.Validate()` rejects edge configurations that would be unsafe or would 403 every
+request. Two settings are interlocked: `edge.client_ip_header` may only move off
+`Fly-Client-IP` while `edge.require_origin_secret` is on, since trusting an edge-set header
+on an origin anyone can reach directly lets a caller forge the IP in our logs. That is a
+startup error, not a warning — the same call as an unknown provider name in `app.go`.
+
+`SetTrustedProxies(nil)` is deliberate: Gin's default trusts every proxy's
+`X-Forwarded-For`. In production `TrustedPlatform` short-circuits ahead of it; everywhere
+else the client IP is now the connection's, not the caller's claim.
+
+`integration_test.go` rebuilds this chain by hand instead of calling `NewRouter`. A
+middleware added only here is invisible to every integration test — add it to
+`setupRouterWithOrigin` too.
 
 ## Handler construction
 
@@ -70,7 +90,9 @@ reading the subtree as a map breaks them.
 `LookupConfig`, `ServicesStatus`), built once via `NewStatusSnapshot(version,
 domain.AllLookupNames)` and populated progressively in `app.go`. It feeds both the
 structured startup log and `GET /v1/info` — **adding a field to a struct surfaces it in
-both places**. Live data (runtime stats, DB pool, Redis ping, auth cache size) is computed
+both places**. That holds for `system` only because `handler.systemWithUptime` *embeds*
+`SystemStatus` rather than restating its fields; the field-by-field copy it replaced
+dropped new fields silently. Do not go back to one. Live data (runtime stats, DB pool, Redis ping, auth cache size) is computed
 at request time in the info handler and merged in. Response groups: `system`, `database`,
 `cache`, `lookups`, `services`, `runtime`, `postgres_pool`. `./scripts/info.sh`
 pretty-prints it (needs `SMOKE_ADMIN_KEY` from `.env`).

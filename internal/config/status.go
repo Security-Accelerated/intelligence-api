@@ -51,6 +51,10 @@ type SystemStatus struct {
 	IdleTimeout     string    `json:"idle_timeout"`
 	ShutdownTimeout string    `json:"shutdown_timeout"`
 	BodyLimit       int       `json:"body_limit"`
+	// Edge posture, so the CDN cutover can be verified through /v1/info.
+	// The secret itself is never reported.
+	RequireOriginSecret bool   `json:"require_origin_secret"`
+	ClientIPHeader      string `json:"client_ip_header"`
 }
 
 type DatabaseConfig struct {
@@ -169,6 +173,9 @@ func NewStatusSnapshot(version string, lookupNames []string) *StatusSnapshot {
 			IdleTimeout:     cfg.GetDuration("server.idle_timeout").String(),
 			ShutdownTimeout: cfg.GetDuration("server.shutdown_timeout").String(),
 			BodyLimit:       cfg.GetInt("server.body_limit"),
+
+			RequireOriginSecret: cfg.GetBool("edge.require_origin_secret"),
+			ClientIPHeader:      cfg.GetString("edge.client_ip_header"),
 		},
 		Database: DatabaseConfig{
 			Host:            cfg.GetString("postgres.host"),

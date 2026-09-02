@@ -8,6 +8,20 @@
 # issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
 # way, so nothing is ever lost operationally.
 
+- version: v0.75.0
+  date: 2026-09-01
+  changes:
+    - text: "Origin lockdown for the CDN cutover: `edge.origin_secret` plus `edge.require_origin_secret` reject anything reaching the origin without the shared secret the edge injects, with a generic 403 that does not confirm to a prober what they found. The app also answers on its `.fly.dev` hostname, so without this the edge WAF has a documented bypass. Ships off — enabling it before the CDN is in front rejects live traffic"
+      audience: internal
+    - text: "`edge.client_ip_header` replaces the hardcoded `Fly-Client-IP`, because Fly populates that from its immediate peer and that becomes a CDN PoP once proxied. Setting it to anything else while origin enforcement is off is a startup error, not a warning: the origin is still directly reachable at that point, so a caller could pick the client IP that lands in our logs and alerts. Nothing keys, limits, or bills on the client IP, so the blast radius is log fields"
+      audience: internal
+    - text: "`SetTrustedProxies(nil)` — Gin's default trusts every proxy's X-Forwarded-For. Production was already shielded by TrustedPlatform; everywhere else the client IP was whatever the caller claimed"
+      audience: internal
+    - text: "`NewRouter` takes a `RouterDeps` struct and returns an error, following `handler.New`. The error path is what makes the interlock above a refusal to start"
+      audience: internal
+    - text: "`/v1/info` reports the edge posture (`require_origin_secret`, `client_ip_header`, never the secret) so the cutover can be verified. It surfaces there because `systemWithUptime` now embeds `SystemStatus` instead of restating all 18 fields — the copy silently dropped anything added to the snapshot"
+      audience: internal
+
 - version: v0.74.1
   date: 2026-08-27
   changes:

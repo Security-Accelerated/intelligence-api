@@ -161,6 +161,15 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ip.max_ips.pro", 20)
 	v.SetDefault("dns.servers", []string{})
 	v.SetDefault("dns.timeout", "30s")
+	// Edge (CDN in front of the origin). Both behaviors ship off: enabling
+	// them before the CDN is actually in front rejects live traffic. The secret
+	// is set first and confirmed in the request logs, then enforcement and the
+	// client-IP header are flipped together at cutover. Flipping only
+	// client_ip_header is a startup error — see httpapi.RouterDeps.Validate.
+	v.SetDefault("edge.origin_secret", "")
+	v.SetDefault("edge.origin_secret_header", "X-Origin-Secret")
+	v.SetDefault("edge.require_origin_secret", false)
+	v.SetDefault("edge.client_ip_header", "Fly-Client-IP")
 }
 
 // Config returns the process-wide Viper instance, populated at init with

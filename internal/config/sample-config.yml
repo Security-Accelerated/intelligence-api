@@ -133,6 +133,23 @@ threat_intel:
   virustotal_api_key: ""
   alienvault_api_key: ""
 
+# CDN in front of the origin. The app also answers on its platform hostname, so
+# a caller who finds that address bypasses the edge WAF entirely; the CDN adds
+# origin_secret_header to everything it proxies and the origin rejects requests
+# without it.
+#
+# Order matters at cutover. Set origin_secret first and confirm the header is
+# arriving, then turn on require_origin_secret and switch client_ip_header in
+# the same change — trusting an edge-set header while the origin is still open
+# lets anyone forge their own IP into the logs, so that combination refuses to
+# start.
+edge:
+  origin_secret: ""
+  origin_secret_header: "X-Origin-Secret"
+  require_origin_secret: false
+  # "CF-Connecting-IP" once proxied through Cloudflare.
+  client_ip_header: "Fly-Client-IP"
+
 postgres:
   host: postgres
   port: 5432
