@@ -54,7 +54,6 @@
     <div class="sidebar-section-title">Getting Started</div>
     <a href="#authentication">Authentication</a>
     <a href="#plans">Plans</a>
-    <a href="#pricing">Pricing</a>
     <a href="#rate-limiting">Rate Limiting</a>
   </div>
 
@@ -103,7 +102,7 @@
   <section class="hero" id="top">
     <p class="eyebrow">Documentation</p>
     <h1>Domain Intelligence</h1>
-    <p>Concurrent WHOIS, DNS, SSL, HTTP header, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, threat intelligence, and DNS security lookups for any domain &mdash; with an aggregate risk score in every response.</p>
+    <p>Concurrent WHOIS, DNS, SSL, HTTP header, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, threat intelligence, and DNS security lookups for any domain &mdash; with an optional aggregate risk score over whatever you requested.</p>
     <div class="hero-actions">
       <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span class="version-pill">{{.Version}}</span>{{end}}</div>
       <a href="mailto:support@securityaccelerated.com" class="support-link">support@securityaccelerated.com</a>
@@ -147,27 +146,7 @@
       </tbody>
     </table>
   </div>
-
-  <!-- Pricing -->
-  <h2 id="pricing">Pricing</h2>
-  <p>Get started with a free plan or upgrade for higher limits and premium features.</p>
-  <div class="table-scroll">
-    <table>
-      <thead><tr><th>Plan</th><th>Features</th><th></th></tr></thead>
-      <tbody>
-        <tr>
-          <td><strong>Free</strong></td>
-          <td>5 req/min, 1 domain/request, all lookups except reputation and threat intel</td>
-          <td>Included with any API key</td>
-        </tr>
-        <tr>
-          <td><strong>Pro</strong></td>
-          <td>120 req/min, 20 domains/request, all lookups including reputation and threat intel</td>
-          <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <p>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Get a Pro key</a>{{else}}Contact us for a Pro key.{{end}}</p>
   <div class="note">After subscribing, your API key will be shown on a one-time confirmation page. Save it immediately -- it cannot be retrieved again.</div>
   {{if .PortalLink}}<p>Already a subscriber? <a href="{{.PortalLink}}" target="_blank" rel="noopener noreferrer" class="portal-link">Manage your subscription</a></p>{{end}}
 
