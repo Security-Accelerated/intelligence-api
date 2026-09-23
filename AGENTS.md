@@ -1,7 +1,7 @@
 # Intelligence API — agent guide
 
 Domain and IP intelligence REST API in Go with Gin. Concurrent WHOIS, DNS, SSL, HTTP
-headers, screenshots, reputation, email security (SPF/DKIM/DMARC/MTA-STS/TLS-RPT/BIMI),
+headers, reputation, email security (SPF/DKIM/DMARC/MTA-STS/TLS-RPT/BIMI),
 subdomains, certificate transparency, BGP/ASN, technology fingerprinting, threat
 intelligence, and DNS security (DNSSEC/CAA) for domains, plus an aggregate risk score. IP
 lookups: GeoIP, ASN, reverse DNS, RDAP abuse contact, threat intelligence. Results are

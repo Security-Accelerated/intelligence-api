@@ -9,7 +9,7 @@ RUN go build -ldflags "-X main.version=${VERSION}" -o /app/intelligence-api ./cm
 
 FROM alpine:3.21
 
-RUN apk add --no-cache chromium su-exec
+RUN apk add --no-cache su-exec
 RUN adduser -D -u 1000 appuser
 RUN mkdir -p /data/geoip && chown appuser:appuser /data/geoip
 COPY --from=build /app/intelligence-api /usr/local/bin/intelligence-api

@@ -13,7 +13,6 @@ const (
 	LookupDNSName           = "dns"
 	LookupSSLName           = "ssl"
 	LookupHeadersName       = "headers"
-	LookupScreenshotName    = "screenshot"
 	LookupReputationName    = "reputation"
 	LookupEmailSecurityName = "email_security"
 	LookupSubdomainsName    = "subdomains"
@@ -32,7 +31,6 @@ var AllLookupNames = []string{
 	LookupDNSName,
 	LookupSSLName,
 	LookupHeadersName,
-	LookupScreenshotName,
 	LookupReputationName,
 	LookupEmailSecurityName,
 	LookupSubdomainsName,
@@ -83,7 +81,6 @@ type DomainResponse struct {
 	DNS           *DNSResult           `json:"dns,omitempty"`
 	SSL           *SSLResult           `json:"ssl,omitempty"`
 	Headers       *HeadersResult       `json:"headers,omitempty"`
-	Screenshot    *ScreenshotResult    `json:"screenshot,omitempty"`
 	Reputation    *ReputationResult    `json:"reputation,omitempty"`
 	EmailSecurity *EmailSecurityResult `json:"email_security,omitempty"`
 	Subdomains    *SubdomainsResult    `json:"subdomains,omitempty"`
@@ -127,11 +124,6 @@ type SSLResult struct {
 type HeadersResult struct {
 	CacheHit bool `json:"cache_hit"`
 	*HeadersInfo
-}
-
-type ScreenshotResult struct {
-	CacheHit bool `json:"cache_hit"`
-	*ScreenshotInfo
 }
 
 type ReputationResult struct {
@@ -234,11 +226,6 @@ type ReputationInfo struct {
 	Score     int               `json:"score"`
 	Risk      string            `json:"risk"`
 	Providers []*ProviderResult `json:"providers"`
-}
-
-type ScreenshotInfo struct {
-	StatusCode int    `json:"status_code"`
-	PNG        string `json:"png,omitempty"`
 }
 
 type WhoisInfo struct {

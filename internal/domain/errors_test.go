@@ -85,8 +85,7 @@ func TestIsExpectedError_Unexpected(t *testing.T) {
 // The previous implementation matched the substring "certificate" and treated
 // it as expected, on the assumption that cert errors describe the target. That
 // is impossible here: everything touching an arbitrary target domain sets
-// InsecureSkipVerify (LookupSSL directly, headers and screenshot via
-// safeTransport) precisely so it can report on expired and self-signed certs.
+// InsecureSkipVerify (LookupSSL directly, headers via safeTransport) precisely so it can report on expired and self-signed certs.
 //
 // x509 errors can therefore only come from trustedTransport, which is used
 // solely for crt.sh, RDAP, VirusTotal, URLhaus and AlienVault OTX — all with

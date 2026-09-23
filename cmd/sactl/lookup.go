@@ -27,7 +27,7 @@ func lookupGroup() group {
 
 // Default sets, used when --lookups is omitted. They are the fast, no-third-party
 // lookups: a bare `sactl lookup domain example.com` should answer promptly
-// rather than sitting on a screenshot or a certificate transparency query.
+// rather than sitting on a certificate transparency query.
 var (
 	defaultDomainLookups = []string{
 		domain.LookupWhoisName, domain.LookupDNSName, domain.LookupSSLName,

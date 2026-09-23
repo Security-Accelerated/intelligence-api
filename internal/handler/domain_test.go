@@ -409,7 +409,6 @@ func quoteAll(names []string) []string {
 
 func TestDomainLookup_PlanGating(t *testing.T) {
 	gated := []string{
-		domain.LookupScreenshotName,
 		domain.LookupReputationName,
 		domain.LookupThreatIntelName,
 	}
@@ -454,7 +453,7 @@ func TestDomainLookup_PlanGating(t *testing.T) {
 
 func TestDomainLookup_UnknownPlanTreatedAsLeastPrivileged(t *testing.T) {
 	w := post(newTestRouterWithPlan(&mockService{}, "mystery"),
-		`{"domains":["example.com"],"lookups":["screenshot"]}`)
+		`{"domains":["example.com"],"lookups":["reputation"]}`)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
@@ -728,8 +727,11 @@ func TestDomainLookup_RecordsDemandOnRejectedRequests(t *testing.T) {
 		wantStatus int
 		wantLookup string
 	}{
-		{"plan-gated 403", planFree, `{"domains":["example.com"],"lookups":["screenshot"]}`, http.StatusForbidden, "screenshot"},
+		{"plan-gated 403", planFree, `{"domains":["example.com"],"lookups":["reputation"]}`, http.StatusForbidden, "reputation"},
 		{"unknown name 400", planPro, `{"domains":["example.com"],"lookups":["banana"]}`, http.StatusBadRequest, "banana"},
+		// Removed before v1.0 (#110). It must be a clear 400 naming the
+		// lookup, not a silent empty result.
+		{"removed screenshot 400", planPro, `{"domains":["example.com"],"lookups":["screenshot"]}`, http.StatusBadRequest, "screenshot"},
 	}
 
 	for _, tc := range cases {

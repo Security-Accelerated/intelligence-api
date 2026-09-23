@@ -57,13 +57,14 @@ type UsageSummary struct {
 // LookupColumns lists the request_log boolean columns that track which lookups
 // each request asked for. It must stay in sync with the union of
 // domain.AllLookupNames and domain.AllIPLookupNames, and with the request_log
-// schema — a test asserts the former.
+// schema — a test asserts the former. request_log.screenshot outlived the
+// lookup (#110): it keeps its history, defaults to false, and is written by
+// nothing until screenshots return.
 var LookupColumns = []string{
 	"whois",
 	"dns",
 	"ssl",
 	"headers",
-	"screenshot",
 	"reputation",
 	"email_security",
 	"subdomains",

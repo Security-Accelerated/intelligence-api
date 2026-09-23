@@ -35,7 +35,7 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 		c.Set("ip_count", 2)
 		c.Set("cache_hits", 5)
 		c.Set("cache_misses", 4)
-		c.Set("lookups_requested", []string{"screenshot", "email_security", "fingerprint", "threat_intel"})
+		c.Set("lookups_requested", []string{"reputation", "email_security", "fingerprint", "threat_intel"})
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -69,7 +69,7 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 	if e.CacheMisses != 4 {
 		t.Errorf("CacheMisses = %d, want 4", e.CacheMisses)
 	}
-	want := []string{"screenshot", "email_security", "fingerprint", "threat_intel"}
+	want := []string{"reputation", "email_security", "fingerprint", "threat_intel"}
 	if len(e.Lookups) != len(want) {
 		t.Fatalf("Lookups = %v, want %v", e.Lookups, want)
 	}

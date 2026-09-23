@@ -33,8 +33,7 @@ primary_region = 'iad'
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
-  # Headless Chromium wants roughly half a gigabyte per capture. At 512 the
-  # process was one screenshot away from the memory ceiling, which is why
-  # screenshot.max_concurrent defaults to 1. 1 GB gives that lookup room
-  # without changing the cap.
+  # Sized for in-process headless Chromium, which wanted about half a gigabyte
+  # per capture. Screenshots were removed before v1.0 (#110), so 512 MB may be
+  # enough now; measure before shrinking it.
   memory_mb = 1024

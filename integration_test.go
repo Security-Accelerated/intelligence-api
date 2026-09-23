@@ -84,7 +84,7 @@ func (stubUsageQueryer) QueryUsage(_, _ int, since, until time.Time) (*usage.Usa
 		AvgLatencyMs:   500,
 		TotalDomains:   50,
 		StatusCodes:    map[string]int{"200": 40, "400": 2},
-		FeatureUsage:   map[string]int{"screenshot": 5, "reputation": 3},
+		FeatureUsage:   map[string]int{"whois": 5, "reputation": 3},
 		RequestsByPath: map[string]int{"/v1/domain/lookup": 40},
 		PeriodStart:    since,
 		PeriodEnd:      until,
@@ -106,7 +106,6 @@ func testConfig() *viper.Viper {
 	cfg.Set("redis.db", 0)
 	cfg.Set("cache.default_ttl", "60m")
 	cfg.Set("auth.cache_ttl", "5m")
-	cfg.Set("screenshot.timeout", "15s")
 	cfg.Set("rate_limit.free", 5)
 	cfg.Set("rate_limit.pro", 120)
 	cfg.Set("postgres.host", "localhost")
@@ -122,8 +121,7 @@ func testConfig() *viper.Viper {
 
 // defaultTestTTL and testCacheTTLs mirror the shape of the configured per-lookup
 // TTL table, with deliberately distinct values so tests can assert that each
-// lookup key expires on its own schedule. `screenshot` is absent so it exercises
-// the default-TTL fallback.
+// lookup key expires on its own schedule.
 const defaultTestTTL = 60 * time.Minute
 
 var testCacheTTLs = map[string]time.Duration{
@@ -215,7 +213,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
 	})
 
-	svc := service.NewDomainService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, 15*time.Second, 4, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
+	svc := service.NewDomainService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -229,9 +227,6 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		},
 		func(_ context.Context, _ string) (*domain.HeadersInfo, error) {
 			return &domain.HeadersInfo{StatusCode: 200, Headers: map[string]string{"Server": "test/1.0"}}, nil
-		},
-		func(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
-			return &domain.ScreenshotInfo{StatusCode: 200, PNG: "c3R1Yg=="}, nil
 		},
 		func(_ context.Context, _ string) (*domain.ReputationInfo, []domain.LookupError) {
 			return &domain.ReputationInfo{
@@ -668,18 +663,20 @@ func TestIntegration_Auth_FreeKeyCanAccessLookup(t *testing.T) {
 	}
 }
 
-func TestIntegration_Screenshot_FreeGets403(t *testing.T) {
+// screenshot was removed before v1.0 (#110). Through the full middleware chain,
+// a caller still asking for it gets a 400 naming the lookup — on every plan,
+// since it is no longer a gated lookup but an unknown one.
+func TestIntegration_Screenshot_RemovedIs400(t *testing.T) {
 	r, _ := setupRouter(t)
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","screenshot"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-free-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusForbidden, w.Body.String())
+	for _, key := range []string{"test-free-key", "test-pro-key", "test-admin-key"} {
+		w := postLookup(t, r, key, `{"domains":["example.com"],"lookups":["whois","screenshot"]}`)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want %d; body: %s", key, w.Code, http.StatusBadRequest, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), "screenshot") {
+			t.Errorf("%s: body should name the removed lookup, got %s", key, w.Body.String())
+		}
 	}
 }
 
@@ -715,58 +712,6 @@ func TestIntegration_FreePlan_MaxDomains(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &body)
 	if body["error"] != "too many domains: maximum 1 allowed for free plan" {
 		t.Errorf("error = %q", body["error"])
-	}
-}
-
-func TestIntegration_Screenshot_ProCanScreenshot(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","screenshot"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-pro-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
-	}
-
-	resp := decodeResults(t, w)
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Screenshot == nil {
-		t.Fatal("expected screenshot to be populated for pro customer")
-	}
-	if resp[0].Screenshot.StatusCode != 200 {
-		t.Errorf("Screenshot.StatusCode = %d, want 200", resp[0].Screenshot.StatusCode)
-	}
-	if resp[0].Screenshot.PNG == "" {
-		t.Error("expected Screenshot.PNG to be non-empty")
-	}
-}
-
-func TestIntegration_Screenshot_AbsentWhenNotRequested(t *testing.T) {
-	r, _ := setupRouter(t)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}`))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-API-Key", "test-admin-key")
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
-
-	resp := decodeResults(t, w)
-	if len(resp) != 1 {
-		t.Fatalf("len(resp) = %d, want 1", len(resp))
-	}
-	if resp[0].Screenshot != nil {
-		t.Error("expected screenshot to be nil when not requested")
 	}
 }
 
@@ -829,12 +774,12 @@ func TestIntegration_Reputation_AbsentWhenNotRequested(t *testing.T) {
 	}
 }
 
-func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
+func TestIntegration_Reputation_CombinedWithOtherLookups(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/domain/lookup",
-		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","reputation","screenshot"]}`))
+		strings.NewReader(`{"domains":["example.com"],"lookups":["whois","dns","ssl","headers","reputation"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-admin-key")
 	r.ServeHTTP(w, req)
@@ -856,14 +801,8 @@ func TestIntegration_Reputation_CombinedWithScreenshot(t *testing.T) {
 	if len(resp[0].Reputation.Providers) != 4 {
 		t.Errorf("len(Reputation.Providers) = %d, want 4", len(resp[0].Reputation.Providers))
 	}
-	if resp[0].Screenshot == nil {
-		t.Fatal("expected screenshot to be populated")
-	}
-	if resp[0].Screenshot.StatusCode != 200 {
-		t.Errorf("Screenshot.StatusCode = %d, want 200", resp[0].Screenshot.StatusCode)
-	}
-	if resp[0].Screenshot.PNG == "" {
-		t.Error("expected Screenshot.PNG to be non-empty")
+	if resp[0].Whois == nil || resp[0].Headers == nil {
+		t.Error("expected the other requested lookups alongside reputation")
 	}
 }
 
@@ -2490,19 +2429,16 @@ func TestIntegration_Lookups_PlanGatingPerLookup(t *testing.T) {
 		lookup string
 		want   int
 	}{
-		{"test-free-key", "screenshot", http.StatusForbidden},
 		{"test-free-key", "reputation", http.StatusForbidden},
 		{"test-free-key", "threat_intel", http.StatusForbidden},
 		{"test-free-key", "dns", http.StatusOK},
-		{"test-lookup-key", "screenshot", http.StatusForbidden},   // free
 		{"test-lookup-key", "reputation", http.StatusForbidden},   // free
 		{"test-lookup-key", "threat_intel", http.StatusForbidden}, // free
 		{"test-lookup-key", "dns", http.StatusOK},
 		{"test-lookup-key", "subdomains", http.StatusOK},
-		{"test-pro-key", "screenshot", http.StatusOK},
 		{"test-pro-key", "reputation", http.StatusOK},
 		{"test-pro-key", "threat_intel", http.StatusOK},
-		{"test-admin-key", "screenshot", http.StatusOK},
+		{"test-admin-key", "reputation", http.StatusOK},
 	}
 	for _, tc := range cases {
 		t.Run(tc.key+"/"+tc.lookup, func(t *testing.T) {

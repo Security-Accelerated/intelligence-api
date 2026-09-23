@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -202,9 +201,6 @@ func okSSL(_ context.Context, _ string) (*domain.SSLInfo, error) {
 func okHeaders(_ context.Context, _ string) (*domain.HeadersInfo, error) {
 	return &domain.HeadersInfo{StatusCode: 200, Headers: map[string]string{"Server": "test"}}, nil
 }
-func okScreenshot(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
-	return &domain.ScreenshotInfo{StatusCode: 200, PNG: "iVBOR"}, nil
-}
 
 func failWhois(_ context.Context, _ string) (*domain.WhoisInfo, error) {
 	return nil, errors.New("whois failed")
@@ -217,9 +213,6 @@ func failSSL(_ context.Context, _ string) (*domain.SSLInfo, error) {
 }
 func failHeaders(_ context.Context, _ string) (*domain.HeadersInfo, error) {
 	return nil, errors.New("headers failed")
-}
-func failScreenshot(_ context.Context, _ string, _ time.Duration) (*domain.ScreenshotInfo, error) {
-	return nil, errors.New("screenshot failed")
 }
 
 func okReputation(_ context.Context, _ string) (*domain.ReputationInfo, []domain.LookupError) {
@@ -313,7 +306,7 @@ func failDNSSecurity(_ context.Context, _ string) (*domain.DNSSecurityInfo, erro
 }
 
 // testTTLs mirrors the shape of the configured per-lookup TTL table, with a
-// distinct value per lookup so tests can tell them apart. `screenshot` is
+// distinct value per lookup so tests can tell them apart. `bgp` is
 // deliberately absent to exercise the default-TTL fallback.
 var testTTLs = map[string]time.Duration{
 	domain.LookupWhoisName:         24 * time.Hour,
@@ -323,7 +316,6 @@ var testTTLs = map[string]time.Duration{
 	domain.LookupEmailSecurityName: 2 * time.Hour,
 	domain.LookupSubdomainsName:    12 * time.Hour,
 	domain.LookupCTLogsName:        18 * time.Hour,
-	domain.LookupBGPName:           20 * time.Hour,
 	domain.LookupReputationName:    25 * time.Minute,
 	domain.LookupThreatIntelName:   35 * time.Minute,
 	domain.LookupDNSSecurityName:   6 * time.Hour,
@@ -337,7 +329,6 @@ func newTestService(mc *mockCache) *DomainService {
 		defaultCacheTTL:     testDefaultTTL,
 		cacheTTLs:           testTTLs,
 		lookupTimeout:       30 * time.Second,
-		screenshotTimeout:   15 * time.Second,
 		subdomainMaxResults: 500,
 		ctLogsMaxEntries:    100,
 		alerter:             &notifications.NoopRecorder{},
@@ -345,7 +336,6 @@ func newTestService(mc *mockCache) *DomainService {
 		lookupDNS:           okDNS,
 		lookupSSL:           okSSL,
 		lookupHeaders:       okHeaders,
-		lookupScreenshot:    okScreenshot,
 		lookupReputation:    okReputation,
 		lookupEmailSecurity: okEmailSecurity,
 		lookupSubdomains:    okSubdomains,
@@ -353,7 +343,6 @@ func newTestService(mc *mockCache) *DomainService {
 		lookupBGP:           okBGP,
 		lookupThreatIntel:   okThreatIntel,
 		lookupDNSSecurity:   okDNSSecurity,
-		screenshotSem:       make(chan struct{}, 4),
 	}
 }
 
@@ -390,9 +379,9 @@ func TestTTLFor_UsesPerLookupValue(t *testing.T) {
 
 func TestTTLFor_FallsBackToDefault(t *testing.T) {
 	svc := newTestService(newMockCache())
-	// screenshot has no entry in testTTLs.
-	if got := svc.ttlFor(domain.LookupScreenshotName); got != testDefaultTTL {
-		t.Errorf("screenshot ttl = %v, want default %v", got, testDefaultTTL)
+	// bgp has no entry in testTTLs.
+	if got := svc.ttlFor(domain.LookupBGPName); got != testDefaultTTL {
+		t.Errorf("bgp ttl = %v, want default %v", got, testDefaultTTL)
 	}
 	if got := svc.ttlFor("not_a_lookup"); got != testDefaultTTL {
 		t.Errorf("unknown ttl = %v, want default %v", got, testDefaultTTL)
@@ -450,7 +439,7 @@ func TestLookup_AllMiss_WritesEachResultWithItsOwnKeyAndTTL(t *testing.T) {
 	svc := newTestService(mc)
 
 	resp, stats := svc.Lookup(context.Background(), "example.com",
-		opts(domain.LookupWhoisName, domain.LookupDNSName, domain.LookupScreenshotName))
+		opts(domain.LookupWhoisName, domain.LookupDNSName, domain.LookupBGPName))
 
 	if stats.Hits != 0 || stats.Misses != 3 {
 		t.Errorf("stats = %+v, want 0 hits 3 misses", stats)
@@ -462,7 +451,7 @@ func TestLookup_AllMiss_WritesEachResultWithItsOwnKeyAndTTL(t *testing.T) {
 	}{
 		{domain.LookupWhoisName, resp.Whois != nil, resp.Whois != nil && resp.Whois.CacheHit},
 		{domain.LookupDNSName, resp.DNS != nil, resp.DNS != nil && resp.DNS.CacheHit},
-		{domain.LookupScreenshotName, resp.Screenshot != nil, resp.Screenshot != nil && resp.Screenshot.CacheHit},
+		{domain.LookupBGPName, resp.BGP != nil, resp.BGP != nil && resp.BGP.CacheHit},
 	} {
 		if !f.present {
 			t.Errorf("%s missing from response", f.name)
@@ -481,9 +470,9 @@ func TestLookup_AllMiss_WritesEachResultWithItsOwnKeyAndTTL(t *testing.T) {
 	if got := mc.ttl(key("example.com", domain.LookupDNSName)); got != 30*time.Minute {
 		t.Errorf("dns TTL = %v, want 30m", got)
 	}
-	// screenshot has no per-lookup TTL configured.
-	if got := mc.ttl(key("example.com", domain.LookupScreenshotName)); got != testDefaultTTL {
-		t.Errorf("screenshot TTL = %v, want default %v", got, testDefaultTTL)
+	// bgp has no per-lookup TTL configured.
+	if got := mc.ttl(key("example.com", domain.LookupBGPName)); got != testDefaultTTL {
+		t.Errorf("bgp TTL = %v, want default %v", got, testDefaultTTL)
 	}
 }
 
@@ -736,7 +725,6 @@ func TestLookup_EachLookupPopulatesItsField(t *testing.T) {
 		domain.LookupDNSName:           resp.DNS != nil,
 		domain.LookupSSLName:           resp.SSL != nil,
 		domain.LookupHeadersName:       resp.Headers != nil,
-		domain.LookupScreenshotName:    resp.Screenshot != nil,
 		domain.LookupReputationName:    resp.Reputation != nil,
 		domain.LookupEmailSecurityName: resp.EmailSecurity != nil,
 		domain.LookupSubdomainsName:    resp.Subdomains != nil,
@@ -762,7 +750,6 @@ func TestLookup_EachOptionalLookupFailureIsReported(t *testing.T) {
 	svc.lookupDNS = failDNS
 	svc.lookupSSL = failSSL
 	svc.lookupHeaders = failHeaders
-	svc.lookupScreenshot = failScreenshot
 	svc.lookupEmailSecurity = failEmailSecurity
 	svc.lookupSubdomains = failSubdomains
 	svc.lookupCTLogs = failCTLogs
@@ -779,7 +766,7 @@ func TestLookup_EachOptionalLookupFailureIsReported(t *testing.T) {
 	}
 	for _, name := range []string{
 		domain.LookupWhoisName, domain.LookupDNSName, domain.LookupSSLName, domain.LookupHeadersName,
-		domain.LookupScreenshotName, domain.LookupEmailSecurityName, domain.LookupSubdomainsName,
+		domain.LookupEmailSecurityName, domain.LookupSubdomainsName,
 		domain.LookupCTLogsName, domain.LookupBGPName, domain.LookupReputationName, domain.LookupThreatIntelName,
 		domain.LookupDNSSecurityName,
 	} {
@@ -1110,21 +1097,6 @@ func TestLookup_CTLogsMaxEntries_Passed(t *testing.T) {
 	}
 }
 
-func TestLookup_ScreenshotTimeout_Passed(t *testing.T) {
-	svc := newTestService(newMockCache())
-	svc.screenshotTimeout = 3 * time.Second
-
-	var got time.Duration
-	svc.lookupScreenshot = func(_ context.Context, _ string, timeout time.Duration) (*domain.ScreenshotInfo, error) {
-		got = timeout
-		return okScreenshot(context.TODO(), "", timeout)
-	}
-	svc.Lookup(context.Background(), "example.com", opts(domain.LookupScreenshotName))
-	if got != 3*time.Second {
-		t.Errorf("screenshot timeout = %v, want 3s", got)
-	}
-}
-
 func TestLookup_AppliesLookupTimeout(t *testing.T) {
 	svc := newTestService(newMockCache())
 	svc.lookupTimeout = 50 * time.Millisecond
@@ -1280,78 +1252,6 @@ func TestLookup_PanickingLookupDegradesToError(t *testing.T) {
 	}
 }
 
-func TestLookup_ScreenshotSemaphoreCapsConcurrency(t *testing.T) {
-	svc := newTestService(newMockCache())
-	svc.screenshotSem = make(chan struct{}, 2)
-
-	var inFlight, peak atomic.Int32
-	release := make(chan struct{})
-	svc.lookupScreenshot = func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error) {
-		n := inFlight.Add(1)
-		for {
-			p := peak.Load()
-			if n <= p || peak.CompareAndSwap(p, n) {
-				break
-			}
-		}
-		<-release
-		inFlight.Add(-1)
-		return okScreenshot(context.TODO(), "", 0)
-	}
-
-	var wg sync.WaitGroup
-	for i := range 6 {
-		wg.Go(func() {
-			// Distinct domains so singleflight does not coalesce them.
-			svc.Lookup(context.Background(), fmt.Sprintf("example%d.com", i), opts(domain.LookupScreenshotName))
-		})
-	}
-	for range 200 {
-		if peak.Load() >= 2 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	close(release)
-	wg.Wait()
-
-	if got := peak.Load(); got > 2 {
-		t.Errorf("peak concurrent screenshots = %d, want <= 2", got)
-	}
-}
-
-func TestLookup_ScreenshotQueueTimeout(t *testing.T) {
-	svc := newTestService(newMockCache())
-	svc.screenshotSem = make(chan struct{}, 1)
-	svc.lookupTimeout = 50 * time.Millisecond
-
-	// Occupy the only Chromium slot, so the request must give up rather than
-	// queue behind it indefinitely.
-	svc.screenshotSem <- struct{}{}
-	defer func() { <-svc.screenshotSem }()
-
-	var called atomic.Int32
-	svc.lookupScreenshot = func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error) {
-		called.Add(1)
-		return okScreenshot(context.TODO(), "", 0)
-	}
-
-	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupScreenshotName))
-
-	if called.Load() != 0 {
-		t.Error("screenshot ran despite no free slot")
-	}
-	if resp.Screenshot != nil {
-		t.Error("expected no screenshot when the queue timed out")
-	}
-	if len(resp.Errors) == 0 {
-		t.Fatal("expected a queue-timeout error")
-	}
-	if !strings.Contains(resp.Errors[0].Message, "queue timed out") {
-		t.Errorf("error = %q, want a queue-timeout message", resp.Errors[0].Message)
-	}
-}
-
 // --- DNS security ---
 
 func TestLookup_DNSSecurity_OptIn(t *testing.T) {
@@ -1470,7 +1370,7 @@ func TestLookup_Risk_PartiallyCachedInputsCountAsMiss(t *testing.T) {
 // --- Setters and constructor ---
 
 func TestNewDomainService_Defaults(t *testing.T) {
-	svc := NewDomainService(newMockCache(), time.Minute, nil, 0, 0, 0, 0, 0, nil, nil, nil)
+	svc := NewDomainService(newMockCache(), time.Minute, nil, 0, 0, 0, nil, nil, nil)
 	if svc.subdomainMaxResults != 500 {
 		t.Errorf("subdomainMaxResults = %d, want 500", svc.subdomainMaxResults)
 	}
@@ -1491,7 +1391,7 @@ func TestNewDomainService_Defaults(t *testing.T) {
 
 func TestSetLookups_ReplacesBaseLookups(t *testing.T) {
 	svc := newTestService(newMockCache())
-	svc.SetLookups(failWhois, failDNS, failSSL, failHeaders, failScreenshot, failReputation)
+	svc.SetLookups(failWhois, failDNS, failSSL, failHeaders, failReputation)
 
 	resp, _ := svc.Lookup(context.Background(), "example.com", opts(domain.LookupWhoisName, domain.LookupDNSName))
 	if resp.Whois != nil || resp.DNS != nil {

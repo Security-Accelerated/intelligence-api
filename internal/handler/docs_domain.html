@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Domain Intelligence API reference. Concurrent WHOIS, DNS, SSL, HTTP headers, screenshots, reputation, email security, subdomains, CT logs, BGP/ASN, fingerprinting, and threat intelligence lookups.">
+<meta name="description" content="Domain Intelligence API reference. Concurrent WHOIS, DNS, SSL, HTTP headers, reputation, email security, subdomains, CT logs, BGP/ASN, fingerprinting, and threat intelligence lookups.">
 <meta property="og:title" content="Domain Intelligence - Intelligence API">
 <meta property="og:description" content="Domain Intelligence API reference with field documentation, code examples, and response behavior.">
 <meta property="og:type" content="website">
@@ -73,7 +73,6 @@
     <a href="#dns" class="indent">dns</a>
     <a href="#ssl" class="indent">ssl</a>
     <a href="#headers" class="indent">headers</a>
-    <a href="#screenshot" class="indent">screenshot</a>
     <a href="#reputation" class="indent">reputation</a>
     <a href="#email-security" class="indent">email_security</a>
     <a href="#subdomains" class="indent">subdomains</a>
@@ -104,7 +103,7 @@
   <section class="hero" id="top">
     <p class="eyebrow">Documentation</p>
     <h1>Domain Intelligence</h1>
-    <p>Concurrent WHOIS, DNS, SSL, HTTP header, screenshot, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, threat intelligence, and DNS security lookups for any domain &mdash; with an aggregate risk score in every response.</p>
+    <p>Concurrent WHOIS, DNS, SSL, HTTP header, reputation, email security, subdomain, certificate transparency, BGP/ASN, technology fingerprinting, threat intelligence, and DNS security lookups for any domain &mdash; with an aggregate risk score in every response.</p>
     <div class="hero-actions">
       <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span class="version-pill">{{.Version}}</span>{{end}}</div>
       <a href="mailto:support@securityaccelerated.com" class="support-link">support@securityaccelerated.com</a>
@@ -143,7 +142,6 @@
         <tr><td><strong>Fingerprint</strong></td><td>Included</td><td>Included</td></tr>
         <tr><td><strong>DNS Security (DNSSEC / CAA)</strong></td><td>Included</td><td>Included</td></tr>
         <tr><td><strong>Aggregate Risk Score</strong></td><td>Included</td><td>Included</td></tr>
-        <tr><td><strong>Screenshot</strong></td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
         <tr><td><strong>Reputation</strong></td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
         <tr><td><strong>Threat Intelligence</strong></td><td>--</td><td><span class="tag tag-pro">Pro</span></td></tr>
       </tbody>
@@ -159,12 +157,12 @@
       <tbody>
         <tr>
           <td><strong>Free</strong></td>
-          <td>5 req/min, 1 domain/request, all lookups except screenshot, reputation, and threat intel</td>
+          <td>5 req/min, 1 domain/request, all lookups except reputation and threat intel</td>
           <td>Included with any API key</td>
         </tr>
         <tr>
           <td><strong>Pro</strong></td>
-          <td>120 req/min, 20 domains/request, all lookups including screenshot, reputation, and threat intel</td>
+          <td>120 req/min, 20 domains/request, all lookups including reputation and threat intel</td>
           <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
         </tr>
       </tbody>
@@ -236,7 +234,6 @@
         <tr><td><code>fingerprint</code></td><td>All</td><td>Detect web technologies from HTTP response headers. Costs no extra network call &mdash; see <a href="#caching">Caching</a>.</td></tr>
         <tr><td><code>dns_security</code></td><td>All</td><td>DNSSEC deployment (DS + DNSKEY + algorithms) and CAA records.</td></tr>
         <tr><td><code>risk</code></td><td>All</td><td>Weighted 0&ndash;100 aggregate risk score over the other lookups you requested. No network call, never cached &mdash; see <a href="#caching">Caching</a>.</td></tr>
-        <tr><td><code>screenshot</code></td><td><span class="tag tag-pro">Pro</span></td><td>Capture a page screenshot.</td></tr>
         <tr><td><code>reputation</code></td><td><span class="tag tag-pro">Pro</span></td><td>Check domain against threat blocklists.</td></tr>
         <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query multiple threat intelligence feeds.</td></tr>
       </tbody>
@@ -567,31 +564,6 @@ resp = requests.post(
     <span class="str">"x_frame_options"</span>: <span class="str">"DENY"</span>
   }
 }</code></pre>
-
-  <!-- screenshot -->
-  <h3 id="screenshot"><code>screenshot</code> -- Page Screenshot <span class="tag tag-pro">Pro</span></h3>
-  <div class="table-scroll">
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td><code>cache_hit</code></td><td><code>bool</code></td><td>Whether this lookup was served from cache (<code>true</code>) or fetched live (<code>false</code>)</td></tr>
-        <tr><td><code>status_code</code></td><td><code>int</code></td><td>HTTP status code from probing the domain</td></tr>
-        <tr><td><code>png</code></td><td><code>string</code></td><td>Base64-encoded PNG image (empty for non-200 responses)</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <pre><code>{
-  <span class="str">"status_code"</span>: <span class="num">200</span>,
-  <span class="str">"png"</span>: <span class="str">"iVBORw0KGgoAAAANSUhEUgAA..."</span>
-}</code></pre>
-  <div class="note">Tries HTTPS first, then falls back to HTTP. Captured at 1280x720 with headless Chrome.</div>
-
-  <h4 id="screenshot-queue">Screenshots are captured a few at a time</h4>
-  <p>The other lookups are a network call at most &mdash; <code>fingerprint</code> and <code>risk</code> are pure computation over results you already asked for. A screenshot is a browser, and a browser wants roughly half a gigabyte of memory, so captures run under a small service-wide concurrency cap &mdash; typically one at a time &mdash; rather than in parallel. A request asking for <code>screenshot</code> waits its turn behind any capture already running &mdash; including captures from other customers.</p>
-  <p>If a capture has not started by the time the request deadline arrives, that lookup reports a queue timeout instead of the request piling up another browser:</p>
-  <pre><code>{ <span class="str">"lookup"</span>: <span class="str">"screenshot"</span>, <span class="str">"message"</span>: <span class="str">"screenshot queue timed out, please retry"</span> }</code></pre>
-  <p>The rest of the response is unaffected &mdash; every other lookup you asked for still returns, and the status is still <code>200</code>.</p>
-  <div class="note"><strong>This one is worth retrying.</strong> Most lookup errors mean the answer is not available; this one only means the service was busy, and the same request a moment later usually succeeds. Two practical habits: ask for <code>screenshot</code> over a handful of domains rather than a full batch, and put it in its own request so a queue wait never delays the lookups that would have returned immediately.</div>
 
   <!-- reputation -->
   <h3 id="reputation"><code>reputation</code> -- Domain Reputation <span class="tag tag-pro">Pro</span></h3>
@@ -1161,7 +1133,6 @@ resp = requests.post(
       <tbody>
         <tr><td><code>whois</code>, <code>ct_logs</code>, <code>subdomains</code>, <code>bgp</code></td><td>24 hours</td></tr>
         <tr><td><code>ssl</code>, <code>email_security</code>, <code>dns_security</code></td><td>4 hours</td></tr>
-        <tr><td><code>screenshot</code></td><td>60 minutes</td></tr>
         <tr><td><code>dns</code>, <code>headers</code>, <code>reputation</code>, <code>threat_intel</code></td><td>30 minutes</td></tr>
       </tbody>
     </table>
@@ -1193,7 +1164,7 @@ resp = requests.post(
         <tr><td><code>400 Bad Request</code></td><td>More domains than your plan allows</td></tr>
         <tr><td><code>400 Bad Request</code></td><td>More domains than the tighter cap that applies when <code>subdomains</code> is requested &mdash; see <a href="#subdomain-cap">Subdomain batch limits</a></td></tr>
         <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
-        <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint, or a requested lookup &mdash; e.g. <code>screenshot requires a pro plan</code></td></tr>
+        <tr><td><code>403 Forbidden</code></td><td>Your plan does not include this endpoint, or a requested lookup &mdash; e.g. <code>reputation requires a pro plan</code></td></tr>
         <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
         <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
         <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
@@ -1239,7 +1210,7 @@ resp = requests.post(
   <p><code>X-Request-ID</code> is generated by the API for every request &mdash; quote it when contacting support. <code>X-Client-Request-ID</code> appears only when you sent a valid one; see <a href="#request-correlation">Request Correlation</a>. The <code>X-RateLimit-*</code> pair reflects your plan's window, and a <code>429</code> adds <code>Retry-After</code> &mdash; see <a href="#rate-limiting">Rate Limiting</a>.</p>
 
   <h3>Response Body</h3>
-  <p>A complete response for <code>"lookups": ["whois", "dns", "ssl", "headers", "screenshot", "reputation", "email_security", "subdomains", "ct_logs", "bgp", "fingerprint", "threat_intel"]</code>:</p>
+  <p>A complete response for <code>"lookups": ["whois", "dns", "ssl", "headers", "reputation", "email_security", "subdomains", "ct_logs", "bgp", "fingerprint", "threat_intel"]</code>:</p>
   <pre><code>{
   <span class="str">"results"</span>: [
     {
@@ -1277,11 +1248,6 @@ resp = requests.post(
           <span class="str">"strict_transport_security"</span>: <span class="str">"max-age=31536000"</span>,
           <span class="str">"x_content_type_options"</span>: <span class="str">"nosniff"</span>
         }
-      },
-      <span class="str">"screenshot"</span>: {
-        <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
-        <span class="str">"status_code"</span>: <span class="num">200</span>,
-        <span class="str">"png"</span>: <span class="str">"iVBORw0KGgoAAAANSUhEUgAA..."</span>
       },
       <span class="str">"reputation"</span>: {
         <span class="str">"cache_hit"</span>: <span class="kw">false</span>,

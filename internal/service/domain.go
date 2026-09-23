@@ -51,9 +51,6 @@ type DomainService struct {
 	cacheTTLs           map[string]time.Duration
 	sf                  singleflight.Group
 	lookupTimeout       time.Duration
-	screenshotTimeout   time.Duration
-	screenshotSem       chan struct{} // caps concurrent captures across ALL in-flight requests
-	screenshotProvider  domain.ScreenshotProvider
 	subdomainMaxResults int
 	ctLogsMaxEntries    int
 	fingerprintEngine   *domain.FingerprintEngine
@@ -63,7 +60,6 @@ type DomainService struct {
 	lookupDNS           func(ctx context.Context, d string) (*domain.DNSInfo, error)
 	lookupSSL           func(ctx context.Context, d string) (*domain.SSLInfo, error)
 	lookupHeaders       func(ctx context.Context, d string) (*domain.HeadersInfo, error)
-	lookupScreenshot    func(ctx context.Context, d string, timeout time.Duration) (*domain.ScreenshotInfo, error)
 	lookupReputation    func(ctx context.Context, d string) (*domain.ReputationInfo, []domain.LookupError)
 	lookupEmailSecurity func(ctx context.Context, d string) (*domain.EmailSecurityInfo, error)
 	lookupSubdomains    func(ctx context.Context, d string, opts domain.SubdomainOptions) (*domain.SubdomainInfo, error)
@@ -76,11 +72,10 @@ type DomainService struct {
 // NewDomainService wires a DomainService to its real lookup implementations.
 //
 // defaultCacheTTL covers any lookup without an entry in cacheTTLs; see ttlFor.
-// screenshotMaxConcurrent sizes the process-wide Chromium semaphore, and
 // tiProviders is the set of threat intelligence backends built from config at
 // startup. Non-positive numeric arguments fall back to sane defaults, so a
 // zero-valued config cannot produce an unusable service.
-func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs map[string]time.Duration, lookupTimeout, screenshotTimeout time.Duration, screenshotMaxConcurrent, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
+func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs map[string]time.Duration, lookupTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -90,9 +85,6 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
 	}
-	if screenshotMaxConcurrent <= 0 {
-		screenshotMaxConcurrent = 4
-	}
 	if alerter == nil {
 		alerter = &notifications.NoopRecorder{}
 	}
@@ -101,8 +93,6 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 		defaultCacheTTL:     defaultCacheTTL,
 		cacheTTLs:           cacheTTLs,
 		lookupTimeout:       lookupTimeout,
-		screenshotTimeout:   screenshotTimeout,
-		screenshotSem:       make(chan struct{}, screenshotMaxConcurrent),
 		subdomainMaxResults: subdomainMaxResults,
 		ctLogsMaxEntries:    ctLogsMaxEntries,
 		fingerprintEngine:   fpEngine,
@@ -111,7 +101,6 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 		lookupDNS:           domain.LookupDNS,
 		lookupSSL:           domain.LookupSSL,
 		lookupHeaders:       domain.LookupHeaders,
-		screenshotProvider:  domain.NewChromiumProvider(),
 		lookupReputation:    domain.LookupReputation,
 		lookupEmailSecurity: domain.LookupEmailSecurity,
 		lookupSubdomains:    domain.LookupSubdomains,
@@ -124,39 +113,6 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 	}
 }
 
-// SetScreenshotProvider swaps the capture backend. Screenshots are the only
-// lookup needing a browser, so this is the seam a hosted provider replaces
-// without the service, the cache, the plan gating or the response shape
-// changing.
-func (s *DomainService) SetScreenshotProvider(p domain.ScreenshotProvider) {
-	if p != nil {
-		s.screenshotProvider = p
-	}
-}
-
-// ScreenshotProviderName reports the active capture backend, for /v1/info.
-func (s *DomainService) ScreenshotProviderName() string {
-	if s.screenshotProvider == nil {
-		return "none"
-	}
-	return s.screenshotProvider.Name()
-}
-
-// captureScreenshot dispatches to the test override when one is set, and to the
-// provider otherwise. Tests replace a function; production supplies a provider.
-func (s *DomainService) captureScreenshot(ctx context.Context, target string) (*domain.ScreenshotInfo, error) {
-	if s.lookupScreenshot != nil {
-		return s.lookupScreenshot(ctx, target, s.screenshotTimeout)
-	}
-	if s.screenshotProvider == nil {
-		return nil, errors.New("no screenshot provider configured")
-	}
-	return s.screenshotProvider.Capture(ctx, target, domain.ScreenshotOptions{
-		Timeout:     s.screenshotTimeout,
-		MaxPNGBytes: domain.DefaultMaxPNGBytes,
-	})
-}
-
 // SetLookups replaces the base lookup functions. Test-only: production wiring
 // happens in NewDomainService.
 func (s *DomainService) SetLookups(
@@ -164,14 +120,12 @@ func (s *DomainService) SetLookups(
 	dns func(context.Context, string) (*domain.DNSInfo, error),
 	ssl func(context.Context, string) (*domain.SSLInfo, error),
 	headers func(context.Context, string) (*domain.HeadersInfo, error),
-	screenshot func(context.Context, string, time.Duration) (*domain.ScreenshotInfo, error),
 	reputation func(context.Context, string) (*domain.ReputationInfo, []domain.LookupError),
 ) {
 	s.lookupWhois = whois
 	s.lookupDNS = dns
 	s.lookupSSL = ssl
 	s.lookupHeaders = headers
-	s.lookupScreenshot = screenshot
 	s.lookupReputation = reputation
 }
 
@@ -240,7 +194,6 @@ type lookupData struct {
 	dns           *domain.DNSInfo
 	ssl           *domain.SSLInfo
 	headers       *domain.HeadersInfo
-	screenshot    *domain.ScreenshotInfo
 	reputation    *domain.ReputationInfo
 	emailSecurity *domain.EmailSecurityInfo
 	subdomains    *domain.SubdomainInfo
@@ -278,23 +231,6 @@ func (s *DomainService) buildRunners(st *runState, d *lookupData, opts domain.Lo
 	if opts.Has(domain.LookupHeadersName) || opts.Has(domain.LookupFingerprintName) {
 		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupHeadersName, &d.headers,
 			func(ctx context.Context) (*domain.HeadersInfo, error) { return s.lookupHeaders(ctx, st.target) }))
-	}
-	if opts.Has(domain.LookupScreenshotName) {
-		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupScreenshotName, &d.screenshot,
-			func(ctx context.Context) (*domain.ScreenshotInfo, error) {
-				// Chromium is by far the most expensive lookup, so it takes a
-				// slot from a process-wide semaphore rather than fork-bombing
-				// under load.
-				if s.screenshotSem != nil {
-					select {
-					case s.screenshotSem <- struct{}{}:
-						defer func() { <-s.screenshotSem }()
-					case <-ctx.Done():
-						return nil, errors.New("screenshot queue timed out, please retry")
-					}
-				}
-				return s.captureScreenshot(ctx, st.target)
-			}))
 	}
 	if opts.Has(domain.LookupReputationName) {
 		runners = append(runners, multiErrRunner(s.alerter, st, domain.LookupReputationName, &d.reputation,
@@ -385,9 +321,6 @@ func (s *DomainService) assemble(resp *domain.DomainResponse, d *lookupData, opt
 	}
 	if opts.Has(domain.LookupHeadersName) && d.headers != nil {
 		resp.Headers = &domain.HeadersResult{CacheHit: hits[domain.LookupHeadersName], HeadersInfo: d.headers}
-	}
-	if opts.Has(domain.LookupScreenshotName) && d.screenshot != nil {
-		resp.Screenshot = &domain.ScreenshotResult{CacheHit: hits[domain.LookupScreenshotName], ScreenshotInfo: d.screenshot}
 	}
 	if opts.Has(domain.LookupReputationName) && d.reputation != nil {
 		resp.Reputation = &domain.ReputationResult{CacheHit: hits[domain.LookupReputationName], ReputationInfo: d.reputation}

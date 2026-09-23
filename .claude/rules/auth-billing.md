@@ -32,7 +32,7 @@ and invalidates the auth cache after rotating.
 ## Plans
 
 One `plan` column on `customers`: `free`, `pro`, `admin`. It controls rate limits
-(free 5/min, pro 120/min, admin unlimited), premium lookups (screenshot, reputation,
+(free 5/min, pro 120/min, admin unlimited), premium lookups (reputation,
 threat_intel), and admin routes via `RequireAdmin()`. Free plan: 1 domain per request; pro:
 20. The lookup→plan tables live with the handlers (see the lookups rule), not here.
 

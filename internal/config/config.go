@@ -87,7 +87,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.ttl.headers", "30m")
 	v.SetDefault("cache.ttl.reputation", "30m")
 	v.SetDefault("cache.ttl.threat_intel", "30m")
-	v.SetDefault("cache.ttl.screenshot", "60m")
 	// IP lookups. geo is absent deliberately: it reads a local mmap and is
 	// never cached, so a TTL would be meaningless.
 	v.SetDefault("cache.ttl.asn", "24h")
@@ -95,21 +94,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.ttl.abuse_contact", "24h")
 	v.SetDefault("auth.cache_ttl", "5m")
 	v.SetDefault("auth.rotation_grace", "24h")
-	// One capture at a time by default. Each in-process Chromium wants roughly
-	// half a gigabyte, so the previous default of 4 could exhaust a machine
-	// sized for the API and take the whole process down with it. Raise it only
-	// alongside memory, or when a hosted provider removes the local cost.
-	v.SetDefault("screenshot.max_concurrent", 1)
-	v.SetDefault("screenshot.provider", "chromium")
 	v.SetDefault("subdomain.http_timeout", "15s")
 	v.SetDefault("ct_logs.http_timeout", "15s")
 	v.SetDefault("billing.cleanup_interval", "10m")
 	v.SetDefault("auth.last_used_buffer_size", 256)
 	v.SetDefault("auth.last_used_flush_interval", "10s")
-	// A cold Chromium on a small shared-CPU machine regularly needs more than
-	// 15s just to reach the point of announcing its DevTools endpoint, so the
-	// old default failed captures that would otherwise have succeeded.
-	v.SetDefault("screenshot.timeout", "45s")
 	v.SetDefault("domain.max_domains.free", 1)
 	v.SetDefault("domain.max_domains.pro", 20)
 	v.SetDefault("subdomain.max_results", 500)
@@ -146,7 +135,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.shutdown_timeout", "15s")
 	v.SetDefault("server.body_limit", 1048576) // 1 MB
 	v.SetDefault("domain.lookup_timeout", "30s")
-	v.SetDefault("screenshot.max_png_bytes", 5242880)      // 5 MB
 	v.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
 	v.SetDefault("alerts.max_concurrent_sends", 5)
 	v.SetDefault("alerts.max_window_size", 1000)

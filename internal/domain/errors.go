@@ -103,7 +103,7 @@ func IsExpectedError(err error) bool {
 	// Certificate *verification* failures are deliberately NOT expected.
 	//
 	// Everything that touches an arbitrary target domain — LookupSSL, and the
-	// headers and screenshot lookups via safeTransport — sets
+	// headers lookup via safeTransport — sets
 	// InsecureSkipVerify, precisely so it can inspect expired and self-signed
 	// certificates. So an x509 error cannot come from a target. It can only
 	// come from trustedTransport, which is used solely for crt.sh, RDAP,

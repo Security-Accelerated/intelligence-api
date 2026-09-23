@@ -45,8 +45,7 @@ checklist is in the `adding-features` skill.
 
 `app.go` builds every collaborator from config and injects it. Collaborators with a real
 second implementation are interfaces (`cache.Cache`, `notifications.Notifier`,
-`usage.Recorder`, `billing.Service`, `domain.ThreatIntelProvider`,
-`domain.ScreenshotProvider`); each has a `Name()` where several can run, one method for
+`usage.Recorder`, `billing.Service`, `domain.ThreatIntelProvider`); each has a `Name()` where several can run, one method for
 the work, construction chosen here from config, and **an unknown name is a startup error**,
 never a silent fallback. Lookups with one implementation are function fields, swapped in
 tests via `SetLookups()` and per-feature setters — do not wrap those in interfaces.

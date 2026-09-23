@@ -46,7 +46,7 @@ func TestGetUsage_DefaultDays(t *testing.T) {
 		AvgLatencyMs:   500.0,
 		TotalDomains:   150,
 		StatusCodes:    map[string]int{"200": 90, "400": 10},
-		FeatureUsage:   map[string]int{"screenshot": 5},
+		FeatureUsage:   map[string]int{"reputation": 5},
 		RequestsByPath: map[string]int{"/v1/domain/lookup": 95},
 		PeriodStart:    time.Now().AddDate(0, 0, -30),
 		PeriodEnd:      time.Now(),

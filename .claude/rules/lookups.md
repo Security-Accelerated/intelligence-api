@@ -59,10 +59,9 @@ client that does not use those transports is a bug.
 
 ## Lookup-specific facts
 
-- **Screenshot** — behind `domain.ScreenshotProvider` (`Name`, `Capture`).
-  `ChromiumProvider` is the only implementation; `screenshot.provider` selects it and an
-  unknown name fails startup. `DomainService.SetScreenshotProvider` wires it; the
-  `lookupScreenshot` function field stays for tests.
+- **Screenshot** — removed before v1.0; `screenshot` is an unknown lookup (400). In-process
+  Chromium could not start inside its budget on a small machine. #110 tracks bringing it
+  back on a hosted provider, and `git revert` of the removal restores the code.
 - **Risk** — `internal/domain/risk.go`, `ComputeRiskScore`: weighted 0–100 from whatever is
   present (threat_intel 0.35, reputation 0.25, ssl / security_headers / email_security /
   domain_age 0.10 each), weights renormalized over present components. Runs as

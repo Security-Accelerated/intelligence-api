@@ -43,7 +43,6 @@ var lookupMinPlan = map[string]string{
 	domain.LookupFingerprintName:   planFree,
 	domain.LookupDNSSecurityName:   planFree,
 	domain.LookupRiskName:          planFree,
-	domain.LookupScreenshotName:    planPro,
 	domain.LookupReputationName:    planPro,
 	domain.LookupThreatIntelName:   planPro,
 }

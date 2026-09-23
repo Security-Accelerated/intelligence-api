@@ -179,9 +179,6 @@ func Run(logger *zap.Logger, version string) error {
 	logger.Info("threat intelligence providers loaded", zap.Any("config", status.Services.ThreatIntel))
 
 	// Set configurable limits on domain package vars before constructing the service.
-	if v := cfg.GetInt("screenshot.max_png_bytes"); v > 0 {
-		domain.DefaultMaxPNGBytes = v
-	}
 	if v := cfg.GetInt64("subdomain.max_response_bytes"); v > 0 {
 		domain.MaxResponseBody = v
 	}
@@ -192,13 +189,7 @@ func Run(logger *zap.Logger, version string) error {
 		domain.CTLogsHTTPTimeout = v
 	}
 
-	screenshotProvider, err := domain.NewScreenshotProvider(cfg.GetString("screenshot.provider"))
-	if err != nil {
-		return err
-	}
-
-	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetDuration("screenshot.timeout"), cfg.GetInt("screenshot.max_concurrent"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
-	domainService.SetScreenshotProvider(screenshotProvider)
+	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
 
 	// Billing
 	billingRepo := billing.NewRepository(db)
