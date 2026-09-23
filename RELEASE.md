@@ -32,11 +32,15 @@ Any of these failing stops the release. Do not release around a dirty tree.
    change; there are no direct pushes to `main`. `changelog.yaml` at the root is a symlink
    to `internal/handler/changelog.yaml`; edit it from the root. Copy the shape of the
    entry above it. Every change carries an `audience`:
-   - `public` — renders in "What's New" on `/docs`, `/docs/domain`, `/docs/ip`
-   - `internal` — admin endpoint only (`GET /v1/admin/changelog`)
+   - `public` — renders on `/docs/changelog`. Describe what a caller sees; no config
+     keys, admin endpoints, infrastructure, or upstream feed names (say "threat
+     intelligence feeds", not the provider)
+   - `internal` — not rendered on the docs. It is still public: the file is in a public
+     repo and `GET /v1/admin/changelog` returns everything
 
    When unsure which a change is, **ask**. Guessing `public` puts internal reasoning on a
-   customer-facing page.
+   customer-facing page. Public entries are never flipped or deleted later; when a
+   release reverses one, add "superseded in vX" to it.
 
    The entry goes in before the tag. Tag first and the deploy builds a version whose notes
    do not exist yet.
