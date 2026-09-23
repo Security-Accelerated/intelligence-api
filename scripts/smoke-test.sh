@@ -491,8 +491,8 @@ fi
 
 echo "=== IP Lookup — Auth ==="
 
-# Several checks below assert on geo/asn content, which needs the MaxMind
-# databases. When they are absent every one of those checks fails as an opaque
+# Several checks below assert on geo content, which needs the GeoIP database.
+# When it is absent every one of those checks fails as an opaque
 # "jq filter failed", which says nothing about the cause. Ask /v1/health once and
 # say so plainly instead.
 #
@@ -509,12 +509,12 @@ geoip_state=$(curl -s -m 10 "$HOST/v1/health" 2>/dev/null | jq -r '.components.g
 geoip_state=${geoip_state:-unreachable}
 
 if [ "$geoip_state" != "ok" ]; then
-    printf "  \033[31m✗\033[0m GeoIP databases are not loaded (/v1/health geoip=%s)\n" "$geoip_state"
-    printf "      The geo/asn content checks below will fail as a result.\n"
-    printf "      Locally: set MAXMIND_LICENSE_KEY in .env and restart — the app downloads on boot.\n"
-    printf "      Deployed: check startup logs, or POST %s/v1/admin/geoip/refresh to force it.\n" "$HOST"
+    printf "  \033[31m✗\033[0m GeoIP database is not loaded (/v1/health geoip=%s)\n" "$geoip_state"
+    printf "      The geo content checks below will fail as a result.\n"
+    printf "      The app downloads it on boot (no key needed) — check startup logs for the download.\n"
+    printf "      To force it: POST %s/v1/admin/geoip/refresh with an admin key.\n" "$HOST"
     fail=$((fail + 1))
-    errors+=("GeoIP databases not loaded (geoip=$geoip_state) — geo/asn checks cannot pass")
+    errors+=("GeoIP database not loaded (geoip=$geoip_state) — geo checks cannot pass")
 fi
 
 IP='{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
@@ -573,7 +573,8 @@ check_json "IP response has abuse_contact" '.results[0].abuse_contact != null' \
     -d '{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
 
 echo "=== GeoIP Admin ==="
-# Note: admin success test omitted — refresh downloads from MaxMind (requires real license key)
+# Note: admin success test omitted — a refresh re-downloads the ~60 MB database,
+# which a smoke run has no business doing against a live deployment.
 post 403 "refresh (pro, forbidden)" /v1/admin/geoip/refresh "$PRO" '{}'
 post 401 "refresh (no key)" /v1/admin/geoip/refresh "" '{}'
 

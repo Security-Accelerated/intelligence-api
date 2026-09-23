@@ -21,8 +21,8 @@ import (
 func okGeo(net.IP) (*domain.GeoIPInfo, error) {
 	return &domain.GeoIPInfo{Country: "United States", CountryCode: "US", City: "Mountain View"}, nil
 }
-func okASN(net.IP) (*domain.IPASNInfo, error) {
-	return &domain.IPASNInfo{ASN: 15169, Organization: "GOOGLE"}, nil
+func okASN(context.Context, net.IP) (*domain.IPASNInfo, error) {
+	return &domain.IPASNInfo{ASN: 15169, Organization: "GOOGLE", Network: "8.8.8.0/24"}, nil
 }
 func okReverseDNS(context.Context, string) (*domain.ReverseDNSInfo, error) {
 	return &domain.ReverseDNSInfo{Hostnames: []string{"dns.google"}}, nil
@@ -39,6 +39,7 @@ func failReverseDNS(context.Context, string) (*domain.ReverseDNSInfo, error) {
 }
 
 var testIPTTLs = map[string]time.Duration{
+	domain.LookupASNName:          24 * time.Hour,
 	domain.LookupReverseDNSName:   6 * time.Hour,
 	domain.LookupAbuseContactName: 24 * time.Hour,
 	domain.LookupThreatIntelName:  35 * time.Minute,
@@ -120,21 +121,19 @@ func TestIPLookup_KeyspaceIsSeparateFromDomains(t *testing.T) {
 	}
 }
 
-// --- geo and asn are never cached ---
+// --- geo is never cached; asn is ---
 
-func TestIPLookup_GeoAndASNAreNeverCached(t *testing.T) {
+func TestIPLookup_GeoIsNeverCached(t *testing.T) {
 	mc := newMockCache()
 	svc := newTestIPService(mc)
 
-	resp, _ := svc.Lookup(context.Background(), testIP, ipOpts(domain.LookupGeoName, domain.LookupASNName))
+	resp, _ := svc.Lookup(context.Background(), testIP, ipOpts(domain.LookupGeoName))
 
-	if resp.Geo == nil || resp.ASN == nil {
-		t.Fatal("expected geo and asn to be populated")
+	if resp.Geo == nil {
+		t.Fatal("expected geo to be populated")
 	}
-	for _, name := range []string{domain.LookupGeoName, domain.LookupASNName} {
-		if mc.has(ipKey(testIP, name)) {
-			t.Errorf("%s must never be cached — it is a local mmap read", name)
-		}
+	if mc.has(ipKey(testIP, domain.LookupGeoName)) {
+		t.Error("geo must never be cached — it is a local mmap read")
 	}
 	if mc.sets() != 0 {
 		t.Errorf("cache writes = %d, want 0", mc.sets())
@@ -145,7 +144,36 @@ func TestIPLookup_GeoAndASNAreNeverCached(t *testing.T) {
 	}
 }
 
-func TestIPLookup_GeoAndASNAlwaysReportCacheMiss(t *testing.T) {
+// asn is a DNS query to Team Cymru, so unlike geo it is cached with its own
+// TTL and the second request is served from cache.
+func TestIPLookup_ASNIsCached(t *testing.T) {
+	mc := newMockCache()
+	svc := newTestIPService(mc)
+
+	var calls int
+	svc.lookupASN = func(ctx context.Context, ip net.IP) (*domain.IPASNInfo, error) {
+		calls++
+		return okASN(ctx, ip)
+	}
+
+	svc.Lookup(context.Background(), testIP, ipOpts(domain.LookupASNName))
+	resp, _ := svc.Lookup(context.Background(), testIP, ipOpts(domain.LookupASNName))
+
+	if calls != 1 {
+		t.Errorf("asn lookup ran %d times, want 1 — the second request should hit the cache", calls)
+	}
+	if resp.ASN == nil || !resp.ASN.CacheHit {
+		t.Fatalf("asn = %+v, want a cache hit", resp.ASN)
+	}
+	if resp.ASN.Network != "8.8.8.0/24" {
+		t.Errorf("cached asn network = %q, want 8.8.8.0/24", resp.ASN.Network)
+	}
+	if got := mc.ttl(ipKey(testIP, domain.LookupASNName)); got != 24*time.Hour {
+		t.Errorf("asn TTL = %v, want 24h", got)
+	}
+}
+
+func TestIPLookup_GeoAlwaysReportsCacheMiss(t *testing.T) {
 	svc := newTestIPService(newMockCache())
 
 	// Twice — an uncached lookup can never become a hit.
@@ -469,23 +497,25 @@ func TestNewIPService_Defaults(t *testing.T) {
 	if svc.alerter == nil {
 		t.Error("expected a non-nil alerter")
 	}
-	if svc.lookupGeo != nil || svc.lookupASN != nil {
-		t.Error("expected geo/asn to stay nil without a reader")
+	if svc.lookupGeo != nil {
+		t.Error("expected geo to stay nil without a reader")
+	}
+	if svc.lookupASN == nil {
+		t.Error("expected asn to be wired without a reader — it does not use one")
 	}
 	if got := svc.ttlFor(domain.LookupReverseDNSName); got != time.Minute {
 		t.Errorf("ttlFor = %v, want the default 1m", got)
 	}
 }
 
-func TestIPLookup_NilGeoReaderSkipsGeoAndASN(t *testing.T) {
+func TestIPLookup_NilGeoReaderSkipsGeo(t *testing.T) {
 	svc := newTestIPService(newMockCache())
 	svc.lookupGeo = nil
-	svc.lookupASN = nil
 
-	resp, stats := svc.Lookup(context.Background(), testIP, ipOpts(domain.LookupGeoName, domain.LookupASNName))
+	resp, stats := svc.Lookup(context.Background(), testIP, ipOpts(domain.LookupGeoName))
 
-	if resp.Geo != nil || resp.ASN != nil {
-		t.Error("expected no geo/asn without a reader")
+	if resp.Geo != nil {
+		t.Error("expected no geo without a reader")
 	}
 	// Requested but unrunnable still counts as a miss, not a hit.
 	if stats.Hits != 0 {

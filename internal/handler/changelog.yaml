@@ -15,7 +15,13 @@
   changes:
     - text: "The docs describe what each lookup returns, not which upstream feeds answer it: feed names, blocklist names, and threat-intel weightings are gone from the prose on /docs/domain and /docs/ip (#91). Response fields that carry a provider or source value are unchanged, so the examples still show them"
       audience: internal
-    - text: "/docs/ip carries the GeoLite attribution line the MaxMind EULA requires, in the page footer rather than in the geo and asn descriptions"
+    - text: "BREAKING: `geo` no longer returns `postal_code`, `region_code`, `timezone`, or `accuracy_radius`. All four were optional; the geolocation source now in use does not provide them, so they were removed rather than documented as always absent"
+      audience: public
+    - text: "`asn` now includes `network`, the announced prefix containing the address (for example `8.8.8.0/24`), and works for IPv6 as well as IPv4. `organization` now carries the registered AS handle and name, for example `GOOGLE - Google LLC` where it was `GOOGLE`. It is cached for 24 hours like the other network lookups, so repeat requests report `cache_hit: true`"
+      audience: public
+    - text: "MaxMind GeoLite2 is gone. Its EULA requires written consent before disclosing the data to third parties, which a paid API does. `geo` now reads DB-IP Lite City (CC BY 4.0, attribution in the /docs/ip footer), streamed from the monthly .mmdb.gz over trustedTransport with a fallback to the previous month before the new one is published. `asn` now queries Team Cymru DNS through the helpers `bgp` already used, gaining IPv6 (origin6 nibble names) and the prefix MaxMind's reader never exposed"
+      audience: internal
+    - text: "Config moves from maxmind.* to geoip.* (geoip.db_path /data/geoip, geoip.city_db dbip-city-lite.mmdb, geoip.max_age 720h); MAXMIND_LICENSE_KEY is retired and the download needs no key. New cache.ttl.asn (24h). The Fly volume keeps its maxmind_data name but mounts at /data/geoip. The old download buffered the whole database in memory and used a bare http.Client outside safenet; the new one streams to disk through trustedTransport"
       audience: internal
     - text: "Pre-1.0 release notes stay public instead of being flipped to internal (#51 reversed). The public set was curated instead: v0.9.0 claimed Google Safe Browsing and PhishTank, which never shipped, and now names what did; reversed entries carry a \"superseded in vX\" note; feed names became generic terms; config keys, admin endpoints and infrastructure detail were dropped from public text; and the v0.65.0 screenshot.timeout entry moved to internal"
       audience: internal

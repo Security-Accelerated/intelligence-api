@@ -35,13 +35,14 @@ expires on its own schedule.
 serving a stale failure to someone who would have gotten a good answer — for a saving that
 per-lookup TTLs already deliver.
 
-### `geo` and `asn` are never cached
+### `geo` is never cached
 
-**Decision.** Their runners set `uncached`, so they are excluded from the MGET pre-flight,
-never written back, and always report `cache_hit: false`.
+**Decision.** Its runner sets `uncached`, so it is excluded from the MGET pre-flight,
+never written back, and always reports `cache_hit: false`. `asn` was uncached too until it
+moved to Team Cymru DNS; as a network lookup it is now cached for 24h like `bgp`.
 
-**Why.** They read a local MaxMind mmap. A Redis round trip costs more than recomputing
-them. The old whole-document cache only stored them because they shared a key with RDAP.
+**Why.** It reads a local mmap. A Redis round trip costs more than recomputing it. The old
+whole-document cache only stored it because it shared a key with RDAP.
 
 **Instead of.** Caching them for consistency with every other lookup. Consistency is not
 the goal; latency is, and here the cache is the slow path. This also deleted the "skip
@@ -350,6 +351,26 @@ procedure drift, and the one you are not looking at is the one that is wrong.
 **Instead of.** Folding them in for a single operator entry point, which is a real
 convenience and the reason it was tried once already. If the CLI should run them, it should
 shell out to the scripts rather than reimplement them.
+
+### GeoIP comes from DB-IP Lite and Team Cymru, not MaxMind
+
+**Decision.** `geo` uses the DB-IP Lite City database (CC BY 4.0), downloaded monthly;
+`asn` uses Team Cymru's IP-to-ASN DNS service. `/docs/ip` carries the DB-IP attribution.
+
+**Why.** The MaxMind GeoLite EULA grants an internal-use license and requires MaxMind's
+written consent before the data is disclosed to third parties. Returning it from a paid API
+is disclosure. CC BY 4.0 explicitly allows commercial use and redistribution with a link
+back. Cymru publishes no restrictions and was already behind the domain `bgp` lookup, so
+`asn` gained no dependency — and gained the `network` prefix, which the MaxMind reader
+never exposed.
+
+**Cost.** DB-IP Lite is less accurate than GeoLite and has no postal code, timezone,
+accuracy radius, or subdivision code; those fields left the response rather than being
+documented as always-absent. `asn` is now a DNS round trip on a cache miss instead of an
+mmap read.
+
+**Instead of.** A commercial GeoIP2 license, which keeps accuracy at a recurring cost that
+is hard to justify before launch. Revisit if customers need finer geolocation.
 
 ### The Fly volume is chowned by the entrypoint, running as root then dropping
 

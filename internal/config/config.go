@@ -88,8 +88,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.ttl.reputation", "30m")
 	v.SetDefault("cache.ttl.threat_intel", "30m")
 	v.SetDefault("cache.ttl.screenshot", "60m")
-	// IP lookups. geo and asn are absent deliberately: they read a local
-	// MaxMind mmap and are never cached, so a TTL would be meaningless.
+	// IP lookups. geo is absent deliberately: it reads a local mmap and is
+	// never cached, so a TTL would be meaningless.
+	v.SetDefault("cache.ttl.asn", "24h")
 	v.SetDefault("cache.ttl.reverse_dns", "6h")
 	v.SetDefault("cache.ttl.abuse_contact", "24h")
 	v.SetDefault("auth.cache_ttl", "5m")
@@ -149,13 +150,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("subdomain.max_response_bytes", 10485760) // 10 MB
 	v.SetDefault("alerts.max_concurrent_sends", 5)
 	v.SetDefault("alerts.max_window_size", 1000)
-	v.SetDefault("maxmind.license_key", "")
-	v.SetDefault("maxmind.db_path", "/data/maxmind")
-	v.SetDefault("maxmind.city_db", "GeoLite2-City.mmdb")
-	v.SetDefault("maxmind.asn_db", "GeoLite2-ASN.mmdb")
-	// MaxMind publishes GeoLite2 updates twice a week. Refresh anything older
-	// than this at startup; 0 disables the check and pins whatever is on disk.
-	v.SetDefault("maxmind.max_age", "168h")
+	v.SetDefault("geoip.db_path", "/data/geoip")
+	v.SetDefault("geoip.city_db", "dbip-city-lite.mmdb")
+	// DB-IP publishes Lite releases monthly. Refresh anything older than this
+	// at startup; 0 disables the check and pins whatever is on disk.
+	v.SetDefault("geoip.max_age", "720h")
 	v.SetDefault("ip.lookup_timeout", "30s")
 	v.SetDefault("ip.max_ips.free", 1)
 	v.SetDefault("ip.max_ips.pro", 20)

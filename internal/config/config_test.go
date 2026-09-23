@@ -42,9 +42,10 @@ func TestConfig_Defaults(t *testing.T) {
 		{"ip.lookup_timeout", "30s"},
 		{"ip.max_ips.free", 1},
 		{"ip.max_ips.pro", 20},
-		{"maxmind.db_path", "/data/maxmind"},
-		{"maxmind.city_db", "GeoLite2-City.mmdb"},
-		{"maxmind.asn_db", "GeoLite2-ASN.mmdb"},
+		{"geoip.db_path", "/data/geoip"},
+		{"geoip.city_db", "dbip-city-lite.mmdb"},
+		{"geoip.max_age", "720h"},
+		{"cache.ttl.asn", "24h"},
 		{"postgres.sslmode", "require"},
 		{"screenshot.provider", "chromium"},
 	}

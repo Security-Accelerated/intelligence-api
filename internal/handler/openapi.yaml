@@ -103,8 +103,7 @@ paths:
 
         Results are returned in a `results` envelope, one element per unique
         canonicalized IP. Match results by the `ip` field rather than by array
-        position. `geo` and `asn` are never cached, so their `cache_hit` is
-        always false.
+        position. `geo` is never cached, so its `cache_hit` is always false.
 
         Private, loopback, link-local, multicast, and other non-globally-routable
         addresses are rejected.
@@ -1148,21 +1147,13 @@ components:
           type: string
         region:
           type: string
-        region_code:
-          type: string
+          description: First-level subdivision name (state/province).
         city:
-          type: string
-        postal_code:
           type: string
         latitude:
           type: number
         longitude:
           type: number
-        timezone:
-          type: string
-        accuracy_radius:
-          type: integer
-          description: Accuracy radius in kilometers.
     IPASNInfo:
       type: object
       properties:
@@ -1173,8 +1164,10 @@ components:
           type: integer
         organization:
           type: string
+          description: Registered name of the AS; omitted when it has none.
         network:
           type: string
+          description: Announced prefix containing the address, in CIDR notation.
       required:
         - asn
     ReverseDNSInfo:

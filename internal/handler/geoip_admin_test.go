@@ -13,18 +13,17 @@ import (
 )
 
 type mockGeoRefresher struct {
-	err    error
-	result *domain.RefreshResult
+	err     error
+	gotPath string
+	gotCity string
 }
 
-func (m *mockGeoRefresher) DownloadAndReload(_ context.Context, _, _, _, _ string) (*domain.RefreshResult, error) {
+func (m *mockGeoRefresher) DownloadAndReload(_ context.Context, dbPath, cityFile string) (*domain.RefreshResult, error) {
+	m.gotPath, m.gotCity = dbPath, cityFile
 	if m.err != nil {
 		return nil, m.err
 	}
-	if m.result != nil {
-		return m.result, nil
-	}
-	return &domain.RefreshResult{CitySize: 1000, ASNSize: 500, CityHash: "abc", ASNHash: "def"}, nil
+	return &domain.RefreshResult{Release: "2026-09", Size: 1000, SHA256: "abc"}, nil
 }
 
 func newGeoIPAdminRouter(refresher GeoIPRefresher, cfg *viper.Viper) *gin.Engine {
@@ -38,16 +37,20 @@ func newGeoIPAdminRouter(refresher GeoIPRefresher, cfg *viper.Viper) *gin.Engine
 
 func TestRefreshGeoIP_Success(t *testing.T) {
 	cfg := viper.New()
-	cfg.Set("maxmind.license_key", "test-key")
-	cfg.Set("maxmind.db_path", "/tmp/test")
+	cfg.Set("geoip.db_path", "/tmp/test")
+	cfg.Set("geoip.city_db", "city.mmdb")
 
-	r := newGeoIPAdminRouter(&mockGeoRefresher{}, cfg)
+	m := &mockGeoRefresher{}
+	r := newGeoIPAdminRouter(m, cfg)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", http.NoBody)
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if m.gotPath != "/tmp/test" || m.gotCity != "city.mmdb" {
+		t.Errorf("refresh got path %q file %q, want the configured /tmp/test and city.mmdb", m.gotPath, m.gotCity)
 	}
 }
 
@@ -62,26 +65,8 @@ func TestRefreshGeoIP_NoRefresher(t *testing.T) {
 	}
 }
 
-func TestRefreshGeoIP_NoLicenseKey(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("maxmind.license_key", "")
-
-	r := newGeoIPAdminRouter(&mockGeoRefresher{}, cfg)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", http.NoBody)
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
-	}
-}
-
 func TestRefreshGeoIP_RefreshError(t *testing.T) {
-	cfg := viper.New()
-	cfg.Set("maxmind.license_key", "test-key")
-	cfg.Set("maxmind.db_path", "/tmp/test")
-
-	r := newGeoIPAdminRouter(&mockGeoRefresher{err: errors.New("download failed")}, cfg)
+	r := newGeoIPAdminRouter(&mockGeoRefresher{err: errors.New("download failed")}, viper.New())
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/admin/geoip/refresh", http.NoBody)
 	r.ServeHTTP(w, req)

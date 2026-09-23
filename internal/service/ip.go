@@ -21,7 +21,7 @@ type IPService struct {
 	alerter         notifications.ErrorRecorder
 
 	lookupGeo          func(ip net.IP) (*domain.GeoIPInfo, error)
-	lookupASN          func(ip net.IP) (*domain.IPASNInfo, error)
+	lookupASN          func(ctx context.Context, ip net.IP) (*domain.IPASNInfo, error)
 	lookupReverseDNS   func(ctx context.Context, ip string) (*domain.ReverseDNSInfo, error)
 	lookupAbuseContact func(ctx context.Context, ip string) (*domain.AbuseContactInfo, error)
 	lookupThreatIntel  func(ctx context.Context, ip string) (*domain.ThreatIntelInfo, []domain.LookupError)
@@ -30,8 +30,8 @@ type IPService struct {
 // NewIPService wires an IPService to its real lookup implementations.
 //
 // defaultCacheTTL covers any lookup without an entry in cacheTTLs. geoReader
-// may be an empty reader — GeoIP lookups then report ErrDBNotLoaded until the
-// databases are bootstrapped via the admin refresh endpoint.
+// may be an empty reader — geo then reports ErrDBNotLoaded until the database
+// download lands. A nil geoReader leaves geo unwired; asn never needs it.
 func NewIPService(
 	c cache.Cache,
 	defaultCacheTTL time.Duration,
@@ -54,6 +54,7 @@ func NewIPService(
 		cacheTTLs:          cacheTTLs,
 		lookupTimeout:      lookupTimeout,
 		alerter:            alerter,
+		lookupASN:          domain.LookupIPASN,
 		lookupReverseDNS:   domain.LookupReverseDNS,
 		lookupAbuseContact: domain.LookupAbuseContact,
 		lookupThreatIntel: func(ctx context.Context, ip string) (*domain.ThreatIntelInfo, []domain.LookupError) {
@@ -63,7 +64,6 @@ func NewIPService(
 
 	if geoReader != nil {
 		svc.lookupGeo = geoReader.LookupGeo
-		svc.lookupASN = geoReader.LookupASN
 	}
 
 	return svc
@@ -73,7 +73,7 @@ func NewIPService(
 // happens in NewIPService.
 func (s *IPService) SetLookups(
 	geo func(net.IP) (*domain.GeoIPInfo, error),
-	asn func(net.IP) (*domain.IPASNInfo, error),
+	asn func(context.Context, net.IP) (*domain.IPASNInfo, error),
 	rdns func(context.Context, string) (*domain.ReverseDNSInfo, error),
 	abuse func(context.Context, string) (*domain.AbuseContactInfo, error),
 	ti func(context.Context, string) (*domain.ThreatIntelInfo, []domain.LookupError),
@@ -113,10 +113,11 @@ type ipLookupData struct {
 
 // buildRunners returns a runner for every requested lookup.
 //
-// geo and asn are marked uncached: they read a local MaxMind mmap, so a Redis
-// round trip would cost more than simply doing the lookup again. Their
-// cache_hit is therefore always false, which is honest — the data was computed
-// fresh for this request.
+// geo is marked uncached: it reads a local mmap, so a Redis round trip would
+// cost more than simply doing the lookup again. Its cache_hit is therefore
+// always false, which is honest — the data was computed fresh for this
+// request. asn is a DNS query to Team Cymru and is cached like any other
+// network lookup.
 func (s *IPService) buildRunners(st *runState, d *ipLookupData, opts domain.IPLookupOptions, parsed net.IP) []lookupRunner {
 	var runners []lookupRunner
 
@@ -127,10 +128,8 @@ func (s *IPService) buildRunners(st *runState, d *ipLookupData, opts domain.IPLo
 		runners = append(runners, r)
 	}
 	if opts.Has(domain.LookupASNName) && s.lookupASN != nil && parsed != nil {
-		r := simpleRunner(s.alerter, st, domain.LookupASNName, &d.asn,
-			func(context.Context) (*domain.IPASNInfo, error) { return s.lookupASN(parsed) })
-		r.uncached = true
-		runners = append(runners, r)
+		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupASNName, &d.asn,
+			func(ctx context.Context) (*domain.IPASNInfo, error) { return s.lookupASN(ctx, parsed) }))
 	}
 	if opts.Has(domain.LookupReverseDNSName) && s.lookupReverseDNS != nil {
 		runners = append(runners, simpleRunner(s.alerter, st, domain.LookupReverseDNSName, &d.reverseDNS,

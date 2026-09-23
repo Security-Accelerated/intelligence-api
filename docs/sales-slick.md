@@ -59,7 +59,7 @@ Verify a domain's DNS is cryptographically signed (DS records at the parent, DNS
 One weighted 0–100 score across everything you requested — threat intelligence, reputation, certificate health, security headers, email authentication, and domain age — graded `none`, `low`, `medium`, `high`, or `critical` on the same thresholds as threat intelligence. (The per-provider reputation score above is separate and uses its own `clean`/`low`/`medium`/`high` scale.) Costs no extra network call and reweights itself over whichever lookups you actually asked for, so you get a single comparable number instead of interpreting eight result sets by hand.
 
 ### IP Intelligence
-Profile any public IP address with a single call. Get geolocation (country, city, coordinates), ASN ownership, reverse DNS hostnames, and abuse contact information via RDAP. Add threat intelligence to check if an IP is associated with known malicious activity across VirusTotal, URLhaus, and AlienVault OTX. Powered by MaxMind GeoLite2 databases with hot-reload support.
+Profile any public IP address with a single call. Get geolocation (country, region, city, coordinates), ASN ownership with the announced prefix, reverse DNS hostnames, and abuse contact information via RDAP. Add threat intelligence to check if an IP is associated with known malicious activity across multiple threat intelligence feeds.
 
 ---
 

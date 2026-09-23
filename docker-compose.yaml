@@ -10,15 +10,11 @@ services:
       - "8080:8080"
     environment:
       POSTGRES_SSLMODE: disable
-      # Read from .env by Compose. With a key present the app downloads the
-      # MaxMind databases on first boot and persists them to ./data/maxmind
-      # (gitignored), so local dev matches production instead of leaving geo
-      # and asn permanently unavailable. Without one the app logs a warning and
-      # those two lookups stay unavailable — everything else works.
-      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:-}
     volumes:
       - /etc/security-accelerated/intelligence-api.yaml:/etc/security-accelerated/intelligence-api.yaml:ro
-      - ./data/maxmind:/data/maxmind
+      # The app downloads the GeoIP database on first boot (no key needed) and
+      # persists it here (gitignored), so local dev matches production.
+      - ./data/geoip:/data/geoip
     depends_on:
       redis:
         condition: service_healthy

@@ -83,16 +83,20 @@ client that does not use those transports is a bug.
   critical. Built conditionally in `app.go`: URLhaus always, VT and OTX when
   `THREAT_INTEL_VIRUSTOTAL_API_KEY` / `THREAT_INTEL_ALIENVAULT_API_KEY` are set. Pro/admin
   only.
-- **IP intelligence** — `GeoIPReader` holds MaxMind City + ASN behind `sync.RWMutex` with
-  atomic `Reload()`; `DownloadAndReload()` fetches with `MAXMIND_LICENSE_KEY`. `ip_rdns.go`
-  does PTR via `domain.Resolver()`; `ip_rdap.go` queries `rdap.org/ip/` for abuse contacts.
-  `ip_threatintel.go` defines `IPThreatIntelProvider` and the adapters (`VTIPProvider`,
-  `URLhausIPProvider`, `OTXIPProvider`) that wrap the domain providers, sharing their
-  clients and limiters. `internal/app/geoip.go` opens databases at startup and downloads
-  in the background when missing, unreadable, or older than `maxmind.max_age` (168h) — the
-  ~80MB download must never block the listener. `planGeoIP` isolates the load/download
-  decision so it is testable without network. Config: `MAXMIND_LICENSE_KEY`,
-  `MAXMIND_DB_PATH`, `IP_LOOKUP_TIMEOUT`, `IP_MAX_IPS_FREE` / `_PRO`.
+- **IP intelligence** — `GeoIPReader` holds the DB-IP Lite City database (GeoIP2 City
+  layout, CC BY 4.0) behind `sync.RWMutex` with atomic `Reload()`; `DownloadAndReload()`
+  streams the monthly `.mmdb.gz` over `trustedTransport`, falling back to the previous
+  month before the current one is published. **No MaxMind data** — its EULA forbids
+  disclosure to third parties (see `docs/decisions.md`). `asn` is `LookupIPASN`
+  (`ip_asn.go`), Team Cymru DNS via the same helpers as `bgp`, IPv4 and IPv6, cached 24h.
+  `ip_rdns.go` does PTR via `domain.Resolver()`; `ip_rdap.go` queries the regional RIR RDAP
+  endpoints for abuse contacts. `ip_threatintel.go` defines `IPThreatIntelProvider` and the
+  adapters (`VTIPProvider`, `URLhausIPProvider`, `OTXIPProvider`) that wrap the domain
+  providers, sharing their clients and limiters. `internal/app/geoip.go` opens the database
+  at startup and downloads in the background when missing, unreadable, or older than
+  `geoip.max_age` (720h) — the ~60MB download must never block the listener. `planGeoIP`
+  isolates the load/download decision so it is testable without network. Config:
+  `GEOIP_DB_PATH`, `IP_LOOKUP_TIMEOUT`, `IP_MAX_IPS_FREE` / `_PRO`.
 
 ## Error text
 

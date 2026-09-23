@@ -111,8 +111,9 @@ open the file.
 ## Infrastructure
 
 Docker Compose locally (API + Redis + Postgres). Production on Fly.io (iad, auto-stop) with
-Neon Postgres and Upstash Redis. A Fly volume `maxmind_data` at `/data/maxmind` persists
-the GeoIP databases; `docker-entrypoint.sh` chowns it as root then drops to `appuser`.
+Neon Postgres and Upstash Redis. A Fly volume `maxmind_data` (name predates DB-IP) at
+`/data/geoip` persists the GeoIP database; `docker-entrypoint.sh` chowns it as root then
+drops to `appuser`.
 Version is baked in via `-ldflags "-X main.version=..."`. GitHub Actions: `test.yml`,
 `docker.yml` (GHCR on push to `main`/tags), `fly-deploy.yml` (deploys on a `v*` tag;
 `workflow_dispatch` with a tag redeploys it — that is the rollback path), `uptime.yml`
