@@ -10,7 +10,7 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
-- version: v1.0.0
+- version: v0.75.0
   date: 2026-09-23
   changes:
     - text: "BREAKING: the `screenshot` lookup has been removed. Captures were not reliable enough to charge for, and a failed capture returned 200 with the reason in `errors`, so the failure was easy to miss. Asking for `screenshot` now returns 400 naming it as an unknown lookup. It is planned to return on a more reliable capture backend"
@@ -137,7 +137,7 @@
       audience: public
     - text: "/v1/usage and /v1/keys/rotate have a reference page of their own at /docs/account, with parameters, response fields, four-language examples, and the sequence for rotating a key without downtime. They are two of the four public endpoints and were the only two documented by a single table row"
       audience: public
-    - text: "Documented that screenshot captures run under a small service-wide concurrency cap and that a capture which does not start before the request deadline reports 'screenshot queue timed out, please retry' in errors. Unlike most lookup errors that one is worth retrying — it means the service was busy, not that the answer is unavailable (superseded in v1.0.0: the screenshot lookup was removed)"
+    - text: "Documented that screenshot captures run under a small service-wide concurrency cap and that a capture which does not start before the request deadline reports 'screenshot queue timed out, please retry' in errors. Unlike most lookup errors that one is worth retrying — it means the service was busy, not that the answer is unavailable (superseded in v0.75.0: the screenshot lookup was removed)"
       audience: public
     - text: "Both reference pages now show what a real upstream failure looks like: a valid target, a 200 response, and the failed lookup's field absent entirely rather than null. Requesting n lookups does not guarantee n fields, and code reaching straight for result.whois.registrar works in testing and throws the first time an upstream has a bad minute"
       audience: public
@@ -205,7 +205,7 @@
 - version: v0.65.0
   date: 2026-07-31
   changes:
-    - text: "Screenshots should start working again on small deployments. Captures were failing with a browser startup timeout, and because a failed lookup returns 200 with the reason in the errors array rather than an HTTP error, the failure was easy to miss entirely (superseded in v1.0.0: captures stayed unreliable and the screenshot lookup was removed)"
+    - text: "Screenshots should start working again on small deployments. Captures were failing with a browser startup timeout, and because a failed lookup returns 200 with the reason in the errors array rather than an HTTP error, the failure was easy to miss entirely (superseded in v0.75.0: captures stayed unreliable and the screenshot lookup was removed)"
       audience: public
     - text: "screenshot.timeout default raised from 15s to 45s. A cold Chromium on a small shared-CPU machine regularly needs longer than 15s just to announce its DevTools endpoint, so captures were failing before the browser had finished starting"
       audience: internal
@@ -831,9 +831,9 @@
 - version: v0.6.0
   date: 2026-02-15
   changes:
-    - text: "Added page screenshot capture via headless Chrome (removed in v1.0.0)"
+    - text: "Added page screenshot capture via headless Chrome (removed in v0.75.0)"
       audience: public
-    - text: "Screenshots available for pro and admin plans via screenshot option (removed in v1.0.0)"
+    - text: "Screenshots available for pro and admin plans via screenshot option (removed in v0.75.0)"
       audience: public
 
 - version: v0.3.0
