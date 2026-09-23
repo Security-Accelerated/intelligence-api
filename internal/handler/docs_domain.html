@@ -238,7 +238,7 @@
         <tr><td><code>risk</code></td><td>All</td><td>Weighted 0&ndash;100 aggregate risk score over the other lookups you requested. No network call, never cached &mdash; see <a href="#caching">Caching</a>.</td></tr>
         <tr><td><code>screenshot</code></td><td><span class="tag tag-pro">Pro</span></td><td>Capture a page screenshot.</td></tr>
         <tr><td><code>reputation</code></td><td><span class="tag tag-pro">Pro</span></td><td>Check domain against threat blocklists.</td></tr>
-        <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query threat intelligence feeds (VirusTotal, URLhaus, AlienVault OTX).</td></tr>
+        <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>Query multiple threat intelligence feeds.</td></tr>
       </tbody>
     </table>
   </div>
@@ -631,8 +631,6 @@ resp = requests.post(
   ]
 }</code></pre>
 
-  <h4>Providers</h4>
-  <p>The following blocklists are checked: Spamhaus DBL, SURBL, URIBL, and Spamhaus ZEN.</p>
 
   <h4>Risk Levels</h4>
   <div class="table-scroll">
@@ -782,7 +780,7 @@ resp = requests.post(
       <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
       <tbody>
         <tr><td><code>domain</code></td><td><code>string</code></td><td>The subdomain</td></tr>
-        <tr><td><code>source</code></td><td><code>string</code></td><td>Data source (<code>crt.sh</code>)</td></tr>
+        <tr><td><code>source</code></td><td><code>string</code></td><td>Where the subdomain was found</td></tr>
       </tbody>
     </table>
   </div>
@@ -921,7 +919,7 @@ resp = requests.post(
 
   <!-- threat_intel -->
   <h3 id="threat-intel"><code>threat_intel</code> -- Threat Intelligence <span class="tag tag-pro">Pro</span></h3>
-  <p>Queries external threat intelligence feeds concurrently and returns an aggregated risk assessment. Three providers are queried: <strong>VirusTotal</strong> (70+ antivirus engines), <strong>URLhaus</strong> (Abuse.ch malware URL database), and <strong>AlienVault OTX</strong> (community threat pulses).</p>
+  <p>Queries external threat intelligence feeds concurrently and returns an aggregated risk assessment.</p>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
@@ -976,7 +974,7 @@ resp = requests.post(
 }</code></pre>
 
   <h4>Scoring</h4>
-  <p>The aggregate score is a weighted average across providers: VirusTotal (50%), URLhaus (30%), AlienVault OTX (20%). Risk levels map from the aggregate score: 0 = none, 1--20 = low, 21--50 = medium, 51--80 = high, 81--100 = critical.</p>
+  <p>The aggregate score is a weighted average across providers. Risk levels map from the aggregate score: 0 = none, 1--20 = low, 21--50 = medium, 51--80 = high, 81--100 = critical.</p>
 
   <!-- dns_security -->
   <h3 id="dns-security"><code>dns_security</code> -- DNSSEC &amp; CAA</h3>
