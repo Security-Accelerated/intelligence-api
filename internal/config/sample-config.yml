@@ -39,8 +39,9 @@ cache:
     reputation: 30m
     threat_intel: 30m
     screenshot: 60m
-    # IP lookups. geo and asn are absent deliberately: they read a local MaxMind
-    # mmap and are never cached, so a TTL would be meaningless.
+    # IP lookups. geo is absent deliberately: it reads a local mmap and is
+    # never cached, so a TTL would be meaningless.
+    asn: 24h
     reverse_dns: 6h
     abuse_contact: 24h
 
@@ -120,14 +121,14 @@ ip:
     free: 1
     pro: 20
 
-maxmind:
-  license_key: ""
-  db_path: "/data/maxmind"
-  city_db: "GeoLite2-City.mmdb"
-  asn_db: "GeoLite2-ASN.mmdb"
-  # Databases older than this are re-downloaded in the background at startup.
-  # MaxMind publishes GeoLite2 updates twice a week. 0 disables the check.
-  max_age: "168h"
+# DB-IP Lite City (CC BY 4.0), downloaded in the background when missing or
+# stale. No key needed. The asn lookup uses Team Cymru DNS and needs no file.
+geoip:
+  db_path: "/data/geoip"
+  city_db: "dbip-city-lite.mmdb"
+  # A database older than this is re-downloaded in the background at startup.
+  # DB-IP publishes Lite releases monthly. 0 disables the check.
+  max_age: "720h"
 
 threat_intel:
   virustotal_api_key: ""

@@ -135,7 +135,6 @@ type UsageStatus struct {
 type GeoIPStatus struct {
 	Enabled bool   `json:"enabled"`
 	CityDB  string `json:"city_db"`
-	ASNDB   string `json:"asn_db"`
 	DBPath  string `json:"db_path"`
 }
 

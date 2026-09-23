@@ -138,6 +138,7 @@ var testCacheTTLs = map[string]time.Duration{
 	domain.LookupReputationName:    25 * time.Minute,
 	domain.LookupThreatIntelName:   35 * time.Minute,
 	domain.LookupDNSSecurityName:   6 * time.Hour,
+	domain.LookupASNName:           22 * time.Hour,
 	domain.LookupReverseDNSName:    6 * time.Hour,
 	domain.LookupAbuseContactName:  24 * time.Hour,
 }
@@ -320,8 +321,8 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		func(_ net.IP) (*domain.GeoIPInfo, error) {
 			return &domain.GeoIPInfo{Country: "United States", CountryCode: "US", City: "Mountain View", Latitude: 37.386, Longitude: -122.084}, nil
 		},
-		func(_ net.IP) (*domain.IPASNInfo, error) {
-			return &domain.IPASNInfo{ASN: 15169, Organization: "GOOGLE"}, nil
+		func(_ context.Context, _ net.IP) (*domain.IPASNInfo, error) {
+			return &domain.IPASNInfo{ASN: 15169, Organization: "GOOGLE", Network: "8.8.8.0/24"}, nil
 		},
 		func(_ context.Context, _ string) (*domain.ReverseDNSInfo, error) {
 			return &domain.ReverseDNSInfo{Hostnames: []string{"dns.google"}}, nil
@@ -1973,29 +1974,30 @@ func TestIntegration_IPLookup_Caching(t *testing.T) {
 		}
 	}
 
-	// Only the network-backed lookups get keys. geo and asn read a local
-	// MaxMind mmap, so caching them would cost more than recomputing.
-	for _, name := range []string{domain.LookupReverseDNSName, domain.LookupAbuseContactName} {
+	// Only the network-backed lookups get keys, asn included. geo reads a local
+	// mmap, so caching it would cost more than recomputing.
+	for _, name := range []string{domain.LookupASNName, domain.LookupReverseDNSName, domain.LookupAbuseContactName} {
 		if !mr.Exists(ipRedisKey("8.8.8.8", name)) {
 			t.Errorf("expected redis key for %s", name)
 		}
 	}
-	for _, name := range []string{domain.LookupGeoName, domain.LookupASNName} {
-		if mr.Exists(ipRedisKey("8.8.8.8", name)) {
-			t.Errorf("%s must never be cached", name)
-		}
+	if mr.Exists(ipRedisKey("8.8.8.8", domain.LookupGeoName)) {
+		t.Error("geo must never be cached")
 	}
 
 	second := post(body)
+	if !second[0].ASN.CacheHit {
+		t.Error("second request: asn cache_hit = false, want true")
+	}
 	if !second[0].ReverseDNS.CacheHit {
 		t.Error("second request: reverse_dns cache_hit = false, want true")
 	}
 	if !second[0].AbuseContact.CacheHit {
 		t.Error("second request: abuse_contact cache_hit = false, want true")
 	}
-	// Uncached lookups never become hits, however many times they are asked for.
-	if second[0].Geo.CacheHit || second[0].ASN.CacheHit {
-		t.Error("geo/asn cache_hit = true, want false (never cached)")
+	// An uncached lookup never becomes a hit, however many times it is asked for.
+	if second[0].Geo.CacheHit {
+		t.Error("geo cache_hit = true, want false (never cached)")
 	}
 }
 
@@ -2004,7 +2006,7 @@ func TestIntegration_IPLookup_PerLookupTTLs(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/ip/lookup",
-		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["reverse_dns","abuse_contact"]}`))
+		strings.NewReader(`{"ips":["8.8.8.8"],"lookups":["asn","reverse_dns","abuse_contact"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", "test-lookup-key")
 	r.ServeHTTP(w, req)
@@ -2016,6 +2018,7 @@ func TestIntegration_IPLookup_PerLookupTTLs(t *testing.T) {
 		lookup string
 		ttl    time.Duration
 	}{
+		{domain.LookupASNName, 22 * time.Hour},
 		{domain.LookupReverseDNSName, 6 * time.Hour},
 		{domain.LookupAbuseContactName, 24 * time.Hour},
 	} {

@@ -60,7 +60,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | POST | `/v1/ip/lookup` | All plans | IP intelligence lookup |
 | GET | `/v1/usage` | All plans | Caller's own usage statistics |
 | POST | `/v1/keys/rotate` | All plans | Rotate the caller's API key (old keys keep working for a grace window) |
-| POST | `/v1/admin/geoip/refresh` | `admin` | Download and reload MaxMind GeoIP databases |
+| POST | `/v1/admin/geoip/refresh` | `admin` | Download and reload the DB-IP GeoIP database |
 | POST | `/v1/admin/auth/cache/invalidate` | `admin` | Invalidate the in-memory auth cache |
 | GET | `/v1/admin/fingerprints` | `admin` | Get technology fingerprint rules |
 | POST | `/v1/admin/fingerprints` | `admin` | Update technology fingerprint rules |
@@ -632,8 +632,8 @@ Private, loopback, link-local, multicast, unspecified, and CGNAT addresses are r
 
 | Lookup | Plan | Description |
 |--------|------|-------------|
-| `geo` | All | Country, city, region, coordinates, timezone (MaxMind GeoLite2) |
-| `asn` | All | ASN number, organization, network (MaxMind GeoLite2 ASN) |
+| `geo` | All | Continent, country, region, city, coordinates (DB-IP Lite City, local database) |
+| `asn` | All | ASN number, organization, announced prefix (Team Cymru DNS) |
 | `reverse_dns` | All | PTR record hostnames |
 | `abuse_contact` | All | Network owner, country, abuse email (via RDAP) |
 | `threat_intel` | **Pro** | VirusTotal, URLhaus, and AlienVault OTX with a composite risk score |
@@ -648,7 +648,7 @@ The IP and domain catalogs are separate. `threat_intel` appears in both and beha
       "ip": "8.8.8.8",
       "inputs": [" 8.8.8.8 ", "8.8.8.8"],
       "geo": { "cache_hit": false, "country": "United States", "city": "Mountain View" },
-      "asn": { "cache_hit": false, "asn": 15169, "organization": "GOOGLE" },
+      "asn": { "cache_hit": false, "asn": 15169, "organization": "GOOGLE - Google LLC", "network": "8.8.8.0/24" },
       "reverse_dns": { "cache_hit": true, "hostnames": ["dns.google"] }
     }
   ]
@@ -663,16 +663,22 @@ Each element carries the canonicalized `ip` and the verbatim `inputs` that mappe
 |-------|-------------|
 | `ip` | The queried IP address (canonicalized) |
 | `inputs` | The original request entries, verbatim, that canonicalized to this address |
-| `geo` | GeoIP: country, city, region, coordinates, timezone (MaxMind GeoLite2) |
-| `asn` | ASN number, organization, network (MaxMind GeoLite2 ASN) |
+| `geo` | GeoIP: continent, country, region, city, coordinates (DB-IP Lite City) |
+| `asn` | ASN number, organization, announced prefix (Team Cymru DNS) |
 | `reverse_dns` | PTR record hostnames |
 | `abuse_contact` | Network owner, country, abuse email (via RDAP) |
 | `threat_intel` | Aggregated threat intelligence with risk score and per-provider results |
 | `errors` | Per-lookup errors (partial failures still return other fields) |
 
-#### `geo` and `asn` are never cached
+#### `geo` is never cached
 
-Both read a local MaxMind memory-mapped database with no network call, so a Redis round trip would cost *more* than simply doing the lookup again. They are recomputed on every request and their `cache_hit` is always `false` — which is accurate, since the data really was produced for that request. Only `reverse_dns`, `abuse_contact` and `threat_intel` get cache entries.
+It reads a local memory-mapped database with no network call, so a Redis round trip would cost *more* than simply doing the lookup again. It is recomputed on every request and its `cache_hit` is always `false` — which is accurate, since the data really was produced for that request. `asn` is a DNS query and is cached like the other network lookups.
+
+#### Data sources and licensing
+
+`geo` uses the [DB-IP](https://db-ip.com) Lite City database under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), which permits commercial use with attribution; `/docs/ip` carries the attribution. It has no postal code, timezone, accuracy radius, or subdivision code, so the response has no fields for them. The app downloads it (about 60 MB compressed) in the background when it is missing or older than `geoip.max_age`, and persists it on the volume. `asn` uses Team Cymru's free IP-to-ASN DNS service, the same source as the domain `bgp` lookup, and needs no local file.
+
+MaxMind GeoLite2 was used until the switch; its EULA restricts disclosing the data to third parties, which a paid API does. See `docs/decisions.md`.
 
 ### `GET /v1/usage` — My Usage (All Plans)
 
@@ -699,7 +705,7 @@ Rotates the caller's API key. The new key is returned exactly once; previous key
 
 ### `GET /v1/health` — Dependency Health (No Auth)
 
-Internal/ops endpoint for load balancers and uptime monitoring. Returns component states only — never addresses, versions, or other internals. Postgres or Redis being down returns `503` with `status: "degraded"`; GeoIP databases are optional, so their state is reported but does not degrade overall health.
+Internal/ops endpoint for load balancers and uptime monitoring. Returns component states only — never addresses, versions, or other internals. Postgres or Redis being down returns `503` with `status: "degraded"`; the GeoIP database is optional, so its state is reported but does not degrade overall health.
 
 **Response:**
 ```json
@@ -803,7 +809,8 @@ Every lookup has its own TTL, reflecting how fast that data actually changes. An
 | `dns_security` | 4h |
 | `reverse_dns` *(IP)* | 6h |
 | `abuse_contact` *(IP)* | 24h |
-| `geo`, `asn` *(IP)* | never cached — local database reads |
+| `asn` *(IP)* | 24h |
+| `geo` *(IP)* | never cached — local database read |
 | *(anything else)* | `cache.default_ttl` (60m) |
 
 Override individually with env vars — `CACHE_TTL_WHOIS=48h`, `CACHE_DEFAULT_TTL=30m` — or in the config file under `cache.ttl.*`.
@@ -894,11 +901,9 @@ Config values:
 | `threat_intel.alienvault_api_key` | `""` | AlienVault OTX API key (enables AlienVault provider) |
 | `dns.servers` | `[]` | External DNS resolvers (default: Google, Cloudflare, OpenDNS) |
 | `dns.timeout` | `30s` | Per-server DNS dial timeout |
-| `maxmind.license_key` | `""` | MaxMind license key for GeoIP database downloads |
-| `maxmind.db_path` | `/data/maxmind` | Directory path for MaxMind GeoLite2 database files |
-| `maxmind.city_db` | `GeoLite2-City.mmdb` | MaxMind city database filename |
-| `maxmind.asn_db` | `GeoLite2-ASN.mmdb` | MaxMind ASN database filename |
-| `maxmind.max_age` | `168h` | Re-download databases older than this at startup; `0` pins whatever is on disk |
+| `geoip.db_path` | `/data/geoip` | Directory for the GeoIP database file |
+| `geoip.city_db` | `dbip-city-lite.mmdb` | GeoIP city database filename |
+| `geoip.max_age` | `720h` | Re-download a database older than this at startup (DB-IP publishes monthly); `0` pins whatever is on disk |
 | `ip.lookup_timeout` | `30s` | Overall timeout for all concurrent IP lookups |
 | `ip.max_ips.free` | `1` | Maximum IPs per request for free plan |
 | `ip.max_ips.pro` | `20` | Maximum IPs per request for pro plan |
@@ -1107,8 +1112,7 @@ git push origin main:release      # trigger Fly deploy
 | `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |
 | `THREAT_INTEL_VIRUSTOTAL_API_KEY` | VirusTotal API key (enables VirusTotal threat intel provider) |
 | `THREAT_INTEL_ALIENVAULT_API_KEY` | AlienVault OTX API key (enables AlienVault threat intel provider) |
-| `MAXMIND_LICENSE_KEY` | MaxMind license key (required for the startup download and `POST /v1/admin/geoip/refresh`). Docker Compose reads it from `.env`; without it `geo` and `asn` are unavailable locally |
-| `MAXMIND_DB_PATH` | Directory for MaxMind .mmdb files (default: `/data/maxmind`) |
+| `GEOIP_DB_PATH` | Directory for the GeoIP database file (default: `/data/geoip`). No key is needed; the database downloads on first boot |
 | `IP_LOOKUP_TIMEOUT` | Timeout for IP intelligence lookups (default: 30s) |
 | `IP_MAX_IPS_FREE` | Max IPs per request for free plan (default: 1) |
 | `IP_MAX_IPS_PRO` | Max IPs per request for pro plan (default: 20) |

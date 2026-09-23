@@ -472,7 +472,7 @@ X-API-Key: {{adminKey}}
 GET {{host}}/v1/admin/changelog
 X-API-Key: {{adminKey}}
 
-### Refresh GeoIP databases (admin only)
+### Refresh the GeoIP database (admin only)
 POST {{host}}/v1/admin/geoip/refresh
 X-API-Key: {{adminKey}}
 

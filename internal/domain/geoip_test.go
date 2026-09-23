@@ -1,123 +1,142 @@
 package domain
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
 )
 
-func TestRedactLicenseKeyParam(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{
-			name: "scrubs license_key in MaxMind URL",
-			in:   "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=SECRET123&suffix=tar.gz",
-			want: "license_key=REDACTED",
-		},
-		{
-			name: "passthrough when no license_key present",
-			in:   "https://example.com/path?foo=bar",
-			want: "foo=bar",
-		},
-		{
-			name: "passthrough on unparseable input",
-			in:   "::not a url::",
-			want: "::not a url::",
-		},
+func gzipped(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		t.Fatal(err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := redactLicenseKeyParam(tt.in)
-			if !strings.Contains(got, tt.want) {
-				t.Errorf("redactLicenseKeyParam(%q) = %q, want it to contain %q", tt.in, got, tt.want)
-			}
-			if strings.Contains(got, "SECRET123") {
-				t.Errorf("redactLicenseKeyParam(%q) leaked license key: %q", tt.in, got)
-			}
-		})
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
 	}
+	return buf.Bytes()
 }
 
-func TestScrubLicenseKey_RewritesURLError(t *testing.T) {
-	original := &url.Error{
-		Op:  "Get",
-		URL: "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=SECRET123&suffix=tar.gz",
-		Err: errors.New("dial tcp: lookup failed"),
-	}
-
-	scrubbed := scrubLicenseKey(original)
-
-	msg := scrubbed.Error()
-	if strings.Contains(msg, "SECRET123") {
-		t.Errorf("scrubbed error still contains license key: %q", msg)
-	}
-	if !strings.Contains(msg, "REDACTED") {
-		t.Errorf("scrubbed error missing REDACTED marker: %q", msg)
-	}
-
-	// The same *url.Error pointer should be in the chain so callers can still
-	// errors.As it; only its URL field is mutated.
-	var urlErr *url.Error
-	if !errors.As(scrubbed, &urlErr) {
-		t.Fatal("scrubbed error no longer satisfies errors.As(*url.Error)")
-	}
-	if urlErr != original {
-		t.Errorf("expected the same *url.Error pointer, got a different one")
-	}
-}
-
-func TestScrubLicenseKey_NilAndUnrelatedErrors(t *testing.T) {
-	if got := scrubLicenseKey(nil); got != nil {
-		t.Errorf("scrubLicenseKey(nil) = %v, want nil", got)
-	}
-
-	plain := errors.New("plain error")
-	if got := scrubLicenseKey(plain); got != plain {
-		t.Errorf("scrubLicenseKey(plain) returned a different error: %v", got)
-	}
-}
-
-func TestDownloadMMDB_CancelsOnContextCancel(t *testing.T) {
-	// Server holds the response open until the connection drops, simulating a
-	// slow MaxMind download. The test cancels ctx; downloadMMDB must abort
-	// promptly via the request context, not wait for the http.Client timeout.
-	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
+// stubDBIP serves the given body for one release month and 404s every other,
+// and points dbipDownloadURL at it for the duration of the test. The stub is on
+// loopback, which safenet rightly blocks, so trustedTransport is swapped for a
+// plain one.
+func stubDBIP(t *testing.T, release string, body []byte) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, release) {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
 
-	saved := maxmindDownloadURL
-	maxmindDownloadURL = srv.URL + "/?edition_id=%s&license_key=%s&suffix=tar.gz"
-	t.Cleanup(func() { maxmindDownloadURL = saved })
+	orig := dbipDownloadURL
+	dbipDownloadURL = srv.URL + "/dbip-city-lite-%s.mmdb.gz"
+	t.Cleanup(func() { dbipDownloadURL = orig })
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // cancel before the call so the request is born already-dead
+	origTransport := trustedTransport
+	trustedTransport = &http.Transport{}
+	t.Cleanup(func() { trustedTransport = origTransport })
+}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	done := make(chan error, 1)
-	go func() {
-		_, _, _, err := downloadMMDB(ctx, client, "GeoLite2-City", "test-key", t.TempDir())
-		done <- err
-	}()
-
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("expected an error from canceled context")
+func TestDBIPReleases(t *testing.T) {
+	tests := []struct {
+		now  time.Time
+		want []string
+	}{
+		{time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC), []string{"2026-09", "2026-08"}},
+		{time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), []string{"2026-01", "2025-12"}},
+		// The 31st must not skip a month the way AddDate on the day would.
+		{time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC), []string{"2026-03", "2026-02"}},
+	}
+	for _, tt := range tests {
+		got := dbipReleases(tt.now)
+		if len(got) != 2 || got[0] != tt.want[0] || got[1] != tt.want[1] {
+			t.Errorf("dbipReleases(%s) = %v, want %v", tt.now.Format(time.DateOnly), got, tt.want)
 		}
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("err = %v, want errors.Is(context.Canceled)", err)
+	}
+}
+
+func TestDownloadMMDB(t *testing.T) {
+	payload := []byte("not really an mmdb, but the downloader does not care")
+	stubDBIP(t, "2026-09", gzipped(t, payload))
+	client := &http.Client{}
+
+	t.Run("streams and decompresses", func(t *testing.T) {
+		dir := t.TempDir()
+		path, sum, size, err := downloadMMDB(context.Background(), client, "2026-09", dir)
+		if err != nil {
+			t.Fatal(err)
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("downloadMMDB did not honor canceled context within 2s")
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, payload) || size != int64(len(payload)) || len(sum) != 64 {
+			t.Errorf("got %d bytes (size %d, sha %q), want the %d-byte payload", len(got), size, sum, len(payload))
+		}
+	})
+
+	t.Run("unpublished month is distinguishable", func(t *testing.T) {
+		_, _, _, err := downloadMMDB(context.Background(), client, "2026-10", t.TempDir())
+		if !errors.Is(err, errReleaseNotPublished) {
+			t.Errorf("err = %v, want errReleaseNotPublished", err)
+		}
+	})
+
+	t.Run("oversized file is rejected, not truncated", func(t *testing.T) {
+		orig := maxMMDBBytes
+		maxMMDBBytes = 10
+		t.Cleanup(func() { maxMMDBBytes = orig })
+
+		dir := t.TempDir()
+		_, _, _, err := downloadMMDB(context.Background(), client, "2026-09", dir)
+		if err == nil || !strings.Contains(err.Error(), "exceeds") {
+			t.Fatalf("err = %v, want a size-limit error", err)
+		}
+		if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+			t.Errorf("left %d files behind, want the temp file removed", len(entries))
+		}
+	})
+}
+
+// The current month 404s early in the month, before DB-IP publishes it; the
+// refresh must fall back to last month rather than fail. The stub body is not
+// a valid database, so reaching validation proves the fallback fetched it.
+func TestDownloadAndReload_FallsBackToPreviousMonth(t *testing.T) {
+	previous := dbipReleases(time.Now())[1]
+	stubDBIP(t, previous, gzipped(t, []byte("garbage")))
+
+	dir := t.TempDir()
+	r := NewEmptyGeoIPReader()
+	_, err := r.DownloadAndReload(context.Background(), dir, "city.mmdb")
+	if err == nil || !strings.Contains(err.Error(), "validate city db") {
+		t.Fatalf("err = %v, want a validation error after falling back to %s", err, previous)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("left %d files behind, want the invalid download removed", len(entries))
+	}
+	if r.Loaded() {
+		t.Error("reader reports loaded after a failed refresh")
+	}
+}
+
+func TestDownloadAndReload_NoReleasePublished(t *testing.T) {
+	stubDBIP(t, "1999-01", nil)
+
+	_, err := NewEmptyGeoIPReader().DownloadAndReload(context.Background(), t.TempDir(), "city.mmdb")
+	if !errors.Is(err, errReleaseNotPublished) {
+		t.Errorf("err = %v, want errReleaseNotPublished when neither month exists", err)
 	}
 }

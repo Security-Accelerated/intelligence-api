@@ -13,8 +13,8 @@ const healthCheckTimeout = 2 * time.Second
 // Health reports dependency health for load balancers and uptime monitoring.
 // Unauthenticated by design — it returns only component states, never
 // addresses, versions, or other internals. Postgres or Redis being down makes
-// the endpoint return 503; GeoIP databases are optional (absent until
-// bootstrapped on fresh deployments) so their state is reported but does not
+// the endpoint return 503; the GeoIP database is optional (absent until its
+// download lands on a fresh volume) so its state is reported but does not
 // degrade overall health.
 func (h *Handler) Health(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), healthCheckTimeout)

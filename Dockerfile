@@ -11,7 +11,7 @@ FROM alpine:3.21
 
 RUN apk add --no-cache chromium su-exec
 RUN adduser -D -u 1000 appuser
-RUN mkdir -p /data/maxmind && chown appuser:appuser /data/maxmind
+RUN mkdir -p /data/geoip && chown appuser:appuser /data/geoip
 COPY --from=build /app/intelligence-api /usr/local/bin/intelligence-api
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh

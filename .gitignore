@@ -20,7 +20,8 @@ vendor/
 # BIN
 bin/
 
-# MaxMind GeoIP databases
+# GeoIP database (and the retired MaxMind directory from older checkouts)
+data/geoip/
 data/maxmind/
 *.mmdb
 

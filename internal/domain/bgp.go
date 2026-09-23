@@ -72,39 +72,65 @@ func LookupBGP(ctx context.Context, domainName string) (*BGPInfo, error) {
 	return &BGPInfo{Records: records}, nil
 }
 
-// lookupCymruOrigin queries <reversed-ip>.origin.asn.cymru.com TXT to get
-// ASN, prefix, country, and registry for the given IPv4 address.
+// lookupCymruOrigin queries Team Cymru's origin zone for the given IPv4 or IPv6
+// address to get ASN, prefix, country, and registry. Shared by the domain bgp
+// lookup and the IP asn lookup. A prefix announced by several origins returns
+// several records; the first is used.
 //
 // Response format: "ASN | Prefix | Country | Registry | Allocated".
 // Example: "15169 | 8.8.8.0/24 | US | arin | 1992-12-01".
 func lookupCymruOrigin(ctx context.Context, ip string) (*ASNRecord, error) {
-	reversed, ok := reverseIPv4(ip)
-	if !ok {
-		return nil, fmt.Errorf("bgp: invalid IPv4 address %q", ip)
+	name, err := cymruOriginName(ip)
+	if err != nil {
+		return nil, err
 	}
 
-	name := reversed + ".origin.asn.cymru.com"
 	txts, err := Resolver().LookupTXT(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("bgp: cymru origin lookup: %w", err)
+		return nil, fmt.Errorf("cymru: origin lookup: %w", err)
 	}
 	if len(txts) == 0 {
-		return nil, fmt.Errorf("bgp: no TXT record for %s", name)
+		return nil, fmt.Errorf("cymru: no TXT record for %s", name)
 	}
 
 	return parseCymruOrigin(ip, txts[0])
+}
+
+// cymruOriginName builds the query name for an address: reversed octets under
+// origin.asn.cymru.com for IPv4, reversed nibbles under origin6.asn.cymru.com
+// for IPv6.
+func cymruOriginName(ip string) (string, error) {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return "", fmt.Errorf("cymru: invalid IP address %q", ip)
+	}
+	if v4 := parsed.To4(); v4 != nil {
+		reversed, _ := reverseIPv4(v4.String())
+		return reversed + ".origin.asn.cymru.com", nil
+	}
+
+	const hexDigits = "0123456789abcdef"
+	v6 := parsed.To16()
+	var b strings.Builder
+	for i := len(v6) - 1; i >= 0; i-- {
+		b.WriteByte(hexDigits[v6[i]&0x0f])
+		b.WriteByte('.')
+		b.WriteByte(hexDigits[v6[i]>>4])
+		b.WriteByte('.')
+	}
+	return b.String() + "origin6.asn.cymru.com", nil
 }
 
 // parseCymruOrigin parses "ASN | Prefix | CC | Registry | Date" into an ASNRecord.
 func parseCymruOrigin(ip, txt string) (*ASNRecord, error) {
 	parts := strings.SplitN(txt, "|", 5)
 	if len(parts) < 4 {
-		return nil, fmt.Errorf("bgp: unexpected cymru format: %q", txt)
+		return nil, fmt.Errorf("cymru: unexpected origin format: %q", txt)
 	}
 
 	asn, err := strconv.Atoi(strings.TrimSpace(parts[0]))
 	if err != nil {
-		return nil, fmt.Errorf("bgp: parse ASN: %w", err)
+		return nil, fmt.Errorf("cymru: parse ASN: %w", err)
 	}
 
 	return &ASNRecord{
@@ -125,15 +151,15 @@ func lookupCymruASName(ctx context.Context, asn int) (string, error) {
 	name := fmt.Sprintf("AS%d.asn.cymru.com", asn)
 	txts, err := Resolver().LookupTXT(ctx, name)
 	if err != nil {
-		return "", fmt.Errorf("bgp: cymru AS name lookup: %w", err)
+		return "", fmt.Errorf("cymru: AS name lookup: %w", err)
 	}
 	if len(txts) == 0 {
-		return "", fmt.Errorf("bgp: no TXT record for %s", name)
+		return "", fmt.Errorf("cymru: no TXT record for %s", name)
 	}
 
 	parts := strings.SplitN(txts[0], "|", 5)
 	if len(parts) < 5 {
-		return "", fmt.Errorf("bgp: unexpected cymru AS format: %q", txts[0])
+		return "", fmt.Errorf("cymru: unexpected AS format: %q", txts[0])
 	}
 
 	return strings.TrimSpace(parts[4]), nil

@@ -87,18 +87,14 @@ type AbuseContactResult struct {
 // --- GeoIP ---
 
 type GeoIPInfo struct {
-	Continent      string  `json:"continent,omitempty"`
-	ContinentCode  string  `json:"continent_code,omitempty"`
-	Country        string  `json:"country,omitempty"`
-	CountryCode    string  `json:"country_code,omitempty"`
-	Region         string  `json:"region,omitempty"`
-	RegionCode     string  `json:"region_code,omitempty"`
-	City           string  `json:"city,omitempty"`
-	PostalCode     string  `json:"postal_code,omitempty"`
-	Latitude       float64 `json:"latitude,omitempty"`
-	Longitude      float64 `json:"longitude,omitempty"`
-	Timezone       string  `json:"timezone,omitempty"`
-	AccuracyRadius uint16  `json:"accuracy_radius,omitempty"`
+	Continent     string  `json:"continent,omitempty"`
+	ContinentCode string  `json:"continent_code,omitempty"`
+	Country       string  `json:"country,omitempty"`
+	CountryCode   string  `json:"country_code,omitempty"`
+	Region        string  `json:"region,omitempty"`
+	City          string  `json:"city,omitempty"`
+	Latitude      float64 `json:"latitude,omitempty"`
+	Longitude     float64 `json:"longitude,omitempty"`
 }
 
 // --- ASN ---

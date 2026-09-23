@@ -452,7 +452,7 @@
       <p class="section-label">Freshness</p>
       <h2>Caching</h2>
       <p>Domain results are cached <strong>per lookup, per domain</strong>, each with its own TTL &mdash; 30 minutes for fast-moving data like <code>dns</code> and <code>headers</code>, up to 24 hours for <code>whois</code> and <code>ct_logs</code>. Every lookup object reports its own <code>cache_hit</code>, so a single result can mix cached and live fields. See the <a href="/docs/domain#caching">Domain Intelligence</a> docs for the full table.</p>
-      <p>IP results work the same way, under a separate <code>ip:</code> key namespace &mdash; 24 hours for <code>abuse_contact</code>, 6 hours for <code>reverse_dns</code>, 30 minutes for <code>threat_intel</code>. <code>geo</code> and <code>asn</code> read a local database and are never cached, so their <code>cache_hit</code> is always <code>false</code>. See the <a href="/docs/ip#caching">IP Intelligence</a> docs.</p>
+      <p>IP results work the same way, under a separate <code>ip:</code> key namespace &mdash; 24 hours for <code>abuse_contact</code> and <code>asn</code>, 6 hours for <code>reverse_dns</code>, 30 minutes for <code>threat_intel</code>. <code>geo</code> reads a local database and is never cached, so its <code>cache_hit</code> is always <code>false</code>. See the <a href="/docs/ip#caching">IP Intelligence</a> docs.</p>
     </div>
   </section>
 

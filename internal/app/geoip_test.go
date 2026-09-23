@@ -10,7 +10,7 @@ import (
 // writeDB creates a stand-in database file with the given modification time.
 func writeDB(t *testing.T, dir string, modTime time.Time) string {
 	t.Helper()
-	path := filepath.Join(dir, "GeoLite2-City.mmdb")
+	path := filepath.Join(dir, "dbip-city-lite.mmdb")
 	if err := os.WriteFile(path, []byte("not really a database"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func writeDB(t *testing.T, dir string, modTime time.Time) string {
 }
 
 func TestPlanGeoIP_MissingDatabaseDownloads(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "GeoLite2-City.mmdb")
+	path := filepath.Join(t.TempDir(), "dbip-city-lite.mmdb")
 
 	plan := planGeoIP(path, 168*time.Hour, time.Now())
 	if plan.load {

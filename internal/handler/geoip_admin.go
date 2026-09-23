@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// RefreshGeoIP triggers a download and hot-reload of the MaxMind GeoIP databases.
+// RefreshGeoIP triggers a download and hot-reload of the GeoIP City database.
 // Admin-only, bodyless endpoint.
 func (h *Handler) RefreshGeoIP(c *gin.Context) {
 	if h.geoRefresher == nil {
@@ -17,23 +17,14 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 		return
 	}
 
-	licenseKey := ""
-	dbPath := "/data/maxmind"
-	cityFile := "GeoLite2-City.mmdb"
-	asnFile := "GeoLite2-ASN.mmdb"
+	dbPath := "/data/geoip"
+	cityFile := "dbip-city-lite.mmdb"
 	if h.cfg != nil {
-		licenseKey = h.cfg.GetString("maxmind.license_key")
-		dbPath = h.cfg.GetString("maxmind.db_path")
-		cityFile = h.cfg.GetString("maxmind.city_db")
-		asnFile = h.cfg.GetString("maxmind.asn_db")
+		dbPath = h.cfg.GetString("geoip.db_path")
+		cityFile = h.cfg.GetString("geoip.city_db")
 	}
 
-	if licenseKey == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "maxmind license key not configured"})
-		return
-	}
-
-	result, err := h.geoRefresher.DownloadAndReload(c.Request.Context(), licenseKey, dbPath, cityFile, asnFile)
+	result, err := h.geoRefresher.DownloadAndReload(c.Request.Context(), dbPath, cityFile)
 	if err != nil {
 		logging.Logger().Error("geoip refresh failed", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "geoip refresh failed"})
@@ -44,13 +35,12 @@ func (h *Handler) RefreshGeoIP(c *gin.Context) {
 		h.status.SetGeoIPStatus(config.GeoIPStatus{
 			Enabled: true,
 			CityDB:  cityFile,
-			ASNDB:   asnFile,
 			DBPath:  dbPath,
 		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "MaxMind databases refreshed",
+		"message": "geoip database refreshed",
 		"details": result,
 	})
 }

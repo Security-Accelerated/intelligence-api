@@ -21,13 +21,14 @@ primary_region = 'iad'
   min_machines_running = 1
   processes = ['app']
 
-# Persists the MaxMind GeoIP databases across restarts. Machine filesystems are
-# a blank slate on every start, so without this the databases are re-downloaded
-# on each cold start. One volume per machine is required by Fly; both are named
-# maxmind_data and each machine attaches one.
+# Persists the GeoIP database across restarts. Machine filesystems are a blank
+# slate on every start, so without this the database is re-downloaded on each
+# cold start. One volume per machine is required by Fly; both are named
+# maxmind_data and each machine attaches one. The name predates the move to
+# DB-IP and stays because Fly volumes cannot be renamed.
 [mounts]
   source = 'maxmind_data'
-  destination = '/data/maxmind'
+  destination = '/data/geoip'
 
 [[vm]]
   cpu_kind = 'shared'
