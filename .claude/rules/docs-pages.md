@@ -55,8 +55,9 @@ requested path is never echoed back.**
 ## Changelog on the docs pages
 
 `internal/handler/changelog.yaml` (symlinked from the repo root) is parsed at startup.
-Docs pages render only entries with `audience: public` in "What's New". The admin endpoint
-`GET /v1/admin/changelog` returns everything. The release flow in `RELEASE.md` says when
+`/docs/changelog` renders only entries with `audience: public`; the other pages link to it.
+The admin endpoint `GET /v1/admin/changelog` returns everything, and the repo is public, so
+`internal` means "not on the docs", not private. The release flow in `RELEASE.md` says when
 entries are written and which audience to use.
 
 Entry text is written with one backtick per identifier, like the rest of the docs.

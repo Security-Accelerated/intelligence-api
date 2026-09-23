@@ -2340,8 +2340,8 @@ func TestIntegration_AdminChangelog_AdminAllowed(t *testing.T) {
 	// versions as the docs page renders — and strictly more whenever any entry
 	// is marked internal. Asserting that relationship rather than the presence
 	// of both audience strings keeps the test honest when the data changes:
-	// every entry is internal immediately before v1.0 (see issue #51), and an
-	// assertion on literal audience values silently breaks then.
+	// a release whose entries are all internal, or all public, would break an
+	// assertion on literal audience values.
 	var adminVersions []map[string]any
 	if err := json.Unmarshal(w.Body.Bytes(), &adminVersions); err != nil {
 		t.Fatalf("unmarshal admin changelog: %v", err)

@@ -1,12 +1,14 @@
 # Changelog — Intelligence API
-# audience: public (shown on docs page), internal (admin/ops only)
+# audience: public (rendered on the docs pages), internal (not rendered there)
 #
-# Pre-1.0 entries stay public for now: an empty release-notes section on a live
-# docs page reads worse than a detailed one, and there is no reason to hide the
-# history while the product is pre-launch. They get flipped to internal
-# immediately before v1.0 ships so the customer-facing notes start clean — see
-# issue #51. The admin endpoint (GET /v1/admin/changelog) is unfiltered either
-# way, so nothing is ever lost operationally.
+# "internal" controls what /docs shows, not who can read it: this file is in a
+# public repository, and GET /v1/admin/changelog returns every entry.
+#
+# Public entries are the full history, pre-1.0 included, and stay public. They
+# describe what a caller sees; operator detail (config keys, admin endpoints,
+# infrastructure) and upstream feed names go in internal entries or generic
+# terms (#91). An entry a later release reversed keeps its text and gains a
+# "superseded in vX" note, rather than being hidden or rewritten.
 
 - version: v1.0.0
   date: 2026-09-23
@@ -14,6 +16,8 @@
     - text: "The docs describe what each lookup returns, not which upstream feeds answer it: feed names, blocklist names, and threat-intel weightings are gone from the prose on /docs/domain and /docs/ip (#91). Response fields that carry a provider or source value are unchanged, so the examples still show them"
       audience: internal
     - text: "/docs/ip carries the GeoLite attribution line the MaxMind EULA requires, in the page footer rather than in the geo and asn descriptions"
+      audience: internal
+    - text: "Pre-1.0 release notes stay public instead of being flipped to internal (#51 reversed). The public set was curated instead: v0.9.0 claimed Google Safe Browsing and PhishTank, which never shipped, and now names what did; reversed entries carry a \"superseded in vX\" note; feed names became generic terms; config keys, admin endpoints and infrastructure detail were dropped from public text; and the v0.65.0 screenshot.timeout entry moved to internal"
       audience: internal
 
 - version: v0.74.1
@@ -27,13 +31,13 @@
 - version: v0.74.0
   date: 2026-08-27
   changes:
-    - text: "Release notes on the docs page now show field and parameter names as inline code instead of printing the backticks around them. 17 public entries were affected, including the BREAKING notes about `lookups`, `results`, and `cache_hit`"
+    - text: "Release notes on the docs page now show field and parameter names as inline code instead of printing the backticks around them"
       audience: public
 
 - version: v0.73.0
   date: 2026-08-27
   changes:
-    - text: "Plans are now Free and Pro. The Basic tier is gone; its rate limit, batch size, Stripe price, and payment link have been removed, and the plan tables in the docs, OpenAPI spec, and sales material now show two columns"
+    - text: "Plans are now Free and Pro. The Basic tier is gone; its rate limit, batch size, Stripe price, and payment link have been removed, and the plan tables in the docs and OpenAPI spec now show two columns"
       audience: public
     - text: "Migration 017 moves any remaining basic customer to pro rather than free, so the merge cannot take capability away from an existing key"
       audience: internal
@@ -61,7 +65,7 @@
 - version: v0.72.1
   date: 2026-08-27
   changes:
-    - text: "One API machine now stays running at all times. Previously the service stopped after ten idle minutes and the next request paid a cold start; the first call after a quiet period is now as fast as any other"
+    - text: "The first request after a quiet period is now as fast as any other. Previously the service scaled to zero after ten idle minutes and the next request paid a cold start"
       audience: public
     - text: "Machine memory raised from 512 MB to 1 GB. Headless Chromium wants roughly half a gigabyte per capture, so the screenshot lookup was one request from the ceiling; screenshot.max_concurrent stays at 1, it just has room now"
       audience: internal
@@ -123,7 +127,7 @@
       audience: public
     - text: "/v1/usage and /v1/keys/rotate have a reference page of their own at /docs/account, with parameters, response fields, four-language examples, and the sequence for rotating a key without downtime. They are two of the four public endpoints and were the only two documented by a single table row"
       audience: public
-    - text: "Documented that screenshot captures run under a small service-wide concurrency cap — typically one at a time — and that a capture which does not start before the request deadline reports 'screenshot queue timed out, please retry' in errors. Unlike most lookup errors that one is worth retrying — it means the service was busy, not that the answer is unavailable"
+    - text: "Documented that screenshot captures run under a small service-wide concurrency cap and that a capture which does not start before the request deadline reports 'screenshot queue timed out, please retry' in errors. Unlike most lookup errors that one is worth retrying — it means the service was busy, not that the answer is unavailable"
       audience: public
     - text: "Both reference pages now show what a real upstream failure looks like: a valid target, a 200 response, and the failed lookup's field absent entirely rather than null. Requesting n lookups does not guarantee n fields, and code reaching straight for result.whois.registrar works in testing and throws the first time an upstream has a bad minute"
       audience: public
@@ -131,7 +135,7 @@
       audience: public
     - text: "The OpenAPI spec carries the same two contracts: the screenshot queue timeout on the screenshot property, and the absent-field behaviour on the errors array"
       audience: public
-    - text: "Documented what the lookup name in an errors entry actually tells you. A plain name (whois) means that lookup failed and its field is absent; a qualified name (threat_intel:virustotal) means one provider inside a fan-out lookup failed while the others answered, and that lookup's field is still present. Treating every errors entry as a missing field throws away good partial results from reputation and threat_intel"
+    - text: "Documented what the lookup name in an errors entry actually tells you. A plain name (whois) means that lookup failed and its field is absent; a qualified name (`threat_intel:<provider>`) means one provider inside a fan-out lookup failed while the others answered, and that lookup's field is still present. Treating every errors entry as a missing field throws away good partial results from reputation and threat_intel"
       audience: public
     - text: "docsPages in docs.go is now the canonical page set — routes are registered by looping it and tests derive their lists from it. The set was previously spelled out in six places, and adding /docs/account meant finding them all by hand. The nav test caught only the last of them"
       audience: internal
@@ -153,7 +157,7 @@
       audience: public
     - text: "Unknown addresses now return a proper 404: a documented page with links to the reference in a browser, and the usual {\"error\": \"not found\"} envelope for paths under /v1 and /billing, so a mistyped endpoint is handled by a caller's existing error path"
       audience: public
-    - text: "Documented the tighter domain cap that applies when subdomains is requested — 1 / 3 / 5 rather than 1 / 5 / 20. It has been enforced since v0.44.0 but appeared in no documentation, so the 400 it returns was unpredictable from the docs"
+    - text: "Documented the tighter domain cap that applies when subdomains is requested — 1 / 3 / 5 rather than 1 / 5 / 20. It has been enforced since v0.44.0 but appeared in no documentation, so the 400 it returns was unpredictable from the docs. Superseded in v0.73.0: with Basic removed, the cap is 1 on Free and 5 on Pro"
       audience: public
     - text: "Corrected the caching summary on the overview, which still described IP results as one cached document with a single top-level cache_hit. IP lookups have been cached individually, with per-lookup cache_hit, since v0.60.0"
       audience: public
@@ -179,9 +183,9 @@
 - version: v0.66.0
   date: 2026-07-31
   changes:
-    - text: "Domains with no certificates now return an empty subdomains and ct_logs result instead of an error. crt.sh answers 404 for a name it holds no certificates for, and that was being reported as a lookup failure. A freshly registered typosquat domain usually has no certificates yet, so the domains a customer is most likely to be triaging returned an error instead of the correct answer: none found"
+    - text: "Domains with no certificates now return an empty subdomains and ct_logs result instead of an error. The certificate transparency source answers 404 for a name it holds no certificates for, and that was being reported as a lookup failure. A freshly registered typosquat domain usually has no certificates yet, so the domains a customer is most likely to be triaging returned an error instead of the correct answer: none found"
       audience: public
-    - text: "Transient crt.sh failures are retried once before being reported, so a single 404 or 5xx from an unhealthy crt.sh no longer fails the lookup outright"
+    - text: "Transient certificate transparency failures are retried once before being reported, so a single 404 or 5xx from an unhealthy upstream no longer fails the lookup outright"
       audience: public
     - text: "Retry semantics, shared by both lookups via fetchCrtSh: a 404 or 5xx is retried once after a short pause; two 404s are treated as genuine absence, because crt.sh 404s names it does hold certificates for when unhealthy, and concluding no-certificates from a single 404 would hand a security tool a wrong answer that looks authoritative. A 404 followed by a 5xx stays an error. 429 is never retried — repeating a rate-limited request makes it worse — and timeouts are not retried because a second full timeout would consume the rest of the request budget"
       audience: internal
@@ -194,7 +198,7 @@
     - text: "Screenshots should start working again on small deployments. Captures were failing with a browser startup timeout, and because a failed lookup returns 200 with the reason in the errors array rather than an HTTP error, the failure was easy to miss entirely"
       audience: public
     - text: "screenshot.timeout default raised from 15s to 45s. A cold Chromium on a small shared-CPU machine regularly needs longer than 15s just to announce its DevTools endpoint, so captures were failing before the browser had finished starting"
-      audience: public
+      audience: internal
     - text: "screenshot.max_concurrent default lowered from 4 to 1. Each in-process browser wants roughly half a gigabyte, so four could exhaust a machine sized for the API and take the whole process down. That was masked only because captures were dying during startup; raising the timeout without this would have turned a broken feature into an outage"
       audience: internal
     - text: "Chromium now runs with --disable-dev-shm-usage and a set of flags trimming work a one-shot capture never benefits from. Containers get a 64MB /dev/shm by default and Chromium assumes far more, which surfaces as a startup timeout rather than as anything mentioning shared memory"
@@ -277,7 +281,7 @@
   changes:
     - text: "Lookups no longer report an upstream failure as an absent record. A threat intelligence provider that could not be reached, a BGP lookup whose queries all failed, an unreadable certificate transparency response, or email security records that could not be resolved are now reported as errors rather than as clean, empty results"
       audience: public
-    - text: "This matters most for threat intelligence: a rate-limited VirusTotal used to return \"not detected\", which scoring counted at its full 0.50 weight, so a domain nobody checked scored the same as a domain checked and found clean"
+    - text: "This matters most for threat intelligence: a rate-limited provider used to return \"not detected\", which scoring counted at its full weight, so a domain nobody checked scored the same as a domain checked and found clean"
       audience: public
     - text: "VirusTotal and the three IP adapters used limiter.Allow() and returned a synthetic clean result; they now use limiter.Wait(ctx) and return an error, matching URLhaus and AlienVault. The coordinator already excludes errored providers from scoring"
       audience: internal
@@ -321,7 +325,7 @@
 - version: v0.59.0
   date: 2026-07-30
   changes:
-    - text: "Fixed a bug where the service could lose its database connection after a few minutes of uptime in deployments that address Postgres or Redis by an internal hostname"
+    - text: "Fixed a bug where the service could lose its database connection after a few minutes of uptime"
       audience: public
     - text: "InitResolver no longer overrides net.DefaultResolver. It sets a resolver scoped to the domain package, returned by domain.Resolver(), which the 11 lookup call sites now use explicitly"
       audience: internal
@@ -357,7 +361,7 @@
 - version: v0.57.0
   date: 2026-07-30
   changes:
-    - text: "GeoIP databases now load themselves at startup and persist across restarts. `geo` and `asn` were unavailable after most restarts because the databases had to be bootstrapped by hand; they are now stored on a volume and downloaded automatically on boot when missing or out of date"
+    - text: "GeoIP databases now load themselves at startup and persist across restarts. `geo` and `asn` were unavailable after most restarts because the databases had to be bootstrapped by hand; they are now persisted and downloaded automatically on boot when missing or out of date"
       audience: public
     - text: "The download runs in a background goroutine rather than blocking startup — it is around 80MB, and blocking would delay the listener past the platform health check on every cold start. geo and asn report that they are unavailable for the first few seconds instead"
       audience: internal
@@ -445,7 +449,7 @@
       audience: public
     - text: "BREAKING: the aggregate `risk` score is now opt-in. Add \"risk\" to `lookups` to get it — it still costs no extra network call and scores over whatever else you requested"
       audience: public
-    - text: "Domain lookups no longer cache failures. Per-lookup TTLs mean one flaky provider can no longer shorten every other lookup's cache lifetime, and a failing lookup is retried rather than remembered. IP lookups still negative-cache, since they are cached as a single document"
+    - text: "Domain lookups no longer cache failures. Per-lookup TTLs mean one flaky provider can no longer shorten every other lookup's cache lifetime, and a failing lookup is retried rather than remembered. IP lookups still negative-cache, since they are cached as a single document (superseded in v0.55.0: IP lookups no longer cache failures either)"
       audience: public
     - text: "Cache keys are now flat `lookup:<domain>:<name>` entries; the composite sorted-suffix key builder has been removed"
       audience: internal
@@ -489,7 +493,7 @@
 - version: v0.52.0
   date: 2026-06-11
   changes:
-    - text: "Every domain lookup now includes an aggregate risk score (0–100 with risk level and per-component breakdown) computed from all returned data"
+    - text: "Every domain lookup now includes an aggregate risk score (0–100 with risk level and per-component breakdown) computed from all returned data (superseded in v0.54.0: the risk score is opt-in; add \"risk\" to `lookups`)"
       audience: public
     - text: "New dns_security option — DNSSEC deployment (DS/DNSKEY, signing algorithms) and CAA records, available on all plans"
       audience: public
@@ -503,7 +507,7 @@
       audience: public
     - text: "All responses now include Strict-Transport-Security, Referrer-Policy, and Content-Security-Policy headers"
       audience: public
-    - text: "Failed lookups are now retried sooner: error responses cache for a short negative TTL instead of the full cache window"
+    - text: "Failed lookups are now retried sooner: error responses cache for a short negative TTL instead of the full cache window (superseded in v0.54.0 and v0.55.0: failures are no longer cached at all)"
       audience: public
     - text: "Removed all inline JavaScript from docs and checkout pages; scripts are now served as external files under a strict page CSP"
       audience: internal
@@ -517,7 +521,7 @@
 - version: v0.51.0
   date: 2026-04-16
   changes:
-    - text: "Subdomain enumeration is now subject to a tighter per-plan domain cap (subdomain.max_domains.*). The config keys and defaults shipped earlier; this is the missing enforcement"
+    - text: "Subdomain enumeration is now subject to a tighter per-plan domain cap"
       audience: public
     - text: "MaxMind license key is now redacted from any wrapped error originating from the database download client"
       audience: internal
@@ -613,7 +617,7 @@
 - version: v0.44.0
   date: 2026-04-03
   changes:
-    - text: "DNS lookups now use external resolvers (Google, Cloudflare, OpenDNS) with automatic fallback"
+    - text: "DNS lookups now use multiple public resolvers with automatic fallback"
       audience: public
     - text: "RDAP abuse contact queries go directly to regional RIR endpoints instead of rdap.org bootstrap"
       audience: internal
@@ -649,7 +653,7 @@
       audience: public
     - text: "IP threat intelligence requires a pro plan (same as domain threat_intel)"
       audience: public
-    - text: "GeoIP and ASN data powered by MaxMind GeoLite2 databases (loaded from disk, refreshable via admin endpoint)"
+    - text: "GeoIP and ASN data served from locally hosted databases"
       audience: public
     - text: "Admin endpoint POST /v1/admin/geoip/refresh for hot-reloading MaxMind databases"
       audience: internal
@@ -715,7 +719,7 @@
       audience: internal
     - text: "Added GET /v1/admin/usage endpoint for aggregated API usage statistics"
       audience: internal
-    - text: "VirusTotal provider is now best-effort when rate-limited instead of failing the whole lookup"
+    - text: "Threat intelligence is now best-effort when a provider is rate-limited instead of failing the whole lookup (superseded in v0.61.0: a rate-limited provider is now reported in errors rather than counted as clean)"
       audience: public
     - text: "Added threat intelligence section to API docs"
       audience: public
@@ -741,7 +745,7 @@
 - version: v0.33.0
   date: 2026-03-16
   changes:
-    - text: "Added threat intelligence lookups — VirusTotal, URLhaus, and AlienVault OTX with weighted scoring"
+    - text: "Added threat intelligence lookups across multiple feeds with weighted scoring"
       audience: public
     - text: "Threat intel available for pro and admin plans via threat_intel option"
       audience: public
@@ -757,7 +761,7 @@
 - version: v0.31.0
   date: 2026-03-14
   changes:
-    - text: "Added certificate transparency log lookups via crt.sh"
+    - text: "Added certificate transparency log lookups"
       audience: public
     - text: "CT log data available for all plans via ct_logs option"
       audience: public
@@ -767,7 +771,7 @@
   changes:
     - text: "Added technology fingerprinting — detects web servers, frameworks, CDNs, and more from HTTP headers"
       audience: public
-    - text: "~90 built-in detection rules, hot-reloadable via admin endpoint"
+    - text: "~90 built-in detection rules"
       audience: public
 
 - version: v0.19.0
@@ -795,13 +799,13 @@
 - version: v0.15.0
   date: 2026-02-28
   changes:
-    - text: "Plan-based limits on domains per request — free: 1, basic: 5, pro: 20"
+    - text: "Plan-based limits on domains per request — free: 1, basic: 5, pro: 20 (Basic removed in v0.73.0)"
       audience: public
 
 - version: v0.13.0
   date: 2026-02-26
   changes:
-    - text: "Added per-plan rate limiting — free: 5/min, basic: 30/min, pro: 120/min"
+    - text: "Added per-plan rate limiting — free: 5/min, basic: 30/min, pro: 120/min (Basic removed in v0.73.0)"
       audience: public
     - text: "SSRF prevention hardened — blocks connections to private/reserved IP ranges"
       audience: internal
@@ -809,7 +813,7 @@
 - version: v0.9.0
   date: 2026-02-20
   changes:
-    - text: "Added domain reputation lookups with multi-provider scoring (Spamhaus, Google Safe Browsing, PhishTank)"
+    - text: "Added domain reputation lookups against multiple DNS blocklists"
       audience: public
     - text: "Reputation available for pro and admin plans via reputation option"
       audience: public
