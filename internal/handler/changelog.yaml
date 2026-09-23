@@ -10,6 +10,16 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.0.0
+  date: 2026-09-23
+  changes:
+    - text: "The overview and domain reference each had a Plans table and a Pricing section repeating the same limits. They are one Plans section now, with the link to get a Pro key under the table. The docs are technical reference and state no price"
+      audience: public
+    - text: "Three places still said an aggregate risk score comes with every response. It has been opt-in since v0.54.0: add `risk` to `lookups` to get it"
+      audience: public
+    - text: "#77 closed as not planned: the API docs stay technical and show no price. The Stripe payment and portal links are still rendered from config under Plans"
+      audience: internal
+
 - version: v0.75.0
   date: 2026-09-23
   changes:

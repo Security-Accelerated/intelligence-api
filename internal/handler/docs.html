@@ -358,7 +358,7 @@
   <section class="services">
     <article class="service-card">
       <h3>Domain Intelligence</h3>
-      <p>WHOIS, DNS, SSL, headers, reputation, email security, subdomains, CT logs, BGP and ASN, fingerprinting, threat intelligence, and DNS security (DNSSEC/CAA) in one request &mdash; with an aggregate risk score in every response.</p>
+      <p>WHOIS, DNS, SSL, headers, reputation, email security, subdomains, CT logs, BGP and ASN, fingerprinting, threat intelligence, and DNS security (DNSSEC/CAA) in one request &mdash; with an optional aggregate risk score over whatever you requested.</p>
       <div class="service-meta"><span class="method-tag">POST</span><span class="endpoint-path">/v1/domain/lookup</span></div>
       <a href="/docs/domain" class="service-link">Open endpoint reference</a>
     </article>
@@ -387,7 +387,7 @@
   </section>
 
   <section class="section-card">
-    <p class="section-label">Commercial Model</p>
+    <p class="section-label">Access</p>
     <h2>Plans</h2>
     <p>Plans control request volume, batch size, and access to premium lookups such as reputation and threat intelligence.</p>
     <div class="table-scroll">
@@ -399,35 +399,13 @@
           <tr><td>IPs per request</td><td>1</td><td>20</td></tr>
           <tr><td>Core lookups (WHOIS, DNS, SSL, headers, GeoIP, ASN, RDNS)</td><td>Yes</td><td>Yes</td></tr>
           <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, DNS security, abuse contact</td><td>Yes</td><td>Yes</td></tr>
-          <tr><td>Aggregate risk score (computed on every domain lookup)</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Aggregate risk score (add <code>risk</code> to <code>lookups</code>)</td><td>Yes</td><td>Yes</td></tr>
           <tr><td>Usage statistics + self-service key rotation</td><td>Yes</td><td>Yes</td></tr>
           <tr><td>Reputation, threat intelligence</td><td>-</td><td>Yes</td></tr>
         </tbody>
       </table>
     </div>
-  </section>
-
-  <section class="section-card">
-    <p class="section-label">Upgrade Paths</p>
-    <h2>Pricing</h2>
-    <p>Start with a free key, then move up when you need larger request batches or premium enrichment.</p>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Plan</th><th>Features</th><th></th></tr></thead>
-        <tbody>
-          <tr>
-            <td><strong>Free</strong></td>
-            <td>5 req/min, 1 target per request, every lookup except reputation and threat intelligence</td>
-            <td>Included with any API key</td>
-          </tr>
-          <tr>
-            <td><strong>Pro</strong></td>
-            <td>120 req/min, 20 targets per request, adds reputation and threat intelligence</td>
-            <td>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Subscribe</a>{{else}}Contact us{{end}}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <p>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Get a Pro key</a>{{else}}Contact us for a Pro key.{{end}}</p>
     <div class="note">After subscribing, your API key is shown once on the confirmation page. Capture it immediately because it cannot be retrieved later.</div>
     {{if .PortalLink}}<a href="{{.PortalLink}}" class="portal-link">Manage your subscription</a>{{end}}
   </section>
