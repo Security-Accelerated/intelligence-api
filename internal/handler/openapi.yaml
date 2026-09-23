@@ -3,7 +3,7 @@ info:
   title: Security Accelerated Intelligence API
   description: |
     Domain and IP intelligence REST API. Performs concurrent WHOIS, DNS, SSL,
-    HTTP header, screenshot, reputation, email security, subdomain, certificate
+    HTTP header, reputation, email security, subdomain, certificate
     transparency, BGP/ASN, technology fingerprinting, DNS security, and threat
     intelligence lookups for domains, plus GeoIP, ASN, reverse DNS, abuse
     contact, and threat intelligence lookups for IP addresses.
@@ -31,8 +31,8 @@ paths:
         pro = 20. The limit counts the entries you submit, before
         deduplication.
 
-        Requesting `screenshot`, `reputation`, or `threat_intel` requires a
-        pro (or admin) plan; lower plans receive HTTP 403 naming the lookup.
+        Requesting `reputation` or `threat_intel` requires a pro (or admin)
+        plan; lower plans receive HTTP 403 naming the lookup.
 
         Results are returned in a `results` envelope, one element per unique
         normalized domain. Match results by the `domain` field rather than by
@@ -378,7 +378,7 @@ components:
           type: array
           items:
             type: string
-            enum: [whois, dns, ssl, headers, screenshot, reputation, email_security, subdomains, ct_logs, bgp, fingerprint, threat_intel, dns_security, risk]
+            enum: [whois, dns, ssl, headers, reputation, email_security, subdomains, ct_logs, bgp, fingerprint, threat_intel, dns_security, risk]
           minItems: 1
           description: >
             Which lookups to run. Required and must be non-empty: there is no
@@ -412,21 +412,6 @@ components:
           $ref: '#/components/schemas/SSLInfo'
         headers:
           $ref: '#/components/schemas/HeadersInfo'
-        screenshot:
-          allOf:
-            - $ref: '#/components/schemas/ScreenshotInfo'
-          description: >
-            Screenshot captures run under a small service-wide concurrency
-            cap — typically one at a time — because each capture runs a
-            browser. A request whose capture has not started before the
-            deadline reports `screenshot queue timed out, please retry` in
-            `errors` instead, leaving every other lookup unaffected.
-
-            Unlike most lookup errors this one is worth retrying: it means the
-            service was busy, not that the answer is unavailable. Ask for
-            `screenshot` over a handful of domains rather than a full batch,
-            and send it as its own request so a queue wait never delays
-            lookups that would have returned immediately.
         reputation:
           $ref: '#/components/schemas/ReputationResult'
         email_security:
@@ -614,19 +599,6 @@ components:
           type: string
         permissions_policy:
           type: string
-    ScreenshotInfo:
-      type: object
-      properties:
-        cache_hit:
-          type: boolean
-          description: True when this lookup was served from cache.
-        status_code:
-          type: integer
-        png:
-          type: string
-          description: Base64-encoded PNG of the homepage.
-      required:
-        - status_code
     ReputationResult:
       type: object
       properties:

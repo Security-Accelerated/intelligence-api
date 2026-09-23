@@ -1,7 +1,7 @@
 # Security Accelerated
 ## Intelligence API
 
-A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, page screenshot, reputation, email security, subdomain enumeration, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for one or more domains, with Redis caching.
+A domain intelligence API that performs concurrent WHOIS, DNS, SSL, HTTP header, reputation, email security, subdomain enumeration, certificate transparency, BGP/ASN, technology fingerprinting, and threat intelligence lookups for one or more domains, with Redis caching.
 
 **Production URL:** `https://api.securityaccelerated.com`
 
@@ -15,13 +15,13 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 
 | Plan | Capabilities |
 |------|-------------|
-| `free` | All lookups except `screenshot`, `reputation`, and `threat_intel`. 1 domain per request. |
-| `pro` | All free capabilities + page screenshots + reputation checks + threat intelligence, up to 20 domains per request |
+| `free` | All lookups except `reputation` and `threat_intel`. 1 domain per request. |
+| `pro` | All free capabilities + reputation checks + threat intelligence, up to 20 domains per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
 The plan is stored in the `customers` table, defaulting to `free`. New customers provisioned via Stripe checkout receive the plan they purchased. An unrecognized plan value is treated as `free` by both the rate limiter and lookup gating, so a bad value fails closed.
 
-Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Requests naming a lookup outside the caller's plan (`screenshot`, `reputation`, `threat_intel` require pro) receive `403 Forbidden`. The `/v1/hello` and `/v1/health` checks require no authentication. Self-service endpoints (`GET /v1/usage`, `POST /v1/keys/rotate`) are available to every plan.
+Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Requests naming a lookup outside the caller's plan (`reputation`, `threat_intel` require pro) receive `403 Forbidden`. The `/v1/hello` and `/v1/health` checks require no authentication. Self-service endpoints (`GET /v1/usage`, `POST /v1/keys/rotate`) are available to every plan.
 
 ### Rate Limiting
 
@@ -104,7 +104,6 @@ An array naming which lookups to run. It must be present and non-empty — there
 | `fingerprint` | All | Web technology detection (servers, frameworks, CDNs, CMS, languages) from HTTP headers. Makes no extra network calls — see [Caching](#caching) |
 | `dns_security` | All | DNSSEC deployment (DS + DNSKEY + algorithms) and CAA records |
 | `risk` | All | Weighted 0–100 aggregate risk score over the *other* lookups you requested. Makes no network call and is never cached — see [Caching](#caching) |
-| `screenshot` | **Pro** | Page screenshot as a base64 PNG |
 | `reputation` | **Pro** | DNS blocklist checks (Spamhaus DBL, SURBL, URIBL, Spamhaus ZEN) with a computed risk score |
 | `threat_intel` | **Pro** | VirusTotal, URLhaus, and AlienVault OTX with a composite risk score |
 
@@ -154,7 +153,6 @@ Each result contains only the lookups you requested — never any you did not �
       "dns": { "cache_hit": true, "a": ["93.184.216.34"], "mx": [], "ns": [], "..." : "..." },
       "ssl": { "cache_hit": false, "subject": "...", "issuer": "...", "..." : "..." },
       "headers": { "cache_hit": false, "status_code": 200, "headers": {}, "security_headers": {} },
-      "screenshot": { "cache_hit": false, "status_code": 200, "png": "<base64-encoded PNG>" },
       "reputation": {
         "cache_hit": false,
         "score": 35,
@@ -273,7 +271,7 @@ Errors are returned as `{"error": "..."}`. Validation runs in a fixed order: the
 | `400` | More domains than the tighter subdomain cap allows | `too many domains: maximum 5 allowed for pro plan when subdomains is requested` |
 | `400` | The single submitted domain is invalid | `invalid domain name` / `raw IP addresses are not accepted; provide a domain name` |
 | `401` | Missing or invalid API key | `invalid API key` |
-| `403` | Lookup not included in the caller's plan | `screenshot requires a pro plan` |
+| `403` | Lookup not included in the caller's plan | `reputation requires a pro plan` |
 | `413` | Request body over the 1 MB limit | `request body too large` |
 | `429` | Rate limit exceeded | see [Rate Limiting](#rate-limiting) |
 
@@ -353,17 +351,6 @@ The `security_headers` subsection audits defensive headers that protect users:
 | `x_xss_protection` | Legacy browser XSS filter (mostly deprecated but still checked in audits) |
 | `referrer_policy` | Controls how much URL information leaks when users click links to other sites |
 | `permissions_policy` | Restricts browser features like camera, microphone, and geolocation |
-
-### `screenshot` — Page Screenshot (Pro/Admin Only)
-
-A visual screenshot of the domain's web page, captured with headless Chrome at 1280x720. Only present when `"screenshot"` is included in `lookups`.
-
-| Field | What it means |
-|-------|---------------|
-| `status_code` | The HTTP status code from probing the domain. The screenshot only captures the page on `200 OK`. |
-| `png` | Base64-encoded PNG image of the page. Empty for non-200 responses. |
-
-The screenshot lookup first tries HTTPS, then falls back to HTTP. Non-200 responses still populate the `screenshot` section with the status code but no image data.
 
 ### `reputation` — Domain Reputation (Pro/Admin Only)
 
@@ -741,7 +728,7 @@ Returns aggregated API usage statistics for a configurable time window.
   "status_codes": {"200": 1190, "400": 32, "403": 15, "429": 10},
   "feature_usage": {
     "whois": 900, "dns": 1100, "ssl": 870, "headers": 640,
-    "screenshot": 45, "reputation": 120, "threat_intel": 95, "email_security": 310,
+    "reputation": 120, "threat_intel": 95, "email_security": 310,
     "subdomains": 200, "ct_logs": 85, "bgp": 60, "fingerprint": 400
   },
   "requests_by_path": {"/v1/domain/lookup": 1200, "/v1/admin/fingerprints": 12},
@@ -765,7 +752,7 @@ Returns application configuration, service status, and live runtime metrics. The
 | `system` | App name, version, mode, session ID, start time, uptime, host, OS, kernel, arch, Go version, server timeouts |
 | `database` | PostgreSQL host, port, dbname, sslmode, connection pool settings |
 | `cache` | Redis addr/db, cache TTL, auth cache TTL, plus live: key count, memory used, ping latency (ms), auth cache size |
-| `lookups` | Lookup timeout, screenshot config, subdomain/CT log limits, rate limits and max domains per plan |
+| `lookups` | Lookup timeout, subdomain/CT log limits, rate limits and max domains per plan |
 | `services` | Notifications (enabled + alert config), billing (enabled + config), threat intel (provider names), fingerprint (source + rule count), usage (buffer config) |
 | `runtime` | Goroutines, heap alloc/inuse (MB), sys memory (MB), GC count |
 | `postgres_pool` | Connection pool: open, in use, idle, wait count, wait duration |
@@ -805,7 +792,6 @@ Every lookup has its own TTL, reflecting how fast that data actually changes. An
 | `headers` | 30m |
 | `reputation` | 30m |
 | `threat_intel` | 30m |
-| `screenshot` | 60m |
 | `dns_security` | 4h |
 | `reverse_dns` *(IP)* | 6h |
 | `abuse_contact` *(IP)* | 24h |
@@ -849,7 +835,6 @@ Cache problems never appear in the response `errors` array — those are reserve
 - Go 1.27+
 - Redis (or use the included Docker Compose)
 - PostgreSQL (or use the included Docker Compose)
-- Chromium or Google Chrome (for page screenshot feature; Docker image includes it)
 
 ### Configuration
 
@@ -889,9 +874,6 @@ Config values:
 | `auth.rotation_grace` | `24h` | How long old keys keep working after `POST /v1/keys/rotate` |
 | `auth.last_used_buffer_size` | `256` | Buffer size for batched last_used_at updates |
 | `auth.last_used_flush_interval` | `10s` | How often last_used_at updates are flushed to PostgreSQL |
-| `screenshot.timeout` | `15s` | Timeout for page screenshot capture (probe + render) |
-| `screenshot.max_png_bytes` | `5242880` | Maximum screenshot PNG size in bytes (5 MB) |
-| `screenshot.max_concurrent` | `4` | Global cap on concurrent Chromium screenshot processes |
 | `subdomain.max_results` | `500` | Maximum number of subdomains returned per domain |
 | `subdomain.max_response_bytes` | `10485760` | Maximum crt.sh response body size in bytes (10 MB) |
 | `subdomain.http_timeout` | `15s` | End-to-end timeout for the crt.sh subdomain request |

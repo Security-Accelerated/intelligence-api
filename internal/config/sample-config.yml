@@ -38,7 +38,6 @@ cache:
     headers: 30m
     reputation: 30m
     threat_intel: 30m
-    screenshot: 60m
     # IP lookups. geo is absent deliberately: it reads a local mmap and is
     # never cached, so a TTL would be meaningless.
     asn: 24h
@@ -56,11 +55,6 @@ domain:
   max_domains:
     free: 1
     pro: 20
-
-screenshot:
-  timeout: 15s
-  max_png_bytes: 5242880  # 5 MB
-  max_concurrent: 4       # global cap on concurrent Chromium processes
 
 subdomain:
   max_results: 500

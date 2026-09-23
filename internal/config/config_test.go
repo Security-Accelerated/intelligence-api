@@ -31,7 +31,6 @@ func TestConfig_Defaults(t *testing.T) {
 		{"cache.ttl.whois", "24h"},
 		{"cache.ttl.dns", "30m"},
 		{"auth.cache_ttl", "5m"},
-		{"screenshot.timeout", "45s"},
 		{"domain.max_domains.pro", 20},
 		{"subdomain.max_results", 500},
 		{"ct_logs.max_entries", 100},
@@ -47,7 +46,6 @@ func TestConfig_Defaults(t *testing.T) {
 		{"geoip.max_age", "720h"},
 		{"cache.ttl.asn", "24h"},
 		{"postgres.sslmode", "require"},
-		{"screenshot.provider", "chromium"},
 	}
 
 	for _, tt := range tests {

@@ -52,8 +52,6 @@ coalescing anywhere; `service/whole_response.go` is gone and must not come back.
   still returns. Full errors are logged server-side.
 - **Cache problems never reach `resp.Errors`.** MGET error → all misses. Corrupt entry →
   miss, and the live fetch overwrites it. Failed SET → still served, logged.
-- **Screenshots** take a slot from a process-wide semaphore (`screenshot.max_concurrent`,
-  default **1**) before running; no slot before the deadline → queue-timeout error.
 
 ## Cache rules
 

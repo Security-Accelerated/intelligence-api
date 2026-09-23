@@ -159,28 +159,34 @@ another's.
 replaced exactly that — the old `copyViaJSON` guard — by making the sharing impossible
 rather than compensating for it.
 
-### Screenshot concurrency defaults to 1
+### Screenshots were removed before v1.0
 
-**Decision.** `screenshot.max_concurrent` defaults to **1**. The runner takes a semaphore
-slot before running and reports a queue timeout if none frees up before the deadline.
+**Decision.** The `screenshot` lookup is gone; asking for it is a 400. The Chromium
+provider, the capture semaphore, the browser SSRF proxy, chromedp, and Chromium in the
+image went with it. `request_log.screenshot` stays for its history. #110 tracks the return.
 
-**Why.** Each in-process Chromium wants roughly half a gigabyte. The previous default of 4
-could exhaust a machine sized for the API and take the whole process down.
+**Why.** In-process headless Chromium never reliably started inside its budget on a
+shared-CPU Fly machine, and failed captures return 200 with the reason in `errors`, so
+they looked like success. Three rounds of fixes (startup timeout, `/dev/shm`, concurrency
+4→1, 1 GB) did not get it there. The likely remaining cause — the 45s capture timeout
+nested under the 30s lookup timeout — was never confirmed in production. Shipping a paid
+lookup that silently fails was worse than not shipping it.
 
-**Instead of.** A higher default for throughput. Throughput here is bounded by memory, not
-by the cap — and the failure mode of getting it wrong is the process dying, not requests
-being slow.
+**Instead of.** Keeping it behind a warning, or fixing the timeout nesting under launch
+pressure. The code is one `git revert` away, and #110 records what was learned: a hosted
+provider is the preferred return path, since local Chromium also costs ~500 MB per
+capture and runs with `--no-sandbox`.
 
 ### Dependency injection: interfaces only where a second implementation is real
 
 **Decision.** Lookups with one implementation and no state are function fields, swapped in
 tests via setters. Collaborators that could plausibly have a second implementation get an
 interface — `cache.Cache`, `notifications.Notifier`, `usage.Recorder`, `billing.Service`,
-`domain.ThreatIntelProvider`, `domain.ScreenshotProvider`.
+`domain.ThreatIntelProvider`.
 
 **Why.** The test is whether an alternative is *real*, not whether one is imaginable.
-Screenshots earned an interface because a hosted provider is a live option and local
-Chromium cannot serve bulk capture at any affordable machine size.
+Screenshots earned an interface for the same reason — a hosted provider was a live option —
+until the lookup was removed; see #110.
 
 **Instead of.** Wrapping everything in interfaces for symmetry. `LookupDNS` behind an
 interface buys nothing and costs a layer of indirection at every call site.

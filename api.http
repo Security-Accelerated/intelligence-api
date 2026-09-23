@@ -85,36 +85,6 @@ X-API-Key: {{freeKey}}
   "lookups": ["whois", "dns", "ssl", "headers"]
 }
 
-### Domain lookup with screenshot - should return 403 (free key)
-POST {{host}}/v1/domain/lookup
-Content-Type: application/json
-X-API-Key: {{freeKey}}
-
-{
-  "domains": ["example.com"],
-  "lookups": ["screenshot"]
-}
-
-### Domain lookup with screenshot (admin key)
-POST {{host}}/v1/domain/lookup
-Content-Type: application/json
-X-API-Key: {{adminKey}}
-
-{
-  "domains": ["example.com"],
-  "lookups": ["screenshot"]
-}
-
-### Domain lookup with screenshot - should return 403 (free key)
-POST {{host}}/v1/domain/lookup
-Content-Type: application/json
-X-API-Key: {{lookupKey}}
-
-{
-  "domains": ["example.com"],
-  "lookups": ["screenshot"]
-}
-
 ### Domain lookup with reputation (admin key)
 POST {{host}}/v1/domain/lookup
 Content-Type: application/json
@@ -133,16 +103,6 @@ X-API-Key: {{lookupKey}}
 {
   "domains": ["example.com"],
   "lookups": ["reputation"]
-}
-
-### Domain lookup with screenshot + reputation (admin key)
-POST {{host}}/v1/domain/lookup
-Content-Type: application/json
-X-API-Key: {{adminKey}}
-
-{
-  "domains": ["example.com"],
-  "lookups": ["screenshot", "reputation"]
 }
 
 ### Domain lookup with email security (free key - all plans)

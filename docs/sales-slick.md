@@ -14,7 +14,7 @@ Security teams waste hours manually checking domains and IPs across dozens of di
 
 One API. One call. Every signal that matters.
 
-Submit a domain or IP address and get back a complete intelligence profile in seconds. For domains: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, what technologies it runs, whether it's linked to known malware campaigns, and even a visual screenshot of the page. For IPs: geolocation, ASN ownership, reverse DNS, abuse contacts, and threat intelligence. Batch multiple domains or IPs in a single request. Results are cached for fast repeat lookups.
+Submit a domain or IP address and get back a complete intelligence profile in seconds. For domains: who owns it, where it's hosted, whether its certificates are valid, how its email security is configured, whether it appears on threat blocklists, what subdomains exist, what technologies it runs, and whether it's linked to known malware campaigns. For IPs: geolocation, ASN ownership, reverse DNS, abuse contacts, and threat intelligence. Batch multiple domains or IPs in a single request. Results are cached for fast repeat lookups.
 
 ---
 
@@ -36,9 +36,6 @@ Check domains against multiple DNS-based threat intelligence feeds (Spamhaus, SU
 
 ### Threat Intelligence
 Query multiple threat intelligence sources — VirusTotal, URLhaus (Abuse.ch), and AlienVault OTX — in a single call. Get malware detection verdicts, campaign attribution from known threat actors, and community threat pulses. Know whether a domain is actively distributing malware, part of a botnet, or flagged by the security research community.
-
-### Page Screenshots
-Capture a visual screenshot of any domain's web page with headless Chrome. See what users see without visiting the site. Invaluable for phishing investigations and brand monitoring.
 
 ### Subdomain Enumeration
 Discover subdomains via Certificate Transparency logs. Find forgotten infrastructure, staging environments, and shadow IT — the entry points attackers look for first.
@@ -71,7 +68,7 @@ POST /v1/domain/lookup
   "domains": ["example.com"],
   "lookups": [
     "whois", "dns", "ssl", "headers",
-    "reputation", "email_security", "screenshot", "subdomains",
+    "reputation", "email_security", "subdomains",
     "ct_logs", "bgp", "fingerprint", "threat_intel",
     "dns_security", "risk"
   ]
@@ -112,7 +109,6 @@ That's it. One request, one comprehensive response.
 | Certificate transparency logs | Included | Included |
 | BGP/ASN enrichment | Included | Included |
 | Technology fingerprinting | Included | Included |
-| Page screenshots | — | Included |
 | Domain reputation scoring | — | Included |
 | Threat intelligence (domain + IP) | — | Included |
 | Rate limit | 5 req/min | 120 req/min |

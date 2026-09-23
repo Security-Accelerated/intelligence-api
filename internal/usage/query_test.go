@@ -90,7 +90,7 @@ func aggRow(totalRequests, cacheHits, cacheMisses int, avgLatency float64, total
 
 var happyPathFeatures = map[string]int{
 	"whois": 40, "dns": 60, "ssl": 30, "headers": 22,
-	"screenshot": 10, "reputation": 20, "email_security": 15,
+	"reputation": 20, "email_security": 15,
 	"subdomains": 12, "ct_logs": 8, "bgp": 5,
 	"fingerprint": 25, "threat_intel": 3,
 }
@@ -153,7 +153,7 @@ func TestQueryUsage_HappyPath(t *testing.T) {
 
 	// Feature usage
 	features := map[string]int{
-		"screenshot": 10, "reputation": 20, "email_security": 15,
+		"reputation": 20, "email_security": 15,
 		"subdomains": 12, "ct_logs": 8, "bgp": 5,
 		"fingerprint": 25, "threat_intel": 3,
 	}
@@ -368,7 +368,7 @@ func TestQueryUsage_WithCustomerFilter(t *testing.T) {
 	mock.ExpectQuery("SELECT").
 		WithArgs(since, until, 42).
 		WillReturnRows(sqlmock.NewRows(aggColumns()).
-			AddRow(aggRow(5, 2, 8, 20.0, 4, 0, map[string]int{"screenshot": 1})...))
+			AddRow(aggRow(5, 2, 8, 20.0, 4, 0, map[string]int{"reputation": 1})...))
 
 	mock.ExpectQuery("SELECT status_code").
 		WithArgs(since, until, 42).
@@ -389,8 +389,8 @@ func TestQueryUsage_WithCustomerFilter(t *testing.T) {
 	if summary.TotalRequests != 5 {
 		t.Errorf("TotalRequests = %d, want 5", summary.TotalRequests)
 	}
-	if summary.FeatureUsage["screenshot"] != 1 {
-		t.Errorf("FeatureUsage[screenshot] = %d, want 1", summary.FeatureUsage["screenshot"])
+	if summary.FeatureUsage["reputation"] != 1 {
+		t.Errorf("FeatureUsage[reputation] = %d, want 1", summary.FeatureUsage["reputation"])
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

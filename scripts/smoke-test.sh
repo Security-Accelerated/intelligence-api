@@ -219,13 +219,11 @@ post 401 "lookup (wrong key)"  "/v1/domain/lookup" "totally-wrong-key" "$DOMAIN"
 
 echo ""
 echo "=== Domain Lookup — Pro Options ==="
-post 200 "screenshot (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot"]}'
-post 200 "screenshot (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["screenshot"]}'
-free_key; post 403 "screenshot (free — pro only)"  "/v1/domain/lookup" "$FK"  '{"domains":["example.com"],"lookups":["screenshot"]}'
+# screenshot was removed before v1.0 (#110); it must be an unknown lookup now.
+post 400 "screenshot (removed)"          "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["screenshot"]}'
 post 200 "reputation (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["reputation"]}'
 post 200 "reputation (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["reputation"]}'
 free_key; post 403 "reputation (free — pro only)"  "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["reputation"]}'
-post 200 "screenshot+reputation (admin)" "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["screenshot","reputation"]}'
 post 200 "threat_intel (admin)"            "/v1/domain/lookup" "$ADMIN" '{"domains":["example.com"],"lookups":["threat_intel"]}'
 post 200 "threat_intel (pro)"              "/v1/domain/lookup" "$PRO"   '{"domains":["example.com"],"lookups":["threat_intel"]}'
 free_key; post 403 "threat_intel (free — pro only)"  "/v1/domain/lookup" "$FK" '{"domains":["example.com"],"lookups":["threat_intel"]}'
