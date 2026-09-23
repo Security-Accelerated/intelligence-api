@@ -147,11 +147,11 @@
     <table>
       <thead><tr><th>Name</th><th>Plan</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td><code>geo</code></td><td>All</td><td>Country, city, region, coordinates, timezone (MaxMind GeoLite2).</td></tr>
-        <tr><td><code>asn</code></td><td>All</td><td>ASN number, organization, network (MaxMind GeoLite2 ASN).</td></tr>
+        <tr><td><code>geo</code></td><td>All</td><td>Country, city, region, coordinates, timezone.</td></tr>
+        <tr><td><code>asn</code></td><td>All</td><td>ASN number, organization, network.</td></tr>
         <tr><td><code>reverse_dns</code></td><td>All</td><td>PTR record hostnames.</td></tr>
         <tr><td><code>abuse_contact</code></td><td>All</td><td>Network owner, country, abuse email (via RDAP).</td></tr>
-        <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>VirusTotal, URLhaus, and AlienVault OTX with a composite risk score.</td></tr>
+        <tr><td><code>threat_intel</code></td><td><span class="tag tag-pro">Pro</span></td><td>Multiple threat intelligence feeds with a composite risk score.</td></tr>
       </tbody>
     </table>
   </div>
@@ -285,7 +285,7 @@ resp = requests.post(
   <p>Results are wrapped in a <code>results</code> envelope. Match elements by <code>ip</code> rather than by position &mdash; addresses that canonicalize to the same value collapse into one result.</p>
 
   <h3 id="geo">geo -- Geographic Location</h3>
-  <p>Location data from MaxMind GeoLite2. Available on all plans.</p>
+  <p>Approximate location of the address. Available on all plans.</p>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Field</th><th>Description</th></tr></thead>
@@ -303,7 +303,7 @@ resp = requests.post(
   </div>
 
   <h3 id="asn">asn -- Autonomous System</h3>
-  <p>Network ownership data from MaxMind GeoLite2 ASN. Available on all plans.</p>
+  <p>The network that announces the address. Available on all plans.</p>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Field</th><th>Description</th></tr></thead>
@@ -353,7 +353,6 @@ resp = requests.post(
       </tbody>
     </table>
   </div>
-  <p>Providers: <strong>VirusTotal</strong> (50% weight), <strong>URLhaus</strong> (30%), <strong>AlienVault OTX</strong> (20%).</p>
 
   <h3 id="errors-field">errors -- Partial Failures</h3>
   <p>If individual lookups fail, they appear here. The rest of the response is still populated.</p>
@@ -415,7 +414,7 @@ resp = requests.post(
     </table>
   </div>
   <h4><code>geo</code> and <code>asn</code> are never cached</h4>
-  <p>Both read a local MaxMind memory-mapped database with no network call, so a Redis round trip would cost <em>more</em> than simply doing the lookup again. They are recomputed on every request and their <code>cache_hit</code> is always <code>false</code> &mdash; which is accurate, since the data really was produced for that request.</p>
+  <p>Both are answered locally without an upstream call, so caching them would cost more than doing the lookup again. They are recomputed on every request and their <code>cache_hit</code> is always <code>false</code> &mdash; which is accurate, since the data really was produced for that request.</p>
   <h4>Cache failures never fail a request</h4>
   <p>Caching is fail-open: an unreachable cache means every lookup is fetched live, an unreadable entry is treated as a miss and overwritten, and a failed write still returns the fetched result. Failed lookups are never cached &mdash; a failing lookup is retried on the next request rather than remembered.</p>
 
@@ -494,6 +493,10 @@ resp = requests.post(
   </p>
   <p class="page-footer-meta">
     Questions: <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a>
+  </p>
+  <p class="page-footer-meta">
+    This product includes GeoLite Data created by MaxMind, available from
+    <a href="https://www.maxmind.com">https://www.maxmind.com</a>.
   </p>
 </footer>
 
