@@ -10,6 +10,14 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v0.76.0
+  date: 2026-10-14
+  changes:
+    - text: "`GET /v1/info` reports `services.billing.mode` as `live`, `test`, or `unknown`, read from the Stripe secret key prefix, and the app logs a warning at startup when production is running on a test key. Nothing else in the billing path tells the two modes apart, so the Stripe go-live (#53) can be confirmed from one field instead of a trial checkout"
+      audience: internal
+    - text: "CI installs golangci-lint v2.14.0 (was v2.13.1). The older release cannot read the export data Go 1.27.2 emits and fails typecheck on every package; CI resolves Go from go.mod, so it would have picked up 1.27.2 and failed on the next PR"
+      audience: internal
+
 - version: v0.75.1
   date: 2026-09-23
   changes:
