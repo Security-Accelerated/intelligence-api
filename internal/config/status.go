@@ -109,9 +109,12 @@ type NotificationsStatus struct {
 }
 
 type BillingStatus struct {
-	Enabled              bool `json:"enabled"`
-	PortalLinkConfigured bool `json:"portal_link_configured"`
-	StaleKeyDays         int  `json:"stale_key_days"`
+	Enabled bool `json:"enabled"`
+	// Mode is "live", "test", or "unknown", read from the Stripe secret key
+	// prefix (billing.KeyMode). Empty when billing is disabled.
+	Mode                 string `json:"mode,omitempty"`
+	PortalLinkConfigured bool   `json:"portal_link_configured"`
+	StaleKeyDays         int    `json:"stale_key_days"`
 }
 
 type ThreatIntelStatus struct {
