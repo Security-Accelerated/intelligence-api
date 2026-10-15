@@ -204,10 +204,18 @@ func Run(logger *zap.Logger, version string) error {
 		billingSvc = billing.NewStripeService(stripeKey, webhookSecret, priceMap, billingRepo, cachedRepo, notifier)
 		status.Services.Billing = config.BillingStatus{
 			Enabled:              true,
+			Mode:                 billing.KeyMode(stripeKey),
 			PortalLinkConfigured: cfg.GetString("stripe.portal_link") != "",
 			StaleKeyDays:         cfg.GetInt("billing.stale_key_days"),
 		}
 		logger.Info("stripe billing enabled", zap.Any("config", status.Services.Billing))
+		// A test key in production is a half-finished go-live: checkout works,
+		// nothing is charged, and no error is raised anywhere. Say so once at
+		// startup; /v1/info carries the same field for later checks.
+		if status.Services.Billing.Mode != billing.ModeLive && cfg.GetString("application.mode") == "production" {
+			logger.Warn("stripe billing is not in live mode in production",
+				zap.String("mode", status.Services.Billing.Mode))
+		}
 	} else {
 		billingSvc = &billing.NoopService{}
 		logger.Info("stripe billing disabled (no credentials configured)")

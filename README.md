@@ -753,7 +753,7 @@ Returns application configuration, service status, and live runtime metrics. The
 | `database` | PostgreSQL host, port, dbname, sslmode, connection pool settings |
 | `cache` | Redis addr/db, cache TTL, auth cache TTL, plus live: key count, memory used, ping latency (ms), auth cache size |
 | `lookups` | Lookup timeout, subdomain/CT log limits, rate limits and max domains per plan |
-| `services` | Notifications (enabled + alert config), billing (enabled + config), threat intel (provider names), fingerprint (source + rule count), usage (buffer config) |
+| `services` | Notifications (enabled + alert config), billing (enabled, Stripe key mode `live`/`test`, config), threat intel (provider names), fingerprint (source + rule count), usage (buffer config) |
 | `runtime` | Goroutines, heap alloc/inuse (MB), sys memory (MB), GC count |
 | `postgres_pool` | Connection pool: open, in use, idle, wait count, wait duration |
 
