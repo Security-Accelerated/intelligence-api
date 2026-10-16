@@ -40,8 +40,9 @@ latest `v*` tag on `main`. Earlier tags receive no fixes.
 
 The things most worth checking are documented in the repository rather than here:
 
-- `internal/safenet` is the single outbound-dial guard. Every outbound HTTP client goes
-  through it; a new one that does not is a vulnerability.
+- `internal/safenet` is the single outbound-dial guard in the API server. Every outbound
+  HTTP client there goes through it; a new one that does not is a vulnerability. The
+  `sactl` CLI talks only to the API host the operator names and uses a plain client.
 - API keys are stored as SHA-256 hashes. The one plaintext exception, `provisioned_keys`,
   is described in `.claude/rules/auth-billing.md`.
 - `docs/decisions.md` explains the controls that look removable and are not.
