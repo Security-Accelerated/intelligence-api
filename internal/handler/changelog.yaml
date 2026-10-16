@@ -15,6 +15,8 @@
   changes:
     - text: "`GET /v1/info` reports `services.billing.mode` as `live`, `test`, or `unknown`, read from the Stripe secret key prefix, and the app logs a warning at startup when production is running on a test key. Nothing else in the billing path tells the two modes apart, so the Stripe go-live (#53) can be confirmed from one field instead of a trial checkout"
       audience: internal
+    - text: "The README is a landing page now: what the service is, one request and its response, the architecture, the engineering choices worth knowing, how to run and develop it, a note on AI-assisted development, and the all-rights-reserved notice. The 1,250 lines of reference it held moved verbatim to docs/api-reference.md (callers) and docs/operations.md (operators); AGENTS.md and the adding-features skill point at the new homes"
+      audience: internal
     - text: "Repository hygiene for the public flip (2026-10-16): SECURITY.md with the reporting address and scope; every third-party GitHub Action pinned to a commit SHA with Dependabot watching for new releases; the README deployment section now describes the real flow (a `v*` tag is the deploy, `workflow_dispatch` redeploys for rollback) instead of a `release` branch that no longer exists; docs/sales-slick.md removed"
       audience: internal
     - text: "CI installs golangci-lint v2.14.0 (was v2.13.1). The older release cannot read the export data Go 1.27.2 emits and fails typecheck on every package; CI resolves Go from go.mod, so it would have picked up 1.27.2 and failed on the next PR"

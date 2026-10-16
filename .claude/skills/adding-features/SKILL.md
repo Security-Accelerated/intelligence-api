@@ -20,7 +20,7 @@ surfaces late — usually as a drift test failing in CI or a stale docs surface.
 8. Add the column to `usage.LookupColumns` and a migration for `request_log` (the drift test will fail until you do)
 9. Add a setter method for tests (`SetThingLookup`)
 10. Update all test files that call `New()` or `SetLookups()`
-11. Update README, docs HTML (request table, valid-lookups table, response field section with its `cache_hit` row, caching TTL table), api.http, smoke test, integration tests, changelog.yaml
+11. Update `docs/api-reference.md` (lookup table, response field section, caching TTL table) and `docs/operations.md` (the `cache.ttl.<name>` config row), docs HTML (request table, valid-lookups table, response field section with its `cache_hit` row, caching TTL table), api.http, smoke test, integration tests, changelog.yaml
 
 ## Adding a New Endpoint
 
@@ -32,4 +32,4 @@ surfaces late — usually as a drift test failing in CI or a stale docs surface.
 6. Wire the service in `internal/app/app.go`
 7. Add a field to `handler.Deps` and set it in `app.go` — existing test call sites need no change, since they name only the dependencies they use
 8. Add context keys to `middleware/request_logger.go` if needed
-9. Update README, api.http, smoke test, integration tests, changelog.yaml
+9. Update `docs/api-reference.md` (endpoint table and a section for the endpoint), api.http, smoke test, integration tests, changelog.yaml

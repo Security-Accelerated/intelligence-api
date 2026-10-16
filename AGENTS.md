@@ -87,8 +87,9 @@ open the file.
   one body. For the one-line-per-PR view, use `git log --first-parent main`.
 - No `Co-Authored-By` trailers. Fleet attribution rules apply (`Assisted-by:`).
 - `go mod tidy` before committing. `gofmt` is not optional.
-- Keep `README.md` in sync when a change touches endpoints, config, make targets, or
-  structure.
+- Keep the docs in sync: `docs/api-reference.md` when a change touches endpoints, request
+  or response fields, or caching; `docs/operations.md` for config keys, env vars, make
+  targets, scripts, or deployment; `README.md` only for structure or the headline claims.
 - A new lookup needs a `usage.LookupColumns` entry and a `request_log` migration; a drift
   test fails until it has both. That failure is the design.
 - Tests: handlers use `httptest` with a gin test router; services swap lookups via
