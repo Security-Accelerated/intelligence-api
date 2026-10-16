@@ -1,0 +1,13 @@
+# Keeps the SHA-pinned actions in .github/workflows current. A pin without this
+# is a pin that silently ages: the workflows would run a known commit forever and
+# never see a security release. Go modules are deliberately not here; `make deps`
+# upgrades them when asked, and every dependency change is treated as a code change
+# with the full test suite behind it.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
