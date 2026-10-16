@@ -41,7 +41,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # refs/tags/ is explicit so a *branch* named v-something can't be
           # checked out here: checkout accepts either for a bare ref.
@@ -62,8 +62,8 @@ jobs:
           echo "deploying $RELEASE_TAG at $have"
       # Pinned to a commit, not @master: this action runs one step before the
       # Fly token is in scope, so a mutable ref is a supply-chain door. Bump by
-      # changing the SHA deliberately. (v1 / 1.6 as of 2026-04-08.)
-      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+      # changing the SHA deliberately.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # v1.6
       - run: flyctl deploy --remote-only --build-arg "VERSION=$RELEASE_TAG"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
