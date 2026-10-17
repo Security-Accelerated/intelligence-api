@@ -10,6 +10,12 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.0.1
+  date: 2026-10-17
+  changes:
+    - text: "The `production` GitHub environment requires a reviewer, so a `v*` tag runs the tests and then waits at \"Review deployments\" until Jason approves it; nothing reaches Fly before that. RELEASE.md, docs/operations.md and AGENTS.md describe the gate, and an agent reports the waiting run rather than approving it"
+      audience: internal
+
 - version: v1.0.0
   date: 2026-10-17
   changes:
