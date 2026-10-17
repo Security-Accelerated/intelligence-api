@@ -10,6 +10,14 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.0.0
+  date: 2026-10-17
+  changes:
+    - text: "Intelligence API 1.0 is generally available. Pro subscriptions are bought from the link under Plans, and the API key is shown once on the confirmation page. From this release the request and response contract is stable: a change that would break an existing caller gets a major version and an entry here before it ships"
+      audience: public
+    - text: "Launch cutover (#54): Stripe billing moved from test mode to live mode (#53) and the first real checkout, cancellation, and downgrade were verified against production before this tag. `request_log` is truncated after the post-release smoke test so usage analytics start at launch"
+      audience: internal
+
 - version: v0.76.0
   date: 2026-10-16
   changes:
