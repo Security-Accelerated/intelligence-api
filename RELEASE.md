@@ -11,8 +11,13 @@ tag; `.github/workflows/fly-deploy.yml` fires on any `v*` tag, runs the test wor
 and then `flyctl deploy` with the tag name baked in as the version. There is no `release`
 branch and no second PR.
 
-The human decision is `make release`. Everything before it has already been reviewed on
-its way into `main`; everything after it is automatic.
+The deploy job runs in the `production` GitHub environment, which requires a reviewer
+(set 2026-10-17). After the tests pass, the run pauses at "Review deployments" in the
+Actions UI until Jason approves it; nothing reaches Fly before that click. An agent
+reports the waiting run and stops. It never approves a deployment, by `gh` or otherwise.
+
+The human decisions are `make release` and that approval. Everything before the tag has
+already been reviewed on its way into `main`; everything after the approval is automatic.
 
 ## Preconditions
 
@@ -48,6 +53,11 @@ Any of these failing stops the release. Do not release around a dirty tree.
 3. **`make release V=vX.Y.Z`.** Creates an annotated tag and pushes it. **This is the
    deploy.** Report the version and stop; the rest is the pipeline's.
 
+4. **Approve the deployment.** Once the tests pass, the run waits on the `production`
+   environment reviewer. Jason approves it under Actions → the run → Review deployments.
+   An agent waiting on a release reports "waiting for approval" with the run URL and does
+   nothing else until the run finishes.
+
    Branch names must not start with `release/` — git cannot hold a `release` ref and a
    `release/…` ref at once, and the old branch may still exist in some clones.
 
@@ -73,7 +83,8 @@ mismatch here means the deploy did not happen, not that it was mislabelled.
 
 Redeploy an earlier tag: **Actions → Fly Deploy → Run workflow → tag** (or
 `gh workflow run fly-deploy.yml -f tag=vX.Y.Z`). The workflow refuses anything that is not
-exactly a release tag. Then run the Verify section against that tag.
+exactly a release tag. A rollback goes through the same `production` approval as a
+release. Then run the Verify section against that tag.
 
 A rollback is a deploy, not a release: no changelog entry, no new tag. If the fix is a
 code change, that is a new release.

@@ -230,7 +230,7 @@ The API is deployed on **Fly.io** with **Neon** (PostgreSQL) and **Upstash** (Re
 
 - **Pull requests** — `test.yml` runs gofmt, vet, lint on new findings, unit tests with `-race`, and integration tests
 - **Push to `main`** — `docker.yml` builds and pushes an image to GHCR
-- **`v*` tag** — `fly-deploy.yml` runs the tests, builds the image with the version baked in, and deploys it to Fly.io. **The tag is the deploy.** Re-running it with `workflow_dispatch` and an existing tag redeploys that version, which is the rollback path
+- **`v*` tag** — `fly-deploy.yml` runs the tests, builds the image with the version baked in, and deploys it to Fly.io. **The tag is the deploy.** The deploy job runs in the `production` GitHub environment, which requires a reviewer, so the run pauses at "Review deployments" after the tests until it is approved. Re-running it with `workflow_dispatch` and an existing tag redeploys that version, which is the rollback path, through the same approval
 - **Uptime monitor** — `uptime.yml` pings `/v1/health` every 5 minutes and sends a Pushover alert on failure
 
 Every third-party action is pinned to a commit SHA, with the version in a trailing comment. Dependabot opens a PR when a pinned action has a new release.
@@ -240,7 +240,7 @@ Every third-party action is pinned to a commit SHA, with the version in a traili
 A release is a `v*` tag on `main`, created with `make release`. The full procedure, including the changelog entry and the rollback path, is in `RELEASE.md`.
 
 ```sh
-make release V=v0.X.Y             # tag main and push the tag; the tag is the deploy
+make release V=v0.X.Y             # tag main and push the tag; the tag is the deploy, gated on the production reviewer
 ```
 
 ### Environment variables (Fly secrets)

@@ -79,8 +79,9 @@ open the file.
 ## Conventions
 
 - Feature branch → PR into `main`. No direct pushes to `main`. Open the PR, do not merge
-  it. A release is a `v*` tag on `main`, and the tag is the deploy — see `RELEASE.md`.
-  Never push one except through `make release`.
+  it. A release is a `v*` tag on `main`, and the tag is the deploy, gated on Jason
+  approving the `production` environment — see `RELEASE.md`. Never push one except
+  through `make release`, and never approve a deployment.
 - **Every PR merges as a merge commit. Never squash, never rebase.** Squash and rebase
   replace the branch's commits with new ones: SHAs referenced in comments and changelogs
   stop existing, and the `Assisted-by:` trailers the fleet audit reads get flattened into
