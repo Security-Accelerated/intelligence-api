@@ -10,13 +10,17 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
-- version: v1.0.1
-  date: 2026-10-17
+- version: v1.0.2
+  date: 2026-10-20
   changes:
     - text: "The Plans table on the docs pages now shows what Pro costs, next to the subscribe button, instead of leaving the price to the checkout page (#77)"
       audience: public
     - text: "The displayed price comes from `stripe.price_display.pro` (`STRIPE_PRICE_DISPLAY_PRO`, set in `fly.toml` `[env]` since it is not a secret). It is display text only, so it must change together with the Stripe price behind `stripe.prices.pro_monthly`; empty hides it"
       audience: internal
+
+- version: v1.0.1
+  date: 2026-10-17
+  changes:
     - text: "The `production` GitHub environment requires a reviewer, so a `v*` tag runs the tests and then waits at \"Review deployments\" until Jason approves it; nothing reaches Fly before that. RELEASE.md, docs/operations.md and AGENTS.md describe the gate, and an agent reports the waiting run rather than approving it"
       audience: internal
     - text: "Indirect dependency gabriel-vasile/mimetype 1.4.15 to 1.4.16, pulled in through gin's request binding via go-playground/validator. No direct use in this codebase; make verify passes unchanged"
@@ -47,11 +51,11 @@
 - version: v0.75.1
   date: 2026-09-23
   changes:
-    - text: "The overview and domain reference each had a Plans table and a Pricing section repeating the same limits. They are one Plans section now, with the link to get a Pro key under the table. The docs are technical reference and state no price (superseded in v1.0.1: the Plans table shows the Pro price)"
+    - text: "The overview and domain reference each had a Plans table and a Pricing section repeating the same limits. They are one Plans section now, with the link to get a Pro key under the table. The docs are technical reference and state no price (superseded in v1.0.2: the Plans table shows the Pro price)"
       audience: public
     - text: "Three places still said an aggregate risk score comes with every response. It has been opt-in since v0.54.0: add `risk` to `lookups` to get it"
       audience: public
-    - text: "#77 closed as not planned: the API docs stay technical and show no price. The Stripe payment and portal links are still rendered from config under Plans (superseded in v1.0.1: the price is shown from `stripe.price_display.pro`)"
+    - text: "#77 closed as not planned: the API docs stay technical and show no price. The Stripe payment and portal links are still rendered from config under Plans (superseded in v1.0.2: the price is shown from `stripe.price_display.pro`)"
       audience: internal
 
 - version: v0.75.0
