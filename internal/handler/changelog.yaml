@@ -47,11 +47,11 @@
 - version: v0.75.1
   date: 2026-09-23
   changes:
-    - text: "The overview and domain reference each had a Plans table and a Pricing section repeating the same limits. They are one Plans section now, with the link to get a Pro key under the table. The docs are technical reference and state no price"
+    - text: "The overview and domain reference each had a Plans table and a Pricing section repeating the same limits. They are one Plans section now, with the link to get a Pro key under the table. The docs are technical reference and state no price (superseded in v1.0.1: the Plans table shows the Pro price)"
       audience: public
     - text: "Three places still said an aggregate risk score comes with every response. It has been opt-in since v0.54.0: add `risk` to `lookups` to get it"
       audience: public
-    - text: "#77 closed as not planned: the API docs stay technical and show no price. The Stripe payment and portal links are still rendered from config under Plans"
+    - text: "#77 closed as not planned: the API docs stay technical and show no price. The Stripe payment and portal links are still rendered from config under Plans (superseded in v1.0.1: the price is shown from `stripe.price_display.pro`)"
       audience: internal
 
 - version: v0.75.0
