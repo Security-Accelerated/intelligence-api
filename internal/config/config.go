@@ -123,6 +123,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("stripe.webhook_secret", "")
 	v.SetDefault("stripe.prices.pro_monthly", "")
 	v.SetDefault("stripe.payment_link.pro", "")
+	v.SetDefault("stripe.price_display.pro", "")
 	v.SetDefault("stripe.portal_link", "")
 	v.SetDefault("billing.stale_key_days", 365)
 	v.SetDefault("usage.buffer_size", 256)

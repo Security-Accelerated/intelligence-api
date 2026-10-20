@@ -398,21 +398,47 @@ func TestDocs_RendersPaymentLinks(t *testing.T) {
 	cfg := viper.New()
 	cfg.Set("stripe.payment_link.pro", "https://buy.stripe.com/test_pro")
 	cfg.Set("stripe.portal_link", "https://billing.stripe.com/test_portal")
+	cfg.Set("stripe.price_display.pro", "$29/month")
+
+	r := docsRouterWithData(nil, cfg, nil)
+	for _, path := range []string{"/docs", "/docs/domain"} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: status = %d, want %d", path, w.Code, http.StatusOK)
+		}
+		body := w.Body.String()
+		if !strings.Contains(body, "https://buy.stripe.com/test_pro") {
+			t.Errorf("%s: expected pro payment link", path)
+		}
+		if !strings.Contains(body, "https://billing.stripe.com/test_portal") {
+			t.Errorf("%s: expected portal link", path)
+		}
+		if !strings.Contains(body, `<span class="plan-price">$29/month</span>`) {
+			t.Errorf("%s: expected pro price in the plans table", path)
+		}
+	}
+}
+
+// With no price configured the table header and CTA say nothing about cost,
+// rather than rendering an empty span or a dangling separator.
+func TestDocs_NoPriceConfiguredHidesPrice(t *testing.T) {
+	cfg := viper.New()
+	cfg.Set("stripe.payment_link.pro", "https://buy.stripe.com/test_pro")
 
 	r := docsRouterWithData(nil, cfg, nil)
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/docs", http.NoBody)
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
-	}
 	body := w.Body.String()
-	if !strings.Contains(body, "https://buy.stripe.com/test_pro") {
-		t.Error("expected pro payment link in docs")
+	if strings.Contains(body, `<th>Pro <span class="plan-price">`) {
+		t.Error("expected no price span when stripe.price_display.pro is empty")
 	}
-	if !strings.Contains(body, "https://billing.stripe.com/test_portal") {
-		t.Error("expected portal link in docs")
+	if !strings.Contains(body, `class="plan-cta">Get a Pro key</a>`) {
+		t.Error("expected CTA without a price suffix")
 	}
 }
 

@@ -95,6 +95,7 @@ Config values:
 | `stripe.webhook_secret` | `""` | Stripe webhook signing secret |
 | `stripe.prices.pro_monthly` | `""` | Stripe Price ID for pro monthly plan |
 | `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
+| `stripe.price_display.pro` | `""` | Price text shown on the docs Plans table (e.g. `$29/month`); empty hides it. Change it together with the Stripe price |
 | `stripe.portal_link` | `""` | Stripe Customer Portal URL for subscription management |
 | `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
 | `billing.cleanup_interval` | `10m` | Sweep cadence for expired provisioned keys |
@@ -267,6 +268,7 @@ make release V=v0.X.Y             # tag main and push the tag; the tag is the de
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 | `STRIPE_PRICES_PRO_MONTHLY` | Stripe Price ID for pro monthly plan |
 | `STRIPE_PAYMENT_LINK_PRO` | Stripe Payment Link URL for pro plan |
+| `STRIPE_PRICE_DISPLAY_PRO` | Price text shown on the docs Plans table; set in `fly.toml` `[env]`, not a secret |
 | `STRIPE_PORTAL_LINK` | Stripe Customer Portal URL for subscription management |
 | `USAGE_BUFFER_SIZE` | Channel buffer size for async usage logging (default: 256) |
 | `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |

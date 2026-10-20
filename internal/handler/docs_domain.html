@@ -129,7 +129,7 @@
   <p>Feature access and limits are determined by your API key's plan.</p>
   <div class="table-scroll">
     <table>
-      <thead><tr><th></th><th>Free</th><th>Pro</th></tr></thead>
+      <thead><tr><th></th><th>Free <span class="plan-price">$0</span></th><th>Pro{{if .ProPrice}} <span class="plan-price">{{.ProPrice}}</span>{{end}}</th></tr></thead>
       <tbody>
         <tr><td><strong>Rate limit</strong></td><td>5 req/min</td><td>120 req/min</td></tr>
         <tr><td><strong>Max domains per request</strong></td><td>1</td><td>20</td></tr>
@@ -146,7 +146,7 @@
       </tbody>
     </table>
   </div>
-  <p>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Get a Pro key</a>{{else}}Contact us for a Pro key.{{end}}</p>
+  <p>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Get a Pro key{{if .ProPrice}} &middot; {{.ProPrice}}{{end}}</a>{{else}}Contact us for a Pro key.{{end}}</p>
   <div class="note">After subscribing, your API key will be shown on a one-time confirmation page. Save it immediately -- it cannot be retrieved again.</div>
   {{if .PortalLink}}<p>Already a subscriber? <a href="{{.PortalLink}}" target="_blank" rel="noopener noreferrer" class="portal-link">Manage your subscription</a></p>{{end}}
 

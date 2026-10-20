@@ -92,6 +92,8 @@ stripe:
     pro_monthly: ""
   payment_link:
     pro: ""
+  price_display:
+    pro: ""           # shown on the docs Plans table, e.g. "$29/month"; keep in step with prices.pro_monthly
   portal_link: ""
 
 billing:

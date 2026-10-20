@@ -8,6 +8,11 @@ primary_region = 'iad'
 
 [build]
 
+# Non-secret display values. The Stripe price ID itself is a secret; this is the
+# text the docs Plans table shows and must change together with that price.
+[env]
+  STRIPE_PRICE_DISPLAY_PRO = '$29/month'
+
 [http_service]
   internal_port = 8080
   force_https = true
