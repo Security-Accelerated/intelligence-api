@@ -1155,7 +1155,15 @@ tbody tr:last-child td:last-child { border-bottom-right-radius: 16px; }
 
 .checklist li + li { margin-top: 6px; }
 
-/* ----- Plan CTA, Portal Link ----- */
+/* ----- Plan price, CTA, Portal Link ----- */
+.plan-price {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
 .plan-cta {
   display: inline-flex;
   align-items: center;

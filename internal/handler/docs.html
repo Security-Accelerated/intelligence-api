@@ -392,7 +392,7 @@
     <p>Plans control request volume, batch size, and access to premium lookups such as reputation and threat intelligence.</p>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Feature</th><th>Free</th><th>Pro</th></tr></thead>
+        <thead><tr><th>Feature</th><th>Free <span class="plan-price">$0</span></th><th>Pro{{if .ProPrice}} <span class="plan-price">{{.ProPrice}}</span>{{end}}</th></tr></thead>
         <tbody>
           <tr><td>Rate limit</td><td>5 req/min</td><td>120 req/min</td></tr>
           <tr><td>Domains per request</td><td>1</td><td>20</td></tr>
@@ -405,7 +405,7 @@
         </tbody>
       </table>
     </div>
-    <p>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Get a Pro key</a>{{else}}Contact us for a Pro key.{{end}}</p>
+    <p>{{if .ProPaymentLink}}<a href="{{.ProPaymentLink}}" class="plan-cta">Get a Pro key{{if .ProPrice}} &middot; {{.ProPrice}}{{end}}</a>{{else}}Contact us for a Pro key.{{end}}</p>
     <div class="note">After subscribing, your API key is shown once on the confirmation page. Capture it immediately because it cannot be retrieved later.</div>
     {{if .PortalLink}}<a href="{{.PortalLink}}" class="portal-link">Manage your subscription</a>{{end}}
   </section>

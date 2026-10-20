@@ -90,6 +90,7 @@ var docsPages = []docsPage{
 
 type docsData struct {
 	ProPaymentLink string
+	ProPrice       string // display text such as "$29/month"; empty hides the price
 	PortalLink     string
 	Version        string
 	Changelog      []docsChangelogVersion
@@ -145,6 +146,7 @@ func (h *Handler) buildDocsData() docsData {
 	data := docsData{Version: version}
 	if h.cfg != nil {
 		data.ProPaymentLink = h.cfg.GetString("stripe.payment_link.pro")
+		data.ProPrice = h.cfg.GetString("stripe.price_display.pro")
 		data.PortalLink = h.cfg.GetString("stripe.portal_link")
 	}
 
