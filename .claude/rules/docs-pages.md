@@ -1,6 +1,7 @@
 ---
 paths:
   - "internal/handler/docs*"
+  - "internal/handler/home*"
   - "internal/handler/render.go"
   - "internal/handler/openapi.go"
   - "internal/handler/changelog.go"
@@ -19,6 +20,29 @@ One table in `docs.go`. Routes are registered by looping it; tests derive their 
 from it. **Adding a page is one table row.** Tests that apply to only some pages select
 (`docsPagesWithLanguageTabs()`) rather than re-list. Do not spell the page set out anywhere
 else — not in the router, not in a test, not in a template's nav.
+
+## The home page is not a docs page
+
+`home.html` is the company page at `/`, served by `Handler.Home`. **It is not a row in
+`docsPages`.** It is the front door: same design language as the docs, different page.
+
+- **Shared:** `docs_styles.css` for the tokens, typefaces, page background, code blocks,
+  tags and theme toggle; `docs.js` for the toggle and the copy buttons; `htmlPageCSP`; and
+  the template data, so its price and payment link come from the same config keys.
+- **Its own:** the header, the hero and its fan-out diagram, the plan panels, the contact
+  panel — all in the page's inline `<style>`, under `home-` class names, built from the
+  shared tokens. **Do not reuse the docs page shell there** (`.topbar`, `.topbar-nav`,
+  `.hero-card`, `.section-card`, the Plans table). The first version did and came out as a
+  copy of the docs overview. It has no `.topbar-actions`, so `docs.js` injects no search.
+
+Use the tokens, never a new colour or typeface: a version with its own palette and face
+was rejected as too far the other way. Its plan limits repeat the Plans table on `/docs`;
+change both together.
+
+The fan-out diagram is a **sample that ends in "and more"**, on purpose, so a new lookup
+does not mean redrawing it. Do not make it exhaustive. The Product section's two lists
+are the full set and do gain a line with each new lookup. The grid-track and injected-control rules below apply to it; the
+docs-nav and table rules do not.
 
 ## Layout rules — pinned by `docs_layout_test.go`
 

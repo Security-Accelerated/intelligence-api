@@ -17,7 +17,8 @@ OpenAPI 3.1 at `/docs/openapi.yaml`.
 cmd/api/main.go          entry point, version via ldflags
 cmd/sactl/               operator CLI: interactive menu with no args, flags otherwise
 internal/app/            dependency wiring, bootstrap, shutdown
-internal/handler/        HTTP handlers, route registration, request validation, docs pages
+internal/handler/        HTTP handlers, route registration, request validation, docs pages,
+                         company home page
 internal/service/        lookup orchestration, caching, fan-out
 internal/domain/         lookup implementations + types (model.go)
 internal/middleware/     auth, rate limit, logging, security headers, body limit, request ID
@@ -46,7 +47,7 @@ behind them live elsewhere, so read the one that matches before editing:
 |---|---|
 | `internal/service`, `cache`, `notifications` | `.claude/rules/service-layer.md` |
 | `internal/domain`, `safenet`, lookup handlers | `.claude/rules/lookups.md` |
-| `internal/handler/docs*` | `.claude/rules/docs-pages.md` |
+| `internal/handler/docs*`, `internal/handler/home*` | `.claude/rules/docs-pages.md` |
 | `internal/auth`, `billing`, `usage`, `adminops`, `cmd/sactl`, `migrations` | `.claude/rules/auth-billing.md` |
 | `internal/middleware`, `httpapi`, `app`, `config` | `.claude/rules/http-layer.md` |
 | Anything that looks removable | `docs/decisions.md` — it may be load-bearing |

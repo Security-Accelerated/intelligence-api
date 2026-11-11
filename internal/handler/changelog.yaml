@@ -10,6 +10,16 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.1.0
+  date: 2026-11-11
+  changes:
+    - text: "The site root is now a Security Accelerated home page: what the Intelligence API covers, the plans, and how to reach us. It used to redirect to the docs, which are one link away and unchanged"
+      audience: public
+    - text: "In dark mode the Pro button, the method badges and the copy button on the checkout page had near-white text on a pale accent and were hard to read; the text is now dark"
+      audience: public
+    - text: "The home page is `internal/handler/home.html`, served by `Handler.Home`. It is not in `docsPages`: it uses the docs stylesheet's tokens, code blocks and theme toggle with its own layout, and shares the CSP and template data; the brand link on every docs page now goes to `/` instead of `/docs`. `GET /` returns 200 where it returned 301, and the smoke test expects that"
+      audience: internal
+
 - version: v1.0.2
   date: 2026-10-20
   changes:

@@ -26,21 +26,6 @@ func docsRouter() *gin.Engine {
 	return r
 }
 
-func TestDocs_RootRedirectsToDocs(t *testing.T) {
-	r := docsRouter()
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	r.ServeHTTP(w, req)
-
-	if w.Code != http.StatusMovedPermanently {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusMovedPermanently)
-	}
-	loc := w.Header().Get("Location")
-	if loc != "/docs" {
-		t.Errorf("Location = %q, want /docs", loc)
-	}
-}
-
 func TestDocs_LandingPage(t *testing.T) {
 	r := docsRouter()
 	w := httptest.NewRecorder()

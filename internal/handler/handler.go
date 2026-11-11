@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/billing"
@@ -149,9 +148,9 @@ func (h *Handler) maxIPs(plan string) int {
 	return h.cfg.GetInt(fmt.Sprintf("ip.max_ips.%s", plan))
 }
 
-// RegisterRoutes registers unauthenticated routes only (health check, docs, billing).
+// RegisterRoutes registers unauthenticated routes only (home page, health check, docs, billing).
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
-	router.GET("/", func(c *gin.Context) { c.Redirect(http.StatusMovedPermanently, "/docs") })
+	router.GET("/", h.Home)
 	for _, page := range docsPages {
 		router.GET(page.Path, h.docsPageHandler(page.Tmpl))
 	}

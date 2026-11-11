@@ -187,7 +187,7 @@ DOMAIN='{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}'
 
 echo ""
 echo "=== Docs ==="
-check 301 "GET / (redirect to /docs)" "$HOST/"
+check 200 "GET / (company home page)" "$HOST/"
 check 200 "GET /docs (landing page)" "$HOST/docs"
 check 200 "GET /docs/domain (domain docs)" "$HOST/docs/domain"
 check 200 "GET /docs/ip (IP docs)" "$HOST/docs/ip"

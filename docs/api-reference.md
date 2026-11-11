@@ -8,7 +8,7 @@ billing internals) is in [operations.md](operations.md).
 
 ## Authentication
 
-Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL as `hex(sha256(key))` and belong to a customer, who has a plan. A customer normally holds one live key, but holds several during a rotation grace window: `POST /v1/keys/rotate` issues a new key and leaves the previous ones authenticating until `auth.rotation_grace` (default 24h) elapses, so deployed clients can be switched over without downtime. The following routes are public (no API key required): `/` (redirect), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/account`, `/docs/changelog`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
+Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL as `hex(sha256(key))` and belong to a customer, who has a plan. A customer normally holds one live key, but holds several during a rotation grace window: `POST /v1/keys/rotate` issues a new key and leaves the previous ones authenticating until `auth.rotation_grace` (default 24h) elapses, so deployed clients can be switched over without downtime. The following routes are public (no API key required): `/` (the company home page), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/account`, `/docs/changelog`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
 
 ### Customer Plans
 
