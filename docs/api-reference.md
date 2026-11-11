@@ -44,7 +44,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 
 | Method | Path | Plan | Description |
 |--------|------|------|-------------|
-| GET | `/` | None | Redirects to `/docs` |
+| GET | `/` | None | Company home page |
 | GET | `/docs` | None | API documentation landing page |
 | GET | `/docs/domain` | None | Domain Intelligence API docs |
 | GET | `/docs/ip` | None | IP Intelligence API docs |

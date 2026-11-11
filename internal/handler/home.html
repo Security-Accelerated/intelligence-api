@@ -493,7 +493,7 @@
   <main>
     <section class="home-hero" id="top">
       <h1>Domain and IP intelligence for security teams.</h1>
-      <p class="home-lede">Security Accelerated builds the Intelligence API. Send it a domain or an IP address, and one request returns registration, DNS, certificates, email security, reputation and more as a single JSON document.</p>
+      <p class="home-lede">Security Accelerated builds the Intelligence API. Ask about a domain and one request returns its registration, DNS, certificates, email security and more. Ask about an IP address and it returns location, network owner, abuse contact and more. That is a sample: the <a href="/docs">docs</a> list everything available today.</p>
       <div class="home-actions">
         <a href="/docs" class="home-button home-button-primary">Read the docs</a>
         <a href="#plans" class="home-button home-button-quiet">See plans</a>
@@ -666,8 +666,8 @@
           <dd>Only successful lookups are stored, so an upstream outage is not replayed to you later as an answer.</dd>
         </div>
         <div>
-          <dt>One outbound path</dt>
-          <dd>Every outbound connection goes through a single SSRF-prevention layer that checks the address at dial time, after DNS resolution.</dd>
+          <dt>One path out for lookups</dt>
+          <dd>Every HTTP and TLS connection a lookup makes goes through a single SSRF-prevention layer that checks the address at dial time, after DNS resolution.</dd>
         </div>
         <div>
           <dt>The release process is in the repo</dt>

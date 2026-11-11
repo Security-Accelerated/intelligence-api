@@ -151,7 +151,7 @@
     <div class="error-icon">!</div>
     <h2>Unable to retrieve your API key</h2>
     <p>{{.Error}}</p>
-    <a href="/" class="docs-link">Back to documentation</a>
+    <a href="/docs" class="docs-link">Back to documentation</a>
     {{else}}
     <div class="success-icon">&#10003;</div>
     <h2>Your API key is ready</h2>
@@ -168,7 +168,7 @@
 
     <p>Include this key in your requests via the <code>X-API-Key</code> header.</p>
 
-    <a href="/" class="docs-link">View API documentation</a>
+    <a href="/docs" class="docs-link">View API documentation</a>
     {{if .PortalLink}}
     <span style="margin: 0 8px; color: var(--border);">|</span>
     <a href="{{.PortalLink}}" class="docs-link" target="_blank">Manage subscription</a>
