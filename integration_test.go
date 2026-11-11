@@ -517,18 +517,23 @@ func TestIntegration_DomainLookup_InvalidDomain(t *testing.T) {
 	}
 }
 
-func TestIntegration_Docs_RootRedirects(t *testing.T) {
+// The root is public and sits outside /v1, so this is the full middleware chain
+// serving it without an API key.
+func TestIntegration_Home_ServesCompanyPage(t *testing.T) {
 	r, _ := setupRouter(t)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusMovedPermanently {
-		t.Fatalf("status = %d, want %d", w.Code, http.StatusMovedPermanently)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	if loc := w.Header().Get("Location"); loc != "/docs" {
-		t.Errorf("Location = %q, want /docs", loc)
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+		t.Errorf("Content-Type = %q, want text/html", ct)
+	}
+	if !strings.Contains(w.Body.String(), "<title>Security Accelerated</title>") {
+		t.Error("expected the company home page at the root")
 	}
 }
 

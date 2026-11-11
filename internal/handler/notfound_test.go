@@ -99,7 +99,7 @@ func TestNotFound_DoesNotEchoRequestedPath(t *testing.T) {
 func TestNotFound_KnownRoutesUnaffected(t *testing.T) {
 	r := docsRouter()
 
-	for _, path := range append([]string{"/docs/styles.css", "/docs/openapi.yaml"}, docsPagePaths...) {
+	for _, path := range append([]string{"/", "/docs/styles.css", "/docs/openapi.yaml"}, docsPagePaths...) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, http.NoBody))
 		if w.Code != http.StatusOK {

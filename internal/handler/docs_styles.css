@@ -191,7 +191,9 @@ html[data-theme="dark"] {
   --lang-tab-hover-border: rgba(141, 156, 255, 0.2);
   --lang-tab-hover-bg: rgba(141, 156, 255, 0.16);
   --divider: rgba(169, 187, 207, 0.14);
-  --on-accent: #f4f7ff;
+  /* Dark, not light: in this theme the accent gradient runs from #8d9cff to
+     #bcc7ff, and near-white text on it measured between 1.5:1 and 2.4:1. */
+  --on-accent: #0b1220;
   --theme-toggle-bg: rgba(15, 24, 37, 0.82);
   --theme-toggle-border: rgba(169, 187, 207, 0.12);
   --theme-toggle-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);

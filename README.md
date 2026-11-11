@@ -58,7 +58,7 @@ client ──> Gin router ──> middleware chain ──> handler ──> servi
 | Package | Responsibility |
 |---|---|
 | `internal/httpapi`, `internal/middleware` | Router assembly, the middleware chain in a fixed order, graceful shutdown |
-| `internal/handler` | Request validation, plan gating, the embedded docs pages and OpenAPI document |
+| `internal/handler` | Request validation, plan gating, the embedded company home page, docs pages and OpenAPI document |
 | `internal/service` | Fan-out orchestration, per-lookup Redis caching with singleflight coalescing, risk scoring |
 | `internal/domain` | One file per lookup, plus the response types in `model.go` |
 | `internal/safenet` | SSRF prevention at dial time: every outbound HTTP client in the server goes through it |

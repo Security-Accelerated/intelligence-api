@@ -252,6 +252,24 @@ meant finding all six by hand.
 select rather than re-list — `docsPagesWithLanguageTabs()` — so a page that gains a Go
 example gets it compiled without anyone remembering.
 
+### The company home page is served by the API and is not in `docsPages`
+
+**Decision.** `/` renders `home.html`, the Security Accelerated company page, from the same
+binary as the docs. It stays out of the `docsPages` table. It uses the docs' design
+language (the shared stylesheet's tokens, typefaces, code blocks and theme toggle) with a
+layout of its own.
+
+**Why.** The root used to be a 301 to `/docs`, which left the company with no page of its
+own. Serving it here means no second host, deploy or toolchain, and the price it shows
+comes from the same config keys as the Plans table on `/docs`. The split between shared
+language and own layout was arrived at by getting it wrong in both directions: the first
+version reused the docs page shell and looked like a copy of the docs overview; the second
+had its own typeface and palette and no longer looked like the same company.
+
+**Instead of.** A separate static site, which would need its own hosting and would quote
+plan limits and a price that nothing ties to this service's config. And instead of a sixth
+docs page, which is what reusing the docs shell produced.
+
 ### Every table is wrapped in `.table-scroll`, and grid tracks use `minmax(0, 1fr)`
 
 **Decision.** Both are pinned by tests in `docs_layout_test.go`.

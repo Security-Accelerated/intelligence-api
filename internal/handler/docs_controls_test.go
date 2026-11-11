@@ -21,7 +21,7 @@ import (
 func TestDocs_InteractiveControlsAreInjected(t *testing.T) {
 	markers := []string{"code-copy", "code-block", "docs-search"}
 
-	for _, page := range allDocsHTML() {
+	for _, page := range allSitePages() {
 		t.Run(page.Path, func(t *testing.T) {
 			for _, marker := range markers {
 				if strings.Contains(page.HTML, marker) {
