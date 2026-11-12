@@ -35,6 +35,15 @@ else — not in the router, not in a test, not in a template's nav.
   `.hero-card`, `.section-card`, the Plans table). The first version did and came out as a
   copy of the docs overview. It has no `.topbar-actions`, so `docs.js` injects no search.
 
+**The hostname decides what `/` is.** One app serves the company's domain and the API's.
+With `site.home_host` set, `/` is the home page on that host (and its `www.`) and a 302 to
+`/docs` on any other; unset, it is the home page everywhere, which is what local
+development and most tests run with. So the two sites link to each other through template
+data, never a bare path: the docs' brand link is `{{.HomeURL}}` and the home page's links
+into the docs are `{{.DocsBase}}/docs…`. A bare `/` on a docs page would loop back to the
+docs in production. The stylesheet and scripts stay same-origin paths; the CSP allows
+nothing else.
+
 Use the tokens, never a new colour or typeface: a version with its own palette and face
 was rejected as too far the other way. Its plan limits repeat the Plans table on `/docs`;
 change both together.

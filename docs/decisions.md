@@ -270,6 +270,30 @@ had its own typeface and palette and no longer looked like the same company.
 plan limits and a price that nothing ties to this service's config. And instead of a sixth
 docs page, which is what reusing the docs shell produced.
 
+### The hostname decides what `/` is, and the redirect is a 302
+
+**Decision.** One app answers for two names. `site.home_host` names the company's domain:
+`/` is the home page there (and on `www.`), and a 302 to `/docs` on every other host. The
+home page links to the docs on `site.api_host`, and the docs' brand link goes to the home
+host. Both keys empty, the default, serves the home page at `/` on every host with relative
+links.
+
+**Why.** v1.1.0 served the home page at the root of the API's hostname, which put the
+company page at `api.` and left the company's own domain on a registrar placeholder. The
+links are absolute because a relative one keeps the reader on the wrong name: the docs
+would be read at the company's domain, and the docs' brand link would go to a root that
+redirects straight back to the docs. They are built from config, never from the request's
+`Host` header, so a caller cannot choose where they point. The redirect is a 302 because
+which host gets the page is configuration, and a browser keeps a 301 after the
+configuration has changed: anyone holding the pre-v1.1.0 301 never saw the home page at
+the API's root.
+
+**Instead of.** A second app or a static site for the company's domain, for the reasons in
+the entry above. And instead of redirecting everything except `/` on the home host over to
+the API host: the docs and the API still answer there, which is untidy but harmless, and
+the redirect would need its own exceptions for the stylesheet and scripts the home page
+loads.
+
 ### Every table is wrapped in `.table-scroll`, and grid tracks use `minmax(0, 1fr)`
 
 **Decision.** Both are pinned by tests in `docs_layout_test.go`.

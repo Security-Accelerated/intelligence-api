@@ -34,6 +34,29 @@ check() {
     fi
 }
 
+# check_root — the root is the company home page on the company's hostname and
+# a redirect to the docs on the API's. This script runs against either without
+# being told which, so it accepts exactly those two first responses. It does not
+# follow the redirect: followed, a redirect to anywhere that answers 200 would
+# pass. Which hostname gets which is pinned by the handler tests, not here.
+check_root() {
+    local desc="GET / (company home page, or 302 to /docs)"
+    local out status location got
+    out=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$HOST/") || true
+    status="${out%% *}"
+    location="${out#* }"
+    got="$status"
+    [ -n "$location" ] && got="$status to $location"
+    if [ "$status" = "200" ] || { [ "$status" = "302" ] && [ "$location" = "${HOST%/}/docs" ]; }; then
+        printf "  \033[32m✓\033[0m %s → %s\n" "$desc" "$got"
+        pass=$((pass + 1))
+    else
+        printf "  \033[31m✗\033[0m %s → %s (expected 200, or 302 to /docs)\n" "$desc" "$got"
+        fail=$((fail + 1))
+        errors+=("$desc: got $got, expected 200 or 302 to /docs")
+    fi
+}
+
 # assert_json — applies a jq filter to an already-captured response body.
 # Failure is fatal. Split out from check_json so one response can carry several
 # assertions without re-issuing the request.
@@ -187,7 +210,7 @@ DOMAIN='{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}'
 
 echo ""
 echo "=== Docs ==="
-check 200 "GET / (company home page)" "$HOST/"
+check_root
 check 200 "GET /docs (landing page)" "$HOST/docs"
 check 200 "GET /docs/domain (domain docs)" "$HOST/docs/domain"
 check 200 "GET /docs/ip (IP docs)" "$HOST/docs/ip"

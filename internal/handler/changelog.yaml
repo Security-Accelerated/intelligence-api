@@ -10,6 +10,14 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.1.1
+  date: 2026-11-12
+  changes:
+    - text: "The Security Accelerated home page moves to securityaccelerated.com. The root of api.securityaccelerated.com goes back to redirecting to the docs, as it did before v1.1.0, and the two sites link to each other"
+      audience: public
+    - text: "`site.home_host` and `site.api_host` (`SITE_HOME_HOST`, `SITE_API_HOST`, set in `fly.toml` `[env]`) tell the one app which hostname is which: `/` renders the home page on the home host and its `www.`, and is a 302 to `/docs` on any other. Both empty keeps v1.1.0's behaviour, the home page at `/` on every host. The home host needs its Fly certificate and DNS before this is released. The smoke test accepts either answer at `/`, a 200 or a 302 to `/docs`, without following the redirect"
+      audience: internal
+
 - version: v1.1.0
   date: 2026-11-11
   changes:

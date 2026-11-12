@@ -94,6 +94,13 @@ type docsData struct {
 	PortalLink     string
 	Version        string
 	Changelog      []docsChangelogVersion
+
+	// HomeURL is where the brand link on the docs pages goes. DocsBase is put
+	// in front of the home page's links into the docs. With no site hosts
+	// configured they are "/" and "", so every link stays on the host it was
+	// served from; with them set, the two sites link to each other by name.
+	HomeURL  string
+	DocsBase string
 }
 
 type docsChangelogVersion struct {
@@ -143,11 +150,19 @@ func (h *Handler) buildDocsData() docsData {
 	if h.status != nil {
 		version = h.status.System.Version
 	}
-	data := docsData{Version: version}
+	data := docsData{Version: version, HomeURL: "/"}
 	if h.cfg != nil {
 		data.ProPaymentLink = h.cfg.GetString("stripe.payment_link.pro")
 		data.ProPrice = h.cfg.GetString("stripe.price_display.pro")
 		data.PortalLink = h.cfg.GetString("stripe.portal_link")
+	}
+	// Built from config, never from the request's Host header, so a caller
+	// cannot choose where these links point.
+	if host := h.siteHost("site.home_host"); host != "" {
+		data.HomeURL = "https://" + host + "/"
+	}
+	if host := h.siteHost("site.api_host"); host != "" {
+		data.DocsBase = "https://" + host
 	}
 
 	for _, v := range h.changelog {

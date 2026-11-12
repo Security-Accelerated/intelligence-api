@@ -125,6 +125,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("stripe.payment_link.pro", "")
 	v.SetDefault("stripe.price_display.pro", "")
 	v.SetDefault("stripe.portal_link", "")
+	v.SetDefault("site.home_host", "")
+	v.SetDefault("site.api_host", "")
 	v.SetDefault("billing.stale_key_days", 365)
 	v.SetDefault("usage.buffer_size", 256)
 	v.SetDefault("usage.flush_interval", "5s")

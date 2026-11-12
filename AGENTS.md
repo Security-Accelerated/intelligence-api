@@ -114,7 +114,9 @@ open the file.
 ## Infrastructure
 
 Docker Compose locally (API + Redis + Postgres). Production on Fly.io (iad, auto-stop) with
-Neon Postgres and Upstash Redis. A Fly volume `maxmind_data` (name predates DB-IP) at
+Neon Postgres and Upstash Redis. One app answers for two hostnames:
+`securityaccelerated.com` (`/` is the company home page) and `api.securityaccelerated.com`
+(`/` redirects to `/docs`), told apart by `site.home_host`. A Fly volume `maxmind_data` (name predates DB-IP) at
 `/data/geoip` persists the GeoIP database; `docker-entrypoint.sh` chowns it as root then
 drops to `appuser`.
 Version is baked in via `-ldflags "-X main.version=..."`. GitHub Actions: `test.yml`,
