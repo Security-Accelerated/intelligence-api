@@ -10,6 +10,14 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.1.3
+  date: 2026-11-12
+  changes:
+    - text: "The home page is shorter: the section between the plans and the contact details is gone. Security reports now go to security@securityaccelerated.com, shown in the contact details"
+      audience: public
+    - text: "Removed the home page's \"Read the code before you send it anything\" section, with its four commitments, and the page's three links to GitHub (the source, the footer link, and SECURITY.md). SECURITY.md itself still names the support address"
+      audience: internal
+
 - version: v1.1.2
   date: 2026-11-12
   changes:
