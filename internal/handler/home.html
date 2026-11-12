@@ -339,18 +339,6 @@
 
   .home-plans-foot { max-width: 64ch; margin: 28px 0 0; }
 
-  /* ----- Approach ----- */
-  .home-commitments {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0 64px;
-    margin: 36px 0 0;
-  }
-
-  .home-commitments div { padding: 18px 0 22px; border-top: 1px solid var(--divider); }
-  .home-commitments dt { color: var(--ink); font-size: 17px; font-weight: 700; }
-  .home-commitments dd { max-width: 46ch; margin: 6px 0 0; }
-
   .home-links {
     display: flex;
     flex-wrap: wrap;
@@ -409,7 +397,6 @@
   @media (max-width: 900px) {
     .home-split,
     .home-plans,
-    .home-commitments,
     .home-contact dl { grid-template-columns: minmax(0, 1fr); }
   }
 
@@ -576,34 +563,6 @@
       <p class="home-plans-foot">A Pro key is self-service: subscribe, copy the key from the confirmation page, and rotate it yourself whenever you need to. The <a href="{{.DocsBase}}/docs">docs</a> have the full comparison.</p>
     </section>
 
-    <section class="home-section" id="approach">
-      <h2>Read the code before you send it anything</h2>
-      <p class="home-intro">The source is published so you can evaluate the service before you trust it with a query. It is source-available with all rights reserved, not open source.</p>
-      <dl class="home-commitments">
-        <div>
-          <dt>You get what worked</dt>
-          <dd>A lookup that fails says why in a per-result <code>errors</code> array. The rest of the response still arrives.</dd>
-        </div>
-        <div>
-          <dt>Failures are never cached</dt>
-          <dd>Only successful lookups are stored, so an upstream outage is not replayed to you later as an answer.</dd>
-        </div>
-        <div>
-          <dt>One path out for lookups</dt>
-          <dd>Every HTTP and TLS connection a lookup makes goes through a single SSRF-prevention layer that checks the address at dial time, after DNS resolution.</dd>
-        </div>
-        <div>
-          <dt>The release process is in the repo</dt>
-          <dd>How a version reaches production, and the approval it waits for, is written down next to the code.</dd>
-        </div>
-      </dl>
-      <p class="home-links">
-        <a href="https://github.com/Security-Accelerated/intelligence-api">Source on GitHub</a>
-        <a href="{{.DocsBase}}/docs/openapi.yaml">OpenAPI 3.1 specification</a>
-        <a href="{{.DocsBase}}/docs/changelog">Release notes</a>
-      </p>
-    </section>
-
     <section class="home-section home-contact" id="contact">
       <h2>Contact</h2>
       <dl>
@@ -613,7 +572,7 @@
         </div>
         <div>
           <dt>Security reports</dt>
-          <dd><a href="https://github.com/Security-Accelerated/intelligence-api/blob/main/SECURITY.md">How to report a vulnerability</a></dd>
+          <dd><a href="mailto:security@securityaccelerated.com">security@securityaccelerated.com</a></dd>
         </div>
       </dl>
     </section>
@@ -624,7 +583,6 @@
     <nav aria-label="Footer links">
       <a href="{{.DocsBase}}/docs">Docs</a>
       <a href="{{.DocsBase}}/docs/openapi.yaml">OpenAPI spec</a>
-      <a href="https://github.com/Security-Accelerated">GitHub</a>
     </nav>
   </footer>
 </div>
