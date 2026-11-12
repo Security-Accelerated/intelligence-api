@@ -108,3 +108,113 @@ func TestHome_PlansFollowBillingConfig(t *testing.T) {
 		}
 	})
 }
+
+// siteHostsConfig is production's shape: the company's domain and the API's
+// are two names for one app.
+func siteHostsConfig() *viper.Viper {
+	cfg := viper.New()
+	cfg.Set("site.home_host", "securityaccelerated.com")
+	cfg.Set("site.api_host", "api.securityaccelerated.com")
+	return cfg
+}
+
+func getAs(cfg *viper.Viper, host, path string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+	req.Host = host
+	w := httptest.NewRecorder()
+	docsRouterWithData(nil, cfg, nil).ServeHTTP(w, req)
+	return w
+}
+
+// One app answers for both names, so the root has to tell them apart: the
+// company page on the company's domain, the way into the docs everywhere else.
+func TestHome_HostDecidesTheRoot(t *testing.T) {
+	cfg := siteHostsConfig()
+
+	for _, tc := range []struct {
+		host     string
+		wantHome bool
+	}{
+		{"securityaccelerated.com", true},
+		{"www.securityaccelerated.com", true},
+		{"SecurityAccelerated.com:443", true},
+		{"securityaccelerated.com.", true},
+		{"api.securityaccelerated.com", false},
+		{"security-accelerated-intelligence-api.fly.dev", false},
+		// A suffix match would hand the page to someone else's domain.
+		{"notsecurityaccelerated.com", false},
+		{"securityaccelerated.com.example.org", false},
+	} {
+		t.Run(tc.host, func(t *testing.T) {
+			w := getAs(cfg, tc.host, "/")
+
+			if tc.wantHome {
+				if w.Code != http.StatusOK {
+					t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+				}
+				if !strings.Contains(w.Body.String(), "<title>Security Accelerated</title>") {
+					t.Error("expected the company home page")
+				}
+				return
+			}
+			// 302 on purpose: which host gets the page is configuration, and
+			// a browser holds on to a 301 after the configuration changes.
+			if w.Code != http.StatusFound {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
+			}
+			if loc := w.Header().Get("Location"); loc != "/docs" {
+				t.Errorf("Location = %q, want /docs", loc)
+			}
+		})
+	}
+
+	// Unset is the default, and the one local development runs with: there is
+	// only one hostname there, and the page has to be reachable on it.
+	t.Run("no home host configured", func(t *testing.T) {
+		if w := getAs(viper.New(), "localhost:8080", "/"); w.Code != http.StatusOK {
+			t.Errorf("status = %d, want %d", w.Code, http.StatusOK)
+		}
+	})
+}
+
+// With the two names configured, each site's links to the other have to name
+// it. A relative link would keep the docs on the company's domain, and send
+// the docs' brand link to a root that redirects straight back to the docs.
+func TestHome_SitesLinkToEachOtherByName(t *testing.T) {
+	cfg := siteHostsConfig()
+
+	t.Run("home page links to the docs on the API host", func(t *testing.T) {
+		body := getAs(cfg, "securityaccelerated.com", "/").Body.String()
+
+		for _, want := range []string{
+			`href="https://api.securityaccelerated.com/docs"`,
+			`href="https://api.securityaccelerated.com/docs/domain"`,
+			`href="https://api.securityaccelerated.com/docs/openapi.yaml"`,
+		} {
+			if !strings.Contains(body, want) {
+				t.Errorf("home page does not contain %q", want)
+			}
+		}
+		if m := regexp.MustCompile(`<a [^>]*href="/docs[^"]*"`).FindString(body); m != "" {
+			t.Errorf("home page still links to the docs on its own host: %s", m)
+		}
+		// The assets stay same-origin: the CSP allows nothing else.
+		if !strings.Contains(body, `<link rel="stylesheet" href="/docs/styles.css">`) {
+			t.Error("the stylesheet must stay a same-origin path")
+		}
+	})
+
+	for _, page := range allDocsHTML() {
+		t.Run("brand link on "+page.Path, func(t *testing.T) {
+			configured := getAs(cfg, "api.securityaccelerated.com", page.Path).Body.String()
+			if !strings.Contains(configured, `<a href="https://securityaccelerated.com/" class="topbar-brand">`) {
+				t.Error("brand link does not go to the home host")
+			}
+
+			unconfigured := getAs(nil, "localhost:8080", page.Path).Body.String()
+			if !strings.Contains(unconfigured, `<a href="/" class="topbar-brand">`) {
+				t.Error("brand link should be the local root when no home host is set")
+			}
+		})
+	}
+}

@@ -97,6 +97,8 @@ Config values:
 | `stripe.payment_link.pro` | `""` | Stripe Payment Link URL for pro plan |
 | `stripe.price_display.pro` | `""` | Price text shown on the docs Plans table (e.g. `$29/month`); empty hides it. Change it together with the Stripe price |
 | `stripe.portal_link` | `""` | Stripe Customer Portal URL for subscription management |
+| `site.home_host` | `""` | Hostname whose `/` is the company home page (`www.` on it counts too); `/` on any other host redirects to `/docs`. Empty serves the home page at `/` on every host |
+| `site.api_host` | `""` | Hostname the home page's docs links point at. Empty keeps them relative |
 | `billing.stale_key_days` | `365` | Days of inactivity before key deactivation |
 | `billing.cleanup_interval` | `10m` | Sweep cadence for expired provisioned keys |
 | `usage.buffer_size` | `256` | Channel buffer size for async usage logging |
@@ -244,6 +246,21 @@ A release is a `v*` tag on `main`, created with `make release`. The full procedu
 make release V=v0.X.Y             # tag main and push the tag; the tag is the deploy, gated on the production reviewer
 ```
 
+### Hostnames
+
+One Fly app answers for two names, and `site.home_host` / `site.api_host` (set in
+`fly.toml` `[env]`) tell it which is which:
+
+| Hostname | `/` | Everything else |
+|----------|-----|-----------------|
+| `securityaccelerated.com`, `www.securityaccelerated.com` | Company home page | Served as on the API host |
+| `api.securityaccelerated.com` | 302 to `/docs` | The API and the docs |
+
+Each name needs a certificate on the app (`fly certs add <hostname>`) and DNS records
+pointing at it; `fly certs show <hostname>` prints the records it expects and whether the
+certificate has been issued. The company's domain has no page until both exist, so a
+hostname is added to Fly and DNS before `site.home_host` is released, not after.
+
 ### Environment variables (Fly secrets)
 
 | Variable | Description |
@@ -270,6 +287,8 @@ make release V=v0.X.Y             # tag main and push the tag; the tag is the de
 | `STRIPE_PAYMENT_LINK_PRO` | Stripe Payment Link URL for pro plan |
 | `STRIPE_PRICE_DISPLAY_PRO` | Price text shown on the docs Plans table; set in `fly.toml` `[env]`, not a secret |
 | `STRIPE_PORTAL_LINK` | Stripe Customer Portal URL for subscription management |
+| `SITE_HOME_HOST` | Hostname whose `/` is the company home page; set in `fly.toml` `[env]`, not a secret |
+| `SITE_API_HOST` | Hostname the home page's docs links point at; set in `fly.toml` `[env]`, not a secret |
 | `USAGE_BUFFER_SIZE` | Channel buffer size for async usage logging (default: 256) |
 | `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |
 | `THREAT_INTEL_VIRUSTOTAL_API_KEY` | VirusTotal API key (enables VirusTotal threat intel provider) |

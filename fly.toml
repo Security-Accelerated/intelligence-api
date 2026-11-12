@@ -12,6 +12,12 @@ primary_region = 'iad'
 # text the docs Plans table shows and must change together with that price.
 [env]
   STRIPE_PRICE_DISPLAY_PRO = '$29/month'
+  # One app, two names. "/" is the company home page on the first (and on
+  # www.) and a redirect to /docs on any other host; the home page links to
+  # the docs on the second. The first needs its certificate and DNS in place
+  # before this ships, or the home page has no address at all.
+  SITE_HOME_HOST = 'securityaccelerated.com'
+  SITE_API_HOST = 'api.securityaccelerated.com'
 
 [http_service]
   internal_port = 8080

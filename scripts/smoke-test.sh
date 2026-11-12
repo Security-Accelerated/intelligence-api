@@ -187,7 +187,9 @@ DOMAIN='{"domains":["example.com"],"lookups":["whois","dns","ssl","headers"]}'
 
 echo ""
 echo "=== Docs ==="
-check 200 "GET / (company home page)" "$HOST/"
+# -L: the root is the company home page on the company's hostname and a
+# redirect to /docs on the API's, and this runs against either.
+check 200 "GET / (company home page, or its redirect to the docs)" -L "$HOST/"
 check 200 "GET /docs (landing page)" "$HOST/docs"
 check 200 "GET /docs/domain (domain docs)" "$HOST/docs/domain"
 check 200 "GET /docs/ip (IP docs)" "$HOST/docs/ip"
