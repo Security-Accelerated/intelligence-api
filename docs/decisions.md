@@ -256,15 +256,19 @@ example gets it compiled without anyone remembering.
 
 **Decision.** `/` renders `home.html`, the Security Accelerated company page, from the same
 binary as the docs. It stays out of the `docsPages` table. It uses the docs' design
-language (the shared stylesheet's tokens, typefaces, code blocks and theme toggle) with a
-layout of its own.
+language (the shared stylesheet's tokens, typefaces and theme toggle) with a layout of
+its own. It says what the product is and carries no reference material: no lookup list,
+no request or response sample.
 
 **Why.** The root used to be a 301 to `/docs`, which left the company with no page of its
 own. Serving it here means no second host, deploy or toolchain, and the price it shows
 comes from the same config keys as the Plans table on `/docs`. The split between shared
 language and own layout was arrived at by getting it wrong in both directions: the first
 version reused the docs page shell and looked like a copy of the docs overview; the second
-had its own typeface and palette and no longer looked like the same company.
+had its own typeface and palette and no longer looked like the same company. Through
+v1.1.1 the page also listed every lookup and showed a request and its response. That was
+a second copy of the docs, one link away from the first, and a list every new lookup had
+to remember to update; it was replaced with a short description of what the API is for.
 
 **Instead of.** A separate static site, which would need its own hosting and would quote
 plan limits and a price that nothing ties to this service's config. And instead of a sixth

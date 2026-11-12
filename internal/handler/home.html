@@ -291,42 +291,13 @@
     align-items: start;
   }
 
-  .home-covers { margin-top: 34px; }
-  .home-covers + .home-covers { margin-top: 26px; }
-
-  .home-covers h3 {
-    margin: 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--accent-line);
-    font-size: 15px;
-  }
-
-  .home-covers ul { columns: 2; column-gap: 28px; color: var(--ink); }
-
-  .home-covers li {
-    padding: 8px 0;
-    border-bottom: 1px solid var(--divider);
-    font-size: 15px;
-    line-height: 1.45;
-    break-inside: avoid;
-  }
-
-  .home-covers small {
-    display: block;
-    color: var(--ink-soft);
-    font-size: 13px;
-  }
-
-  .home-covers p { margin: 12px 0 0; font-weight: 700; }
-
-  .home-code h3 {
-    margin: 0;
-    color: var(--ink-soft);
-    font-size: 13px;
-    letter-spacing: 0.02em;
-  }
-
-  .home-code pre { margin: 8px 0 22px; }
+  /* The pitch on the left, three reasons on the right. No lookup list and no
+     code here: that is what the docs are for. */
+  .home-points { margin: 0; }
+  .home-points div { padding: 18px 0 22px; border-top: 1px solid var(--divider); }
+  .home-points div:first-child { border-top-color: var(--accent-line); }
+  .home-points dt { color: var(--ink); font-size: 17px; font-weight: 700; }
+  .home-points dd { max-width: 46ch; margin: 6px 0 0; }
 
   /* ----- Plans ----- */
   .home-plans {
@@ -460,7 +431,6 @@
     .home-fan-lookups li { gap: 6px; min-height: 27px; }
     .home-fan-lookups li::before,
     .home-fan-lookups li::after { flex-basis: 6px; min-width: 4px; }
-    .home-covers ul { columns: 1; }
   }
 </style>
 </head>
@@ -502,7 +472,7 @@
       <div class="home-fan-card">
         <!-- A sample, not the full list: eight lookups and "and more", so a new
              lookup does not mean redrawing this. The full list is in the
-             Product section below. If the number of rows ever changes, the
+             docs, not on this page. If the number of rows ever changes, the
              viewBox height is 10 per row and the middle is half of it. -->
         <div class="home-fan" role="img" aria-label="One request for example.com fans out into lookups that run at the same time, such as WHOIS, DNS, TLS and reputation, and comes back as one JSON document.">
           <div class="home-fan-node">example.com</div>
@@ -552,74 +522,27 @@
     <section class="home-section home-split" id="product">
       <div>
         <h2>Intelligence API</h2>
-        <p class="home-intro">One REST API for domains and IP addresses. You name the lookups you want, and the answer to &ldquo;what is this thing?&rdquo; comes back as a single document your tooling can read.</p>
-
-        <div class="home-covers">
-          <h3>For a domain</h3>
-          <ul>
-            <li>WHOIS registration</li>
-            <li>DNS records</li>
-            <li>TLS certificate</li>
-            <li>HTTP headers</li>
-            <li>Email security <small>SPF, DKIM, DMARC, MTA-STS, TLS-RPT, BIMI</small></li>
-            <li>DNSSEC and CAA</li>
-            <li>Subdomains</li>
-            <li>Certificate transparency</li>
-            <li>BGP and ASN</li>
-            <li>Technology fingerprinting</li>
-            <li>Reputation <span class="tag tag-pro">Pro</span></li>
-            <li>Threat intelligence <span class="tag tag-pro">Pro</span></li>
-            <li>Aggregate risk score</li>
-          </ul>
-          <p><a href="{{.DocsBase}}/docs/domain">Domain reference</a></p>
-        </div>
-
-        <div class="home-covers">
-          <h3>For an IP address</h3>
-          <ul>
-            <li>GeoIP</li>
-            <li>ASN</li>
-            <li>Reverse DNS</li>
-            <li>Abuse contact</li>
-            <li>Threat intelligence <span class="tag tag-pro">Pro</span></li>
-          </ul>
-          <p><a href="{{.DocsBase}}/docs/ip">IP reference</a></p>
-        </div>
+        <p class="home-intro">Built for the moment a domain or an IP address turns up in an alert, a log line or an inbox, and someone has to decide whether it matters. The Intelligence API collects the public record on it and returns a single answer your tools can read.</p>
+        <p class="home-links">
+          <a href="{{.DocsBase}}/docs/domain">Domain reference</a>
+          <a href="{{.DocsBase}}/docs/ip">IP reference</a>
+        </p>
       </div>
 
-      <div class="home-code">
-        <h3>Request</h3>
-        <pre><code>curl <span class="flag">-s</span> <span class="url">https://api.securityaccelerated.com/v1/domain/lookup</span> \
-  <span class="flag">-H</span> <span class="str">'X-API-Key: YOUR_KEY'</span> \
-  <span class="flag">-H</span> <span class="str">'Content-Type: application/json'</span> \
-  <span class="flag">-d</span> <span class="str">'{"domains": ["example.com"],
-       "lookups": ["dns", "ssl", "email_security", "risk"]}'</span></code></pre>
-        <h3>Response, trimmed</h3>
-        <pre><code>{
-  <span class="hdr">"results"</span>: [
-    {
-      <span class="hdr">"domain"</span>: <span class="str">"example.com"</span>,
-      <span class="hdr">"dns"</span>: {
-        <span class="hdr">"cache_hit"</span>: <span class="kw">false</span>,
-        <span class="hdr">"a"</span>: [<span class="str">"23.192.228.80"</span>],
-        <span class="hdr">"ns"</span>: [<span class="str">"a.iana-servers.net"</span>, <span class="str">"b.iana-servers.net"</span>]
-      },
-      <span class="hdr">"ssl"</span>: {
-        <span class="hdr">"cache_hit"</span>: <span class="kw">true</span>,
-        <span class="hdr">"issuer"</span>: <span class="str">"DigiCert Global G3 TLS ECC SHA384 2020 CA1"</span>,
-        <span class="hdr">"not_after"</span>: <span class="str">"2027-01-15T23:59:59Z"</span>,
-        <span class="hdr">"days_until_expiry"</span>: <span class="num">91</span>
-      },
-      <span class="hdr">"email_security"</span>: {
-        <span class="hdr">"cache_hit"</span>: <span class="kw">false</span>,
-        <span class="hdr">"spf"</span>: { <span class="hdr">"raw"</span>: <span class="str">"v=spf1 -all"</span>, <span class="hdr">"all"</span>: <span class="str">"-all"</span> },
-        <span class="hdr">"dmarc"</span>: { <span class="hdr">"raw"</span>: <span class="str">"v=DMARC1; p=reject"</span>, <span class="hdr">"policy"</span>: <span class="str">"reject"</span> }
-      },
-      <span class="hdr">"risk"</span>: { <span class="hdr">"cache_hit"</span>: <span class="kw">false</span>, <span class="hdr">"score"</span>: <span class="num">12</span>, <span class="hdr">"risk_level"</span>: <span class="str">"low"</span> }
-    }
-  ]
-}</code></pre>
-      </div>
+      <dl class="home-points">
+        <div>
+          <dt>One place to ask</dt>
+          <dd>Registration, DNS, certificates, mail setup and reputation each come from a different tool with a different output. Here they sit behind one API and come back in one shape.</dd>
+        </div>
+        <div>
+          <dt>Made for automation</dt>
+          <dd>A plain REST API with JSON in and out. It fits alert enrichment, triage playbooks and your own scripts.</dd>
+        </div>
+        <div>
+          <dt>Clear about freshness</dt>
+          <dd>Results are cached so a repeat question comes back fast, and every one says whether it came from the cache.</dd>
+        </div>
+      </dl>
     </section>
 
     <section class="home-section" id="plans">
