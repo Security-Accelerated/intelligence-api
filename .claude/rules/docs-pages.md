@@ -26,9 +26,9 @@ else — not in the router, not in a test, not in a template's nav.
 `home.html` is the company page at `/`, served by `Handler.Home`. **It is not a row in
 `docsPages`.** It is the front door: same design language as the docs, different page.
 
-- **Shared:** `docs_styles.css` for the tokens, typefaces, page background, code blocks,
-  tags and theme toggle; `docs.js` for the toggle and the copy buttons; `htmlPageCSP`; and
-  the template data, so its price and payment link come from the same config keys.
+- **Shared:** `docs_styles.css` for the tokens, typefaces, page background, inline code
+  and theme toggle; `docs.js` for the toggle; `htmlPageCSP`; and the template data, so its
+  price and payment link come from the same config keys.
 - **Its own:** the header, the hero and its fan-out diagram, the plan panels, the contact
   panel — all in the page's inline `<style>`, under `home-` class names, built from the
   shared tokens. **Do not reuse the docs page shell there** (`.topbar`, `.topbar-nav`,
@@ -48,10 +48,15 @@ Use the tokens, never a new colour or typeface: a version with its own palette a
 was rejected as too far the other way. Its plan limits repeat the Plans table on `/docs`;
 change both together.
 
-The fan-out diagram is a **sample that ends in "and more"**, on purpose, so a new lookup
-does not mean redrawing it. Do not make it exhaustive. The Product section's two lists
-are the full set and do gain a line with each new lookup. The grid-track and injected-control rules below apply to it; the
-docs-nav and table rules do not.
+**It says what the product is; the docs say how to use it.** The page has no lookup list,
+no request or response sample, no code block. It had all three, and they were removed as
+a second copy of the docs that a new lookup would have to update. A new lookup changes
+nothing on this page. The fan-out diagram is the one place lookups are named, and it is a
+**sample that ends in "and more"**, on purpose, so a new lookup does not mean redrawing
+it. Do not make it exhaustive, and do not add reference material back.
+
+The grid-track and injected-control rules below apply to the page; the docs-nav and table
+rules do not.
 
 ## Layout rules — pinned by `docs_layout_test.go`
 

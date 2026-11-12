@@ -10,6 +10,14 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.1.2
+  date: 2026-11-12
+  changes:
+    - text: "The home page describes what the Intelligence API is for and leaves the detail to the docs: the list of every lookup and the sample request and response are gone from it"
+      audience: public
+    - text: "With the list gone, a new lookup no longer touches `home.html`; the `adding-features` checklist and the docs-pages rule say so. The page's fan-out diagram is still a sample ending in \"and more\""
+      audience: internal
+
 - version: v1.1.1
   date: 2026-11-12
   changes:

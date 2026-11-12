@@ -20,7 +20,7 @@ surfaces late — usually as a drift test failing in CI or a stale docs surface.
 8. Add the column to `usage.LookupColumns` and a migration for `request_log` (the drift test will fail until you do)
 9. Add a setter method for tests (`SetThingLookup`)
 10. Update all test files that call `New()` or `SetLookups()`
-11. Update `docs/api-reference.md` (lookup table, response field section, caching TTL table) and `docs/operations.md` (the `cache.ttl.<name>` config row), docs HTML (request table, valid-lookups table, response field section with its `cache_hit` row, caching TTL table), the Product list on the home page (`home.html`; not its diagram, which is a sample), api.http, smoke test, integration tests, changelog.yaml
+11. Update `docs/api-reference.md` (lookup table, response field section, caching TTL table) and `docs/operations.md` (the `cache.ttl.<name>` config row), docs HTML (request table, valid-lookups table, response field section with its `cache_hit` row, caching TTL table), api.http, smoke test, integration tests, changelog.yaml
 
 ## Adding a New Endpoint
 
