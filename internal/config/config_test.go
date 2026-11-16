@@ -46,6 +46,9 @@ func TestConfig_Defaults(t *testing.T) {
 		{"geoip.max_age", "720h"},
 		{"cache.ttl.asn", "24h"},
 		{"postgres.sslmode", "require"},
+		// Off by default: turning it on opens a second, unauthenticated listener.
+		{"metrics.enabled", false},
+		{"metrics.listen_addr", ":9091"},
 	}
 
 	for _, tt := range tests {

@@ -9,6 +9,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/metrics"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
 	"golang.org/x/sync/singleflight"
@@ -55,6 +56,7 @@ type DomainService struct {
 	ctLogsMaxEntries    int
 	fingerprintEngine   *domain.FingerprintEngine
 	alerter             notifications.ErrorRecorder
+	metrics             *metrics.Metrics
 
 	lookupWhois         func(ctx context.Context, d string) (*domain.WhoisInfo, error)
 	lookupDNS           func(ctx context.Context, d string) (*domain.DNSInfo, error)
@@ -74,8 +76,9 @@ type DomainService struct {
 // defaultCacheTTL covers any lookup without an entry in cacheTTLs; see ttlFor.
 // tiProviders is the set of threat intelligence backends built from config at
 // startup. Non-positive numeric arguments fall back to sane defaults, so a
-// zero-valued config cannot produce an unusable service.
-func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs map[string]time.Duration, lookupTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider) *DomainService {
+// zero-valued config cannot produce an unusable service. m may be nil, which
+// records no metrics.
+func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs map[string]time.Duration, lookupTimeout time.Duration, subdomainMaxResults, ctLogsMaxEntries int, fpEngine *domain.FingerprintEngine, alerter notifications.ErrorRecorder, tiProviders []domain.ThreatIntelProvider, m *metrics.Metrics) *DomainService {
 	if subdomainMaxResults <= 0 {
 		subdomainMaxResults = 500
 	}
@@ -88,7 +91,7 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 	if alerter == nil {
 		alerter = &notifications.NoopRecorder{}
 	}
-	return &DomainService{
+	svc := &DomainService{
 		cache:               c,
 		defaultCacheTTL:     defaultCacheTTL,
 		cacheTTLs:           cacheTTLs,
@@ -97,6 +100,7 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 		ctLogsMaxEntries:    ctLogsMaxEntries,
 		fingerprintEngine:   fpEngine,
 		alerter:             alerter,
+		metrics:             m,
 		lookupWhois:         domain.LookupWhois,
 		lookupDNS:           domain.LookupDNS,
 		lookupSSL:           domain.LookupSSL,
@@ -110,6 +114,22 @@ func NewDomainService(c cache.Cache, defaultCacheTTL time.Duration, cacheTTLs ma
 			return domain.LookupThreatIntel(ctx, d, tiProviders)
 		},
 		lookupDNSSecurity: domain.LookupDNSSecurity,
+	}
+	svc.initMetrics()
+	return svc
+}
+
+// initMetrics creates the metric series for every lookup this service fetches,
+// so each exists at zero from startup (see metrics.InitLookup for why).
+// fingerprint and risk are left out: both are computed from other lookups'
+// data and never fetched, so no series of theirs would ever move. A test
+// asserts this set matches what a request for every lookup actually records.
+func (s *DomainService) initMetrics() {
+	for _, name := range domain.AllLookupNames {
+		if name == domain.LookupFingerprintName || name == domain.LookupRiskName {
+			continue
+		}
+		s.metrics.InitLookup(scopeDomain, name, true)
 	}
 }
 
@@ -291,7 +311,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		errs:        &resp.Errors,
 		logger:      logging.Logger(),
 		target:      domainName,
-		targetField: "domain",
+		targetField: scopeDomain,
 		keyFor:      func(name string) string { return cache.LookupKey(domainName, name) },
 	}
 
@@ -300,6 +320,7 @@ func (s *DomainService) Lookup(ctx context.Context, domainName string, opts doma
 		sf:            &s.sf,
 		lookupTimeout: s.lookupTimeout,
 		ttlFor:        s.ttlFor,
+		metrics:       s.metrics,
 	}, st, s.buildRunners(st, data, opts))
 
 	s.assemble(resp, data, opts, hits)

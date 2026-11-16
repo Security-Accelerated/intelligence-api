@@ -132,6 +132,13 @@ geoip:
   # DB-IP publishes Lite releases monthly. 0 disables the check.
   max_age: "720h"
 
+# Prometheus metrics, served at GET /metrics on a listener of their own. The
+# endpoint is unauthenticated: the port being unreachable from outside is what
+# protects it, so never publish it. Off by default.
+metrics:
+  enabled: false
+  listen_addr: ":9091"
+
 threat_intel:
   virustotal_api_key: ""
   alienvault_api_key: ""

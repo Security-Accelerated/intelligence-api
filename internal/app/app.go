@@ -15,6 +15,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/httpapi"
+	"github.com/security-accelerated/intelligence-api/internal/metrics"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"github.com/security-accelerated/intelligence-api/internal/service"
@@ -32,9 +33,17 @@ func Run(logger *zap.Logger, version string) error {
 
 	status := config.NewStatusSnapshot(version, lookupNames)
 
+	// Built whether or not the endpoint is enabled: recording is a few atomic
+	// operations, and metrics.enabled only decides whether anything serves it.
+	m, err := metrics.New(version)
+	if err != nil {
+		return fmt.Errorf("build metrics: %w", err)
+	}
+
 	rlCfg := middleware.RateLimitConfig{
-		Free: cfg.GetInt("rate_limit.free"),
-		Pro:  cfg.GetInt("rate_limit.pro"),
+		Free:    cfg.GetInt("rate_limit.free"),
+		Pro:     cfg.GetInt("rate_limit.pro"),
+		Metrics: m,
 	}
 
 	logger.Info("initializing application",
@@ -56,6 +65,9 @@ func Run(logger *zap.Logger, version string) error {
 		}
 	}()
 	logger.Info("connected to postgres", zap.Any("config", status.Database))
+	if err := m.RegisterDB(db); err != nil {
+		return err
+	}
 
 	// Auth
 	lastUsedBatcher := auth.NewLastUsedBatcher(
@@ -84,6 +96,9 @@ func Run(logger *zap.Logger, version string) error {
 		return fmt.Errorf("connect to redis: %w", err)
 	}
 	logger.Info("connected to redis", zap.Any("config", status.Cache))
+	if err := m.RegisterRedisPool(redisCache.Client()); err != nil {
+		return err
+	}
 
 	// DNS resolver for intelligence lookups. Scoped to the domain package via
 	// domain.Resolver(), so this no longer has to run after Postgres and Redis
@@ -189,7 +204,7 @@ func Run(logger *zap.Logger, version string) error {
 		domain.CTLogsHTTPTimeout = v
 	}
 
-	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders)
+	domainService := service.NewDomainService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("domain.lookup_timeout"), cfg.GetInt("subdomain.max_results"), cfg.GetInt("ct_logs.max_entries"), fpService.Engine(), alerter, tiProviders, m)
 
 	// Billing
 	billingRepo := billing.NewRepository(db)
@@ -257,6 +272,9 @@ func Run(logger *zap.Logger, version string) error {
 			logger.Error("geoip reader close failed", zap.Error(err))
 		}
 	}()
+	if err := m.RegisterGeoIP(geoReader); err != nil {
+		return err
+	}
 
 	// IP threat intel providers (adapters around the domain providers)
 	var ipTIProviders []domain.IPThreatIntelProvider
@@ -272,7 +290,7 @@ func Run(logger *zap.Logger, version string) error {
 	}
 
 	// IP intelligence service
-	ipService := service.NewIPService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders)
+	ipService := service.NewIPService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders, m)
 
 	// HTTP
 	h := handler.New(handler.Deps{
@@ -289,7 +307,7 @@ func Run(logger *zap.Logger, version string) error {
 		DB:                 db,
 		Status:             status,
 	})
-	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")))
+	router := httpapi.NewRouter(h, cachedRepo, redisCache.Client(), rlCfg, usageLogger, cfg.GetString("application.mode"), int64(cfg.GetInt("server.body_limit")), m)
 	serverCfg := httpapi.ServerConfig{
 		Port:            status.System.Port,
 		ReadTimeout:     cfg.GetDuration("server.read_timeout"),
@@ -298,6 +316,14 @@ func Run(logger *zap.Logger, version string) error {
 		ShutdownTimeout: cfg.GetDuration("server.shutdown_timeout"),
 	}
 	server := httpapi.NewServer(router, serverCfg)
+
+	// Prometheus endpoint, on its own listener. Started before the API so a
+	// port it cannot bind stops the process before it takes any traffic.
+	stopMetrics, err := startMetricsServer(ctx, cfg, m, serverCfg, logger, status)
+	if err != nil {
+		return err
+	}
+	defer stopMetrics()
 
 	// Shutdown signal
 	sigCh := make(chan os.Signal, 1)

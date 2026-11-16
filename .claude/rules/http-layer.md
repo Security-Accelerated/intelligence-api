@@ -14,22 +14,42 @@ paths:
 
 ## Middleware chain — order matters
 
-1. `gin.Recovery()` — panics → 500 (handler goroutines only; lookups recover themselves)
-2. `SecurityHeaders()` — X-Content-Type-Options, X-Frame-Options, `Cache-Control:
+1. `Metrics()` — records latency by route template, method, status and plan after
+   `c.Next()` returns. **First, ahead of Recovery**: a panic unwinds past every middleware
+   between it and Recovery, so anywhere later a panicking request would not be counted
+2. `gin.Recovery()` — panics → 500 (handler goroutines only; lookups recover themselves)
+3. `SecurityHeaders()` — X-Content-Type-Options, X-Frame-Options, `Cache-Control:
    no-store`, HSTS, Referrer-Policy, and a strict `default-src 'none'` CSP for the JSON
    API. HTML pages override the CSP with `htmlPageCSP` in the handler package.
-3. `BodyLimit(1MB)`
-4. `ClientRequestID()` — validates/echoes `X-Client-Request-ID`, sets a context key
-5. `RequestLogger()` — structured logging; runs after `c.Next()` returns
-6. *(protected)* `APIKeyAuth()` — sets `customer_id`, `api_key_id`, `api_key_plan`
-7. *(protected)* `RateLimit()` — per-key sliding window in Redis, **fail-open**, admin
+4. `BodyLimit(1MB)`
+5. `ClientRequestID()` — validates/echoes `X-Client-Request-ID`, sets a context key
+6. `RequestLogger()` — structured logging; runs after `c.Next()` returns
+7. *(protected)* `APIKeyAuth()` — sets `customer_id`, `api_key_id`, `api_key_plan`
+8. *(protected)* `RateLimit()` — per-key sliding window in Redis, **fail-open**, admin
    bypass
-8. *(protected + admin)* `UsageLog()` — records to `usage.Recorder` after the response
-9. *(admin)* `RequireAdmin()` — `plan == "admin"`
+9. *(protected + admin)* `UsageLog()` — records to `usage.Recorder` after the response
+10. *(admin)* `RequireAdmin()` — `plan == "admin"`
 
 Adding middleware means choosing a position in this list, and the position is part of the
 change. Auth must precede rate limiting (the limit is per key); usage logging must follow
 auth (it needs the key) and must be after `c.Next()` so it sees the outcome.
+
+## Metrics — `internal/metrics`
+
+One `*metrics.Metrics`, built in `app.go` and passed to the router, the rate limiter
+(`RateLimitConfig.Metrics`) and both services. It is a concrete type, not an interface:
+there is one implementation, and every recording method is a no-op on a nil pointer, so
+tests pass nil or build their own (each owns its registry; `metricstest` reads one the
+way a scrape does). Recording is always on. `metrics.enabled` only decides whether
+`httpapi.StartMetricsServer` serves it, on **its own listener** (`metrics.listen_addr`).
+`/metrics` is never a route on the API router: the endpoint is unauthenticated and the
+separate port is its access control (`docs/decisions.md`).
+
+**Label values must be bounded.** Anything a caller chooses (path, method) goes through a
+fixed fallback (`RouteUnmatched`, `MethodOther`) before it becomes a label. A new label
+whose values come from a request is a way to exhaust the scraper. Metric names and labels
+are also what `deploy/grafana/intelligence-api.json` queries: renaming one means editing
+the dashboard and `docs/operations.md` in the same change.
 
 ## Handler construction
 
@@ -71,7 +91,7 @@ domain.AllLookupNames)` and populated progressively in `app.go`. It feeds both t
 structured startup log and `GET /v1/info` — **adding a field to a struct surfaces it in
 both places**. Live data (runtime stats, DB pool, Redis ping, auth cache size) is computed
 at request time in the info handler and merged in. Response groups: `system`, `database`,
-`cache`, `lookups`, `services`, `runtime`, `postgres_pool`. `./scripts/info.sh`
+`cache`, `lookups`, `services` (including `services.metrics`), `runtime`, `postgres_pool`. `./scripts/info.sh`
 pretty-prints it (needs `SMOKE_ADMIN_KEY` from `.env`).
 
 ## Health

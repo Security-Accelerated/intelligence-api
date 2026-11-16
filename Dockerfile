@@ -21,5 +21,8 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # root-owned and there is no uid/gid option on mounts, so this is the only way a
 # non-root process can write to its own volume.
 EXPOSE 8080
+# The Prometheus listener, when metrics.enabled is set. Documentation only, as
+# EXPOSE always is: never publish this port, the endpoint has no authentication.
+EXPOSE 9091
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["intelligence-api"]

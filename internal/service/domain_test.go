@@ -1370,7 +1370,7 @@ func TestLookup_Risk_PartiallyCachedInputsCountAsMiss(t *testing.T) {
 // --- Setters and constructor ---
 
 func TestNewDomainService_Defaults(t *testing.T) {
-	svc := NewDomainService(newMockCache(), time.Minute, nil, 0, 0, 0, nil, nil, nil)
+	svc := NewDomainService(newMockCache(), time.Minute, nil, 0, 0, 0, nil, nil, nil, nil)
 	if svc.subdomainMaxResults != 500 {
 		t.Errorf("subdomainMaxResults = %d, want 500", svc.subdomainMaxResults)
 	}

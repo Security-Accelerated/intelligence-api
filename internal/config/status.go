@@ -95,6 +95,7 @@ type ServicesStatus struct {
 	Fingerprint   FingerprintStatus   `json:"fingerprint"`
 	Usage         UsageStatus         `json:"usage"`
 	GeoIP         GeoIPStatus         `json:"geoip"`
+	Metrics       MetricsStatus       `json:"metrics"`
 }
 
 type NotificationsStatus struct {
@@ -136,6 +137,13 @@ type GeoIPStatus struct {
 	Enabled bool   `json:"enabled"`
 	CityDB  string `json:"city_db"`
 	DBPath  string `json:"db_path"`
+}
+
+// MetricsStatus reports whether the Prometheus listener is serving. ListenAddr
+// is empty when it is not.
+type MetricsStatus struct {
+	Enabled    bool   `json:"enabled"`
+	ListenAddr string `json:"listen_addr,omitempty"`
 }
 
 // NewStatusSnapshot builds a StatusSnapshot from the current config values.

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -65,6 +66,23 @@ func (r *GeoIPReader) Loaded() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.cityDB != nil
+}
+
+// BuildTime reports when the loaded database was built, read from the
+// database's own metadata, and false when no database is loaded. It is the age
+// of the data being served, which the file's modification time is not: that
+// records when the file was downloaded.
+func (r *GeoIPReader) BuildTime() (time.Time, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.cityDB == nil {
+		return time.Time{}, false
+	}
+	epoch := r.cityDB.Metadata().BuildEpoch
+	if epoch > math.MaxInt64 {
+		return time.Time{}, false
+	}
+	return time.Unix(int64(epoch), 0), true
 }
 
 // LookupGeo returns geographic information for the given IP. DB-IP Lite carries

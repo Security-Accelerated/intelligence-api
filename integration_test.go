@@ -213,7 +213,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		{Name: "TestServer", Category: "web-server", Headers: map[string]string{"Server": "test"}},
 	})
 
-	svc := service.NewDomainService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil)
+	svc := service.NewDomainService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, 500, 100, fpEngine, &notifications.NoopRecorder{}, nil, nil)
 	// Replace real lookups with stubs so we don't hit the network.
 	svc.SetLookups(
 		func(_ context.Context, _ string) (*domain.WhoisInfo, error) {
@@ -311,7 +311,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	})
 
 	// IP service with stubs
-	ipSvc := service.NewIPService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, nil, &notifications.NoopRecorder{}, nil)
+	ipSvc := service.NewIPService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, nil, &notifications.NoopRecorder{}, nil, nil)
 	ipSvc.SetLookups(
 		func(_ net.IP) (*domain.GeoIPInfo, error) {
 			return &domain.GeoIPInfo{Country: "United States", CountryCode: "US", City: "Mountain View", Latitude: 37.386, Longitude: -122.084}, nil

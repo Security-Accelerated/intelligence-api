@@ -64,6 +64,7 @@ client ──> Gin router ──> middleware chain ──> handler ──> servi
 | `internal/safenet` | SSRF prevention at dial time: every outbound HTTP client in the server goes through it |
 | `internal/auth`, `internal/billing`, `internal/usage` | Hashed API keys with rotation, Stripe webhooks and key provisioning, buffered usage logging |
 | `internal/notifications` | Pushover alerting with throttle and spike detection |
+| `internal/metrics` | Prometheus instrumentation, served on a listener separate from the API's; the Grafana dashboard for it is in `deploy/grafana` |
 | `internal/cache`, `internal/database`, `internal/config`, `internal/logging` | Redis, PostgreSQL, Viper config with env overrides, Zap in ECS format |
 | `cmd/api`, `cmd/sactl` | The server, and the operator CLI that reuses the server's own packages |
 
