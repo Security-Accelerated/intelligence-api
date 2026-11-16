@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"sync"
 	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/metrics"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
@@ -18,6 +21,13 @@ import (
 // a []lookupRunner and hand it to runLookups; everything about which lookups
 // exist, how they are fetched and how the response is assembled stays in the
 // owning service.
+
+// The two kinds of target. Each is a runState's targetField, which names the
+// target in log output and is the "scope" label on every lookup metric.
+const (
+	scopeDomain = "domain"
+	scopeIP     = "ip"
+)
 
 // lookupRunner is one cacheable lookup for one target: how to decode a payload
 // into the caller's own storage, and how to fetch that payload live.
@@ -46,6 +56,38 @@ type lookupRunner struct {
 type fetchResult struct {
 	payload []byte
 	errs    []domain.LookupError
+	// timedOut marks a failure that was a timeout, for the outcome metric. The
+	// errs above carry only sanitized text, so the runner classifies while it
+	// still holds the error.
+	timedOut bool
+}
+
+// isTimeout reports whether a lookup failed by running out of time: the
+// lookup's own deadline, or a network timeout further down (a DNS query, an
+// HTTP client timeout), which is where most of them come from.
+func isTimeout(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+// lookupOutcome classifies a finished fetch for the lookup metric. Any
+// reported error makes it a failure, including a fan-out lookup's partial
+// result, which is the same line the cache draws when it refuses to store one.
+// A failure counts as a timeout when the runner saw a timeout error or the
+// fetch's own deadline has passed; the fan-out lookups report sanitized
+// per-provider errors only, so the deadline is all there is to go on for them.
+func lookupOutcome(ctx context.Context, res fetchResult) string {
+	switch {
+	case len(res.errs) == 0:
+		return metrics.OutcomeOK
+	case res.timedOut || errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return metrics.OutcomeTimeout
+	default:
+		return metrics.OutcomeError
+	}
 }
 
 // runState is the mutable per-request state shared by concurrently running
@@ -122,10 +164,13 @@ func simpleRunner[T any](alerter notifications.ErrorRecorder, st *runState, name
 			if err != nil {
 				st.logger.Warn("lookup failed", zap.String("lookup", name), st.logTarget(), zap.Error(err))
 				recordIfUnexpected(alerter, name, err)
-				return fetchResult{errs: []domain.LookupError{{
-					Lookup:  name,
-					Message: sanitizeErr(err),
-				}}}
+				return fetchResult{
+					errs: []domain.LookupError{{
+						Lookup:  name,
+						Message: sanitizeErr(err),
+					}},
+					timedOut: isTimeout(err),
+				}
 			}
 			return fetchResult{payload: marshalForCache(st, name, result)}
 		},
@@ -156,6 +201,8 @@ type runnerDeps struct {
 	sf            *singleflight.Group
 	lookupTimeout time.Duration
 	ttlFor        func(lookupName string) time.Duration
+	// metrics may be nil, which records nothing.
+	metrics *metrics.Metrics
 }
 
 // runLookups resolves every runner: one MGET for the cacheable ones, then a
@@ -190,7 +237,13 @@ func runLookups(ctx context.Context, d runnerDeps, st *runState, runners []looku
 			// target — only one runs and every caller gets its payload. Keying
 			// per lookup rather than per response means two requests asking for
 			// overlapping-but-different lookup sets still share the overlap.
+			//
+			// singleflight runs the function on the goroutine of the caller
+			// that started the flight, so ran is only ever written here and
+			// tells this caller whether it fetched or waited on someone else.
+			ran := false
 			v, _, _ := d.sf.Do(key, func() (any, error) {
+				ran = true
 				// Shared work is detached from the triggering caller's context
 				// and bounded by the service's own timeout instead. One client
 				// disconnecting — or holding a tight deadline — must not cancel
@@ -200,7 +253,11 @@ func runLookups(ctx context.Context, d runnerDeps, st *runState, runners []looku
 				fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.lookupTimeout)
 				defer cancel()
 
+				// Timed around the fetch alone, so the cache write below does
+				// not count toward the lookup's duration.
+				start := time.Now()
 				res := r.fetch(fetchCtx)
+				d.metrics.ObserveLookup(st.targetField, r.name, lookupOutcome(fetchCtx, res), time.Since(start))
 				// Only the goroutine that actually ran the fetch writes it
 				// back; coalesced callers would rewrite the identical value.
 				//
@@ -220,6 +277,9 @@ func runLookups(ctx context.Context, d runnerDeps, st *runState, runners []looku
 				return res, nil
 			})
 			res := v.(fetchResult)
+			if !ran {
+				d.metrics.Coalesced(st.targetField, r.name)
+			}
 
 			st.mu.Lock()
 			defer st.mu.Unlock()
@@ -265,6 +325,10 @@ func readCachedLookups(ctx context.Context, d runnerDeps, st *runState, runners 
 		cached = nil
 	}
 
+	// Hits and misses are counted for the cacheable runners only. An uncached
+	// lookup never asked the cache anything, and counting it as a miss would
+	// drag the hit ratio down for a reason nobody can act on. A failed MGET and
+	// an unusable entry both count as misses, because both end in a live fetch.
 	for i, r := range cacheable {
 		if i < len(cached) && cached[i] != nil {
 			if err := r.decode(cached[i]); err != nil {
@@ -273,9 +337,11 @@ func readCachedLookups(ctx context.Context, d runnerDeps, st *runState, runners 
 					zap.String("lookup", r.name), st.logTarget(), zap.Error(err))
 			} else {
 				hits[r.name] = true
+				d.metrics.CacheResult(st.targetField, r.name, true)
 				continue
 			}
 		}
+		d.metrics.CacheResult(st.targetField, r.name, false)
 		misses = append(misses, r)
 	}
 	return misses

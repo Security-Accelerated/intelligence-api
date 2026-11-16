@@ -418,6 +418,61 @@ select.
 
 ## Operations
 
+### 2026-11-16 — `/metrics` is on its own listener, with no authentication
+
+**Decision.** Prometheus metrics are served at `GET /metrics` on a second listener
+(`metrics.listen_addr`, `:9091`), started only when `metrics.enabled` is set. The public
+router has no such route and answers 404. The endpoint checks no credential; the port
+having no public address is the whole access control.
+
+**Why.** Whoever scrapes has to be able to reach it, and the scraper we use (Fly's, see
+the next entry) takes a port and a path and cannot send a header. Behind the admin key,
+every scrape would also run the protected chain: an auth lookup, then a row in
+`request_log` every 15 seconds per machine, which is the table this work exists to stop
+leaning on. And the admin key would have to be copied into a
+scraper's configuration, where a key that can rewrite fingerprint rules and read every
+customer's usage has no business being.
+
+**Instead of.** `GET /v1/admin/metrics` behind `RequireAdmin()`, which looks safer because
+it has a lock on it. The lock is the problem: it puts the most powerful credential in the
+least protected place, and it makes reading the metrics depend on authentication, so on
+Postgres, working: they would go dark in the outage they are there to explain.
+
+**Cost.** Nothing in the code stops someone publishing the port. A `[[services]]` block
+for 9091 in `fly.toml`, or a Compose mapping without `127.0.0.1:`, exposes route names,
+plan names, traffic volumes and the running version to anyone. On Fly the port is also
+reachable by other apps in the same organization over the private network.
+
+**Revisit if.** The organization gains an app that should not see these numbers, or the
+metrics have to be scraped from outside the platform. Then put a bearer token on this
+listener; do not move it onto the API port.
+
+### 2026-11-16 — Production metrics use Fly's managed Prometheus and Grafana
+
+**Decision.** `fly.toml` carries a `[metrics]` section and Fly scrapes each machine. The
+dashboard in `deploy/grafana/` is imported into Fly's hosted Grafana at fly-metrics.net.
+We run no Prometheus, no Grafana and no agent in production. The pair in
+`docker-compose.yaml` is for checking the dashboard locally and nothing else.
+
+**Why.** It is the only option that adds nothing to operate. The scrape happens inside
+Fly's network, so the endpoint stays off the internet, and there is no token to store or
+rotate. It also fits machines that stop when idle: a stopped machine is simply not
+scraped, where a push-based setup needs an agent running beside the app on each one.
+
+**Instead of.** Grafana Cloud's free tier, which needs either a public, authenticated
+scrape endpoint or a collector process in every machine pushing with a stored credential,
+on machines sized at 1 GB. And instead of self-hosting both on Fly, which is another app
+with a volume, upgrades and its own uptime to watch, for one service's dashboard.
+
+**Cost.** Retention, limits and price are Fly's to change; it is free today and they say
+they will give notice. There is no alerting from these metrics yet: alerts still come from
+the Pushover alerter and the uptime workflow. The dashboard is imported by hand, so the
+hosted copy can fall behind the file.
+
+**Revisit if.** Fly starts charging enough to matter, alerting on these metrics is wanted
+(Grafana Cloud's alerting is the likely reason to move), or the service leaves Fly. The
+metrics endpoint itself is plain Prometheus and does not change in any of those cases.
+
 ### 2026-08-27 — Deploys trigger on a release tag, not a release branch
 
 **Decision.** `fly-deploy.yml` fires on any `v*` tag. `make release V=` pushes the tag and

@@ -8,8 +8,13 @@ services:
         VERSION: ${VERSION:-dev}
     ports:
       - "8080:8080"
+      # The metrics listener, for curl and the smoke test. Loopback only: the
+      # endpoint is unauthenticated, and Prometheus reaches it over the compose
+      # network without this.
+      - "127.0.0.1:9091:9091"
     environment:
       POSTGRES_SSLMODE: disable
+      METRICS_ENABLED: "true"
     volumes:
       - /etc/security-accelerated/intelligence-api.yaml:/etc/security-accelerated/intelligence-api.yaml:ro
       # The app downloads the GeoIP database on first boot (no key needed) and
@@ -47,7 +52,35 @@ services:
       interval: 2s
       timeout: 3s
       retries: 10
+  # Prometheus and Grafana, so the dashboard in deploy/grafana can be checked
+  # against real series before a release. Development only: production is
+  # scraped by Fly (see docs/operations.md). Both are published on loopback.
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - api
+  grafana:
+    image: grafana/grafana:13.3.1
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # No login on a loopback-only dev instance. Editor is enough to change a
+      # panel and export the result; nothing here is ever reachable off-host.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/intelligence-api.json
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/intelligence-api.json:/var/lib/grafana/dashboards/intelligence-api.json:ro
+    depends_on:
+      - prometheus
 
 volumes:
   redis-data:
   postgres-data:
+  prometheus-data:

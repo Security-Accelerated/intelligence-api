@@ -490,7 +490,7 @@ func TestIPLookup_GeoDBNotLoadedDoesNotAlert(t *testing.T) {
 // --- Constructor ---
 
 func TestNewIPService_Defaults(t *testing.T) {
-	svc := NewIPService(newMockCache(), time.Minute, nil, 0, nil, nil, nil)
+	svc := NewIPService(newMockCache(), time.Minute, nil, 0, nil, nil, nil, nil)
 	if svc.lookupTimeout != 30*time.Second {
 		t.Errorf("lookupTimeout = %v, want 30s", svc.lookupTimeout)
 	}

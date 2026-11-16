@@ -53,6 +53,9 @@ func TestConfig_Defaults(t *testing.T) {
 		{"cache.ttl.key_exchange", "12h"},
 		{"cache.ttl.certificate", "4h"},
 		{"postgres.sslmode", "require"},
+		// Off by default: turning it on opens a second, unauthenticated listener.
+		{"metrics.enabled", false},
+		{"metrics.listen_addr", ":9091"},
 	}
 
 	for _, tt := range tests {

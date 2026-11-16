@@ -107,6 +107,8 @@ Config values:
 | `billing.cleanup_interval` | `10m` | Sweep cadence for expired provisioned keys |
 | `usage.buffer_size` | `256` | Channel buffer size for async usage logging |
 | `usage.flush_interval` | `5s` | How often buffered usage entries are flushed to PostgreSQL |
+| `metrics.enabled` | `false` | Serve Prometheus metrics at `GET /metrics` on a separate listener. See [Metrics](#metrics) |
+| `metrics.listen_addr` | `:9091` | Address of the metrics listener. The endpoint is unauthenticated, so this port must never be published |
 
 ### Database Setup
 
@@ -149,6 +151,14 @@ docker compose up --build
 ```
 
 This starts the API, Redis, and PostgreSQL. The API is available at `http://localhost:8080`. The migration and seed files run automatically on first start.
+
+It also starts Prometheus and Grafana, so the dashboard can be checked against real series before a release. All three ports are published on loopback only:
+
+| URL | What |
+|-----|------|
+| `http://localhost:9091/metrics` | The API's metrics listener (Compose sets `METRICS_ENABLED=true`) |
+| `http://localhost:9090` | Prometheus, scraping the API every 15s |
+| `http://localhost:3000` | Grafana, no login, opening on the Intelligence API dashboard |
 
 ### Run from GitHub Container Registry
 
@@ -226,7 +236,7 @@ make run    # builds and starts the server
 | `make release V=v0.1.0` | Tag and push a release |
 | `make deploy` | Deploy to Fly.io with git version baked in |
 | `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup. The wait is bounded by `RESET_TIMEOUT` (default 300s), after which it names the dependency that never came up |
-| `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080` |
+| `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080`. Also checks that `/metrics` is a 404 on the public port, and reads the metrics listener where it is reachable: `localhost:9091` for a local host, `SMOKE_METRICS_URL` otherwise, skipped when neither applies |
 | `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
 | `./scripts/info.sh [host]` | Pretty-print the `/v1/info` admin endpoint. Defaults to production |
 
@@ -294,6 +304,7 @@ hostname is added to Fly and DNS before `site.home_host` is released, not after.
 | `STRIPE_PORTAL_LINK` | Stripe Customer Portal URL for subscription management |
 | `SITE_HOME_HOST` | Hostname whose `/` is the company home page; set in `fly.toml` `[env]`, not a secret |
 | `SITE_API_HOST` | Hostname the home page's docs links point at; set in `fly.toml` `[env]`, not a secret |
+| `METRICS_ENABLED` | Serve Prometheus metrics on the metrics listener; set to `true` in `fly.toml` `[env]`, not a secret. The `[metrics]` section of the same file tells Fly where to scrape |
 | `USAGE_BUFFER_SIZE` | Channel buffer size for async usage logging (default: 256) |
 | `USAGE_FLUSH_INTERVAL` | Flush interval for usage batch inserts (default: 5s) |
 | `THREAT_INTEL_VIRUSTOTAL_API_KEY` | VirusTotal API key (enables VirusTotal threat intel provider) |
@@ -423,6 +434,60 @@ Two alert types:
 Alerts include a cooldown period (default: 15 minutes) to prevent alert fatigue. When credentials are not configured, alerting is silently disabled.
 
 Additionally, a GitHub Actions workflow monitors uptime by pinging the API every 5 minutes and sending a Pushover alert on failure.
+
+## Metrics
+
+With `metrics.enabled` set, the API serves Prometheus metrics at `GET /metrics` on a second listener (`metrics.listen_addr`, default `:9091`). That listener serves nothing else, and the API's own port does not serve `/metrics` at all: it answers 404 there.
+
+**The endpoint has no authentication. The port being unreachable from outside is the access control**, so it is never added to a Fly service, a load balancer, or a public Compose port mapping. The reasoning is in [decisions.md](decisions.md).
+
+Metrics are recorded whether or not the endpoint is enabled; the key only decides whether anything serves them. `GET /v1/info` reports the state under `services.metrics`.
+
+### What is exported
+
+| Metric | Labels | What it measures |
+|--------|--------|------------------|
+| `intelligence_api_http_request_duration_seconds` | `route`, `method`, `status`, `plan` | Latency histogram of every HTTP request. Its `_count` series is the request count |
+| `intelligence_api_lookup_duration_seconds` | `scope`, `lookup`, `outcome` | Duration histogram of live lookup fetches. Its `_count` series is the outcome count |
+| `intelligence_api_cache_requests_total` | `scope`, `lookup`, `result` | Lookup cache reads, `result` being `hit` or `miss` |
+| `intelligence_api_singleflight_coalesced_total` | `scope`, `lookup` | Lookup calls that waited on another caller's in-flight fetch instead of making their own |
+| `intelligence_api_rate_limit_rejections_total` | `plan` | Requests the rate limiter answered with 429 |
+| `intelligence_api_redis_pool_*` | | The Redis connection pool: `connections`, `idle_connections`, and the counters `hits_total`, `misses_total`, `timeouts_total`, `stale_connections_total` |
+| `go_sql_*` | `db_name="postgres"` | The PostgreSQL connection pool, from `database/sql` |
+| `intelligence_api_geoip_database_loaded` | | 1 while a GeoIP database is loaded |
+| `intelligence_api_geoip_database_build_timestamp_seconds` | | When the loaded GeoIP database was built. Its age is `time()` minus this. Absent while nothing is loaded |
+| `intelligence_api_build_info` | `version`, `goversion` | Always 1; the labels carry the running version |
+| `go_*`, `process_*` | | Go runtime and process metrics from the client library |
+
+How to read the labels:
+
+- **`route`** is the route template (`/v1/domain/lookup`), never the path as sent. A request that matched no route is `unmatched`, and a method outside the standard set is `other`, so a scanner cannot create a series per request.
+- **`plan`** is the caller's plan, or `none` for a request with no valid API key (docs pages, health checks, failed authentication).
+- **`scope`** is `domain` or `ip`. It keeps the two `threat_intel` lookups apart.
+- **`lookup`** is a name from the lookup catalog. `fingerprint` and `risk` never appear: both are computed from other lookups and are never fetched. A `fingerprint` request shows up as `headers`.
+- **`outcome`** is `ok`, `error` or `timeout`. A fan-out lookup (`reputation`, `threat_intel`) is an `error` when any provider failed, even if it returned a partial result, which is the same line the cache draws when it declines to store one.
+- **Cache hits and coalesced callers are not in the lookup histogram.** It times work that went upstream, so a warm cache does not make a slow provider look fast.
+- **`geo` has no cache series.** It is never cached, so it is neither a hit nor a miss.
+
+One limitation to keep in mind when reading a graph: Prometheus cannot see a series' first value as an increase. The lookup, cache and rate-limit series are created at zero on startup so their first event is visible. The HTTP series cannot be, because the combinations of route, status and plan are not enumerable, so the first request of each combination after a start does not show in a `rate()`. A lone 500 right after a restart is in the raw counter and not on the graph.
+
+### Dashboard
+
+`deploy/grafana/intelligence-api.json` is the Grafana dashboard for these metrics: traffic and latency, per-lookup fetch rate, duration and failure ratio, cache hit ratio, rate-limit rejections, both connection pools, GeoIP database age, and the runtime. It selects its data source and the app through variables at the top, so the same file works locally and in production.
+
+To change it, edit it in the local Grafana, export the dashboard as JSON, and replace the file.
+
+### Production: Fly's managed Prometheus and Grafana
+
+Production uses the metrics stack Fly runs for every organization. Nothing is deployed for it and no credential is involved:
+
+- The `[metrics]` section of `fly.toml` (`port = 9091`, `path = '/metrics'`) tells Fly to scrape each machine every 15 seconds. `METRICS_ENABLED = 'true'` in `[env]` is what makes the app listen there; the two are changed together.
+- The port is not in `[http_service]`, so it has no public address. It is reachable from other apps in the same Fly organization over the private network.
+- Fly adds `app`, `region`, `host` and `instance` labels to every series.
+- Grafana is at [fly-metrics.net](https://fly-metrics.net), signed in with the Fly account. Import the dashboard once with Dashboards → New → Import, upload `deploy/grafana/intelligence-api.json`, and choose the Prometheus data source. After a change to the file, import it again and overwrite.
+- For ad-hoc queries, the Prometheus API is at `https://api.fly.io/prometheus/<org-slug>/`, authenticated with a Fly access token.
+
+A stopped machine is not scraped, and its counters start again from zero when it next starts; `rate()` handles the reset. The managed stack is free at the time of writing, drops a scrape larger than 16 MB, and may drop metrics with very high cardinality, which is one more reason the label values above are bounded.
 
 ## Billing
 

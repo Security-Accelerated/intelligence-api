@@ -32,6 +32,18 @@
     - text: "`sactl lookup encryption HOST` and an Encryption posture entry in the interactive lookup menu; `sactl usage` prints the host total"
       audience: internal
 
+- version: v1.2.0
+  date: 2026-11-16
+  changes:
+    - text: "Prometheus metrics (#133). With `metrics.enabled` (`METRICS_ENABLED`) the app serves `GET /metrics` on its own listener, `metrics.listen_addr` (default `:9091`). The endpoint has no authentication and the API port answers 404 for it: the separate, unpublished port is the access control, recorded in docs/decisions.md. Off by default; `fly.toml` turns it on and gains a `[metrics]` section so Fly's managed Prometheus scrapes it"
+      audience: internal
+    - text: "Exported: an HTTP latency histogram by route template, method, status and plan; a per-lookup fetch duration histogram by scope, lookup and outcome (ok, error, timeout); cache hits and misses and singleflight-coalesced calls per lookup; rate-limit rejections per plan; the Postgres and Redis connection pools; GeoIP database build time; a build-info gauge with the version; Go runtime and process metrics. Each histogram's `_count` is the matching counter. `GET /v1/info` reports `services.metrics`"
+      audience: internal
+    - text: "`deploy/grafana/intelligence-api.json` is the Grafana dashboard for these metrics. `docker compose up` now also starts Prometheus and Grafana on loopback (9090 and 3000) to check it locally. Production uses Fly's hosted Grafana at fly-metrics.net, where the dashboard is imported by hand. The smoke test asserts `/metrics` is a 404 on the public port and reads the metrics listener where it can reach it (`SMOKE_METRICS_URL`, or localhost:9091 for a local host)"
+      audience: internal
+    - text: "New dependency: github.com/prometheus/client_golang 1.25.0"
+      audience: internal
+
 - version: v1.1.3
   date: 2026-11-12
   changes:

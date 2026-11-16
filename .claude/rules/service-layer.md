@@ -66,12 +66,29 @@ coalescing anywhere; `service/whole_response.go` is gone and must not come back.
   reads each key individually so `CACHE_TTL_WHOIS` and friends work through Viper's
   `AutomaticEnv`. Pulling the subtree as a map silently drops env overrides.
 - Expiry is absolute. There is no stale serving and no negative cache.
-- `geo` and `asn` are `uncached`. `fingerprint` has no key of its own — it is computed
+- `geo` is `uncached`. `fingerprint` has no key of its own — it is computed
   from `headers` at assembly, and its `cache_hit` mirrors the headers entry.
+
+## Metrics
+
+`runLookups` records everything, so a lookup wired through a runner is instrumented with
+no code of its own: fetch duration and outcome (`ok` / `error` / `timeout`) around the
+fetch inside singleflight, a hit or miss per cacheable runner in the MGET pre-flight, and
+a coalesced call for every caller that waited on someone else's fetch. Cache hits and
+coalesced callers are deliberately absent from the duration histogram, which times
+upstream work. The label is the **runner** name, so `fingerprint` is recorded as `headers`
+and `risk` not at all.
+
+Each service's `initMetrics()` creates its lookups' series at zero at construction,
+because `rate()` cannot see a series' first value. It derives the set from
+`domain.AllLookupNames` / `AllIPLookupNames`, minus the lookups nothing fetches; a test
+per service fails if that set and what a request actually records ever differ.
 
 ## Adding a lookup
 
 Runner in `buildRunners()`, branch in `assemble()`, function field + setter on the service.
+A lookup with no runner of its own (computed from another's data, like `fingerprint`) must
+also be excluded in `initMetrics()`; the test there says so if it is not.
 The full multi-file checklist is the `adding-features` skill; use it rather than
 reconstructing the list.
 

@@ -8,13 +8,16 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/auth"
 	"github.com/security-accelerated/intelligence-api/internal/handler"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/metrics"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/security-accelerated/intelligence-api/internal/usage"
 	"go.uber.org/zap"
 )
 
 // NewRouter builds the gin engine with all middleware and routes registered.
-func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClient *redis.Client, rlCfg middleware.RateLimitConfig, recorder usage.Recorder, mode string, bodyLimit int64) *gin.Engine {
+// m may be nil, which records no request metrics. /metrics itself is not a
+// route here: it is served on its own listener by StartMetricsServer.
+func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClient *redis.Client, rlCfg middleware.RateLimitConfig, recorder usage.Recorder, mode string, bodyLimit int64, m *metrics.Metrics) *gin.Engine {
 	if mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -26,6 +29,9 @@ func NewRouter(h *handler.Handler, cachedRepo *auth.CachedRepository, redisClien
 	if mode == "production" {
 		router.TrustedPlatform = "Fly-Client-IP"
 	}
+	// Metrics goes ahead of Recovery so a request that panics is still
+	// recorded, as the 500 Recovery turns it into.
+	router.Use(middleware.Metrics(m))
 	router.Use(gin.Recovery())
 	router.Use(middleware.SecurityHeaders())
 	router.Use(middleware.BodyLimit(bodyLimit))

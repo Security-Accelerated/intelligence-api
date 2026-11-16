@@ -8,6 +8,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/metrics"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"golang.org/x/sync/singleflight"
 )
@@ -19,6 +20,7 @@ type IPService struct {
 	sf              singleflight.Group
 	lookupTimeout   time.Duration
 	alerter         notifications.ErrorRecorder
+	metrics         *metrics.Metrics
 
 	lookupGeo          func(ip net.IP) (*domain.GeoIPInfo, error)
 	lookupASN          func(ctx context.Context, ip net.IP) (*domain.IPASNInfo, error)
@@ -31,7 +33,8 @@ type IPService struct {
 //
 // defaultCacheTTL covers any lookup without an entry in cacheTTLs. geoReader
 // may be an empty reader — geo then reports ErrDBNotLoaded until the database
-// download lands. A nil geoReader leaves geo unwired; asn never needs it.
+// download lands. A nil geoReader leaves geo unwired; asn never needs it. m may
+// be nil, which records no metrics.
 func NewIPService(
 	c cache.Cache,
 	defaultCacheTTL time.Duration,
@@ -40,6 +43,7 @@ func NewIPService(
 	geoReader *domain.GeoIPReader,
 	alerter notifications.ErrorRecorder,
 	tiProviders []domain.IPThreatIntelProvider,
+	m *metrics.Metrics,
 ) *IPService {
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
@@ -54,6 +58,7 @@ func NewIPService(
 		cacheTTLs:          cacheTTLs,
 		lookupTimeout:      lookupTimeout,
 		alerter:            alerter,
+		metrics:            m,
 		lookupASN:          domain.LookupIPASN,
 		lookupReverseDNS:   domain.LookupReverseDNS,
 		lookupAbuseContact: domain.LookupAbuseContact,
@@ -65,8 +70,18 @@ func NewIPService(
 	if geoReader != nil {
 		svc.lookupGeo = geoReader.LookupGeo
 	}
+	svc.initMetrics()
 
 	return svc
+}
+
+// initMetrics creates the metric series for every IP lookup, so each exists at
+// zero from startup (see metrics.InitLookup for why). geo gets no cache series:
+// it is the one lookup that never reads the cache.
+func (s *IPService) initMetrics() {
+	for _, name := range domain.AllIPLookupNames {
+		s.metrics.InitLookup(scopeIP, name, name != domain.LookupGeoName)
+	}
 }
 
 // SetLookups replaces all lookup functions. Test-only: production wiring
@@ -167,7 +182,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 		errs:        &resp.Errors,
 		logger:      logging.Logger(),
 		target:      ip,
-		targetField: "ip",
+		targetField: scopeIP,
 		keyFor:      func(name string) string { return cache.IPLookupKey(ip, name) },
 	}
 
@@ -176,6 +191,7 @@ func (s *IPService) Lookup(ctx context.Context, ip string, opts domain.IPLookupO
 		sf:            &s.sf,
 		lookupTimeout: s.lookupTimeout,
 		ttlFor:        s.ttlFor,
+		metrics:       s.metrics,
 	}, st, s.buildRunners(st, data, opts, net.ParseIP(ip)))
 
 	s.assemble(resp, data, opts, hits)

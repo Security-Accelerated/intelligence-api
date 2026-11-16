@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/metrics"
 	"go.uber.org/zap"
 )
 
@@ -17,6 +18,8 @@ import (
 type RateLimitConfig struct {
 	Free int
 	Pro  int
+	// Metrics counts rejections per plan. Optional: nil records nothing.
+	Metrics *metrics.Metrics
 }
 
 // RateLimit returns middleware that enforces per-API-key, plan-aware rate
@@ -35,6 +38,11 @@ func RateLimit(client *redis.Client, cfg RateLimitConfig) gin.HandlerFunc {
 
 // RateLimitWithLogger is like RateLimit but accepts a logger for testing.
 func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.Logger) gin.HandlerFunc {
+	// The two plans this limiter has limits for start at zero rejections, so a
+	// plan's first rejection is a visible change rather than a new series.
+	cfg.Metrics.InitRateLimitPlan("free")
+	cfg.Metrics.InitRateLimitPlan("pro")
+
 	return func(c *gin.Context) {
 		keyID, exists := c.Get("api_key_id")
 		if !exists {
@@ -108,6 +116,7 @@ func RateLimitWithLogger(client *redis.Client, cfg RateLimitConfig, logger *zap.
 				zap.Int64("count", count),
 				zap.Int("limit", limit),
 			)
+			cfg.Metrics.RateLimitRejected(planStr)
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
 			return
 		}

@@ -32,10 +32,13 @@ internal/database/       shared PostgreSQL connection
 internal/billing/        Stripe webhooks, key provisioning, noop fallback
 internal/usage/          buffered usage logging, admin query
 internal/notifications/  Pushover alerting, throttle and spike detection
+internal/metrics/        Prometheus collectors and recording methods; metricstest reads them in tests
 internal/safenet/        SSRF prevention at dial time
 internal/logging/        Zap (ECS in prod, pretty in dev)
 internal/config/         Viper, YAML + env overrides, StatusSnapshot
 migrations/              PostgreSQL schema
+deploy/                  Grafana dashboard (deploy/grafana/intelligence-api.json), plus the
+                         Prometheus and Grafana config the local Compose stack mounts
 scripts/                 docker-reset.sh, smoke-test.sh, status.sh, info.sh — dev only
 changelog.yaml           symlink to internal/handler/changelog.yaml; edit from the root
 ```
@@ -112,11 +115,16 @@ open the file.
   `sanitizeErr()`.
 - Every outbound HTTP client goes through `safenet` — a new one that doesn't is a
   vulnerability, not a style issue.
+- `/metrics` has no authentication; its own listener (`:9091`) is the access control.
+  Never route it on the API port, add it to a Fly service, or publish it from Compose
+  beyond loopback. Keep it out of the public docs, like `/v1/hello`.
 
 ## Infrastructure
 
-Docker Compose locally (API + Redis + Postgres). Production on Fly.io (iad, auto-stop) with
-Neon Postgres and Upstash Redis. One app answers for two hostnames:
+Docker Compose locally (API + Redis + Postgres, plus Prometheus and Grafana for checking the
+dashboard). Production on Fly.io (iad, auto-stop) with Neon Postgres and Upstash Redis;
+Fly's managed Prometheus scrapes the metrics listener per `[metrics]` in `fly.toml`, and
+the dashboard is imported into fly-metrics.net. One app answers for two hostnames:
 `securityaccelerated.com` (`/` is the company home page) and `api.securityaccelerated.com`
 (`/` redirects to `/docs`), told apart by `site.home_host`. A Fly volume `maxmind_data` (name predates DB-IP) at
 `/data/geoip` persists the GeoIP database; `docker-entrypoint.sh` chowns it as root then
