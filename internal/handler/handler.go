@@ -57,6 +57,10 @@ type IPLookupService interface {
 	Lookup(ctx context.Context, ip string, opts domain.IPLookupOptions) (*domain.IPResponse, domain.CacheStats)
 }
 
+type EncryptionLookupService interface {
+	Lookup(ctx context.Context, host string, opts domain.EncryptionLookupOptions) (*domain.EncryptionResponse, domain.CacheStats)
+}
+
 // GeoIPRefresher downloads and hot-reloads the GeoIP City database.
 type GeoIPRefresher interface {
 	DownloadAndReload(ctx context.Context, dbPath, cityFile string) (*domain.RefreshResult, error)
@@ -70,6 +74,7 @@ type AuthCacheStats interface {
 type Handler struct {
 	domainService      DomainLookupService
 	ipService          IPLookupService
+	encryptionService  EncryptionLookupService
 	fingerprintService FingerprintAdminService
 	billingService     billing.Service
 	usageService       usage.Queryer
@@ -94,6 +99,7 @@ type Handler struct {
 type Deps struct {
 	DomainService      DomainLookupService
 	IPService          IPLookupService
+	EncryptionService  EncryptionLookupService
 	FingerprintService FingerprintAdminService
 	BillingService     billing.Service
 	UsageService       usage.Queryer
@@ -116,6 +122,7 @@ func New(d Deps) *Handler {
 	return &Handler{
 		domainService:      d.DomainService,
 		ipService:          d.IPService,
+		encryptionService:  d.EncryptionService,
 		fingerprintService: d.FingerprintService,
 		billingService:     d.BillingService,
 		usageService:       d.UsageService,
@@ -146,6 +153,15 @@ func (h *Handler) maxIPs(plan string) int {
 		return 0
 	}
 	return h.cfg.GetInt(fmt.Sprintf("ip.max_ips.%s", plan))
+}
+
+// maxHosts returns the configured maximum number of hosts per encryption
+// request for the given plan. Returns 0 (no limit) if config is nil.
+func (h *Handler) maxHosts(plan string) int {
+	if h.cfg == nil {
+		return 0
+	}
+	return h.cfg.GetInt(fmt.Sprintf("encryption.max_hosts.%s", plan))
 }
 
 // RegisterRoutes registers unauthenticated routes only (home page, health check, docs, billing).
@@ -180,6 +196,7 @@ func (h *Handler) RegisterProtectedRoutes(router *gin.Engine, middlewares ...gin
 	v1.POST("/admin/geoip/refresh", middleware.RequireAdmin(), h.RefreshGeoIP)
 	v1.POST("/domain/lookup", h.DomainLookup)
 	v1.POST("/ip/lookup", h.IPLookup)
+	v1.POST("/encryption/lookup", h.EncryptionLookup)
 	v1.GET("/usage", h.MyUsage)
 	v1.POST("/keys/rotate", h.RotateKey)
 }

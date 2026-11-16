@@ -13,6 +13,7 @@ type UsageEntry struct {
 	LatencyMs   int
 	DomainCount int
 	IPCount     int
+	HostCount   int
 
 	// CacheHits and CacheMisses count individual lookups served from cache
 	// versus fetched live. They are operational metrics only.
@@ -47,6 +48,7 @@ type UsageSummary struct {
 	AvgLatencyMs   float64        `json:"avg_latency_ms"`
 	TotalDomains   int            `json:"total_domains"`
 	TotalIPs       int            `json:"total_ips"`
+	TotalHosts     int            `json:"total_hosts"`
 	StatusCodes    map[string]int `json:"status_codes"`
 	FeatureUsage   map[string]int `json:"feature_usage"`
 	RequestsByPath map[string]int `json:"requests_by_path"`
@@ -56,8 +58,9 @@ type UsageSummary struct {
 
 // LookupColumns lists the request_log boolean columns that track which lookups
 // each request asked for. It must stay in sync with the union of
-// domain.AllLookupNames and domain.AllIPLookupNames, and with the request_log
-// schema — a test asserts the former. request_log.screenshot outlived the
+// domain.AllLookupNames, domain.AllIPLookupNames and
+// domain.AllEncryptionLookupNames, and with the request_log schema — a test
+// asserts the former. request_log.screenshot outlived the
 // lookup (#110): it keeps its history, defaults to false, and is written by
 // nothing until screenshots return.
 var LookupColumns = []string{
@@ -79,6 +82,10 @@ var LookupColumns = []string{
 	"asn",
 	"reverse_dns",
 	"abuse_contact",
+	// Encryption lookups.
+	"protocols",
+	"key_exchange",
+	"certificate",
 }
 
 // NoopRecorder silently discards all entries.

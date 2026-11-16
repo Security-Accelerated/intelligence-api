@@ -214,6 +214,7 @@ check_root
 check 200 "GET /docs (landing page)" "$HOST/docs"
 check 200 "GET /docs/domain (domain docs)" "$HOST/docs/domain"
 check 200 "GET /docs/ip (IP docs)" "$HOST/docs/ip"
+check 200 "GET /docs/encryption (encryption docs)" "$HOST/docs/encryption"
 check 200 "GET /docs/account (account docs)" "$HOST/docs/account"
 check 200 "GET /docs/changelog (release notes)" "$HOST/docs/changelog"
 check 200 "GET /docs/openapi.yaml (OpenAPI spec)" "$HOST/docs/openapi.yaml"
@@ -592,6 +593,57 @@ check_json "IP response has abuse_contact" '.results[0].abuse_contact != null' \
     -X POST "$HOST/v1/ip/lookup" \
     -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
     -d '{"ips":["8.8.8.8"],"lookups":["geo","asn","reverse_dns","abuse_contact"]}'
+
+echo "=== Encryption Lookup — Auth ==="
+# certificate is one handshake to the target; the full set is fourteen. The
+# auth checks only need the request to be accepted, so they ask for the cheap
+# one, and every lookup is on the free plan.
+ENC='{"hosts":["example.com"],"lookups":["certificate"]}'
+post 200 "admin key" /v1/encryption/lookup "$ADMIN" "$ENC"
+post 200 "pro key" /v1/encryption/lookup "$PRO" "$ENC"
+free_key; post 200 "free key" /v1/encryption/lookup "$FK" "$ENC"
+post 401 "no key" /v1/encryption/lookup "" "$ENC"
+post 401 "bad key" /v1/encryption/lookup "invalid-key" "$ENC"
+
+echo "=== Encryption Lookup — Validation ==="
+post 400 "raw IP"             /v1/encryption/lookup "$ADMIN" '{"hosts":["93.184.216.34"],"lookups":["certificate"]}'
+post 400 "not a hostname"     /v1/encryption/lookup "$ADMIN" '{"hosts":["localhost"],"lookups":["certificate"]}'
+post 400 "empty array"        /v1/encryption/lookup "$ADMIN" '{"hosts":[],"lookups":["certificate"]}'
+post 400 "missing lookups"    /v1/encryption/lookup "$ADMIN" '{"hosts":["example.com"]}'
+post 400 "empty lookups"      /v1/encryption/lookup "$ADMIN" '{"hosts":["example.com"],"lookups":[]}'
+post 400 "unknown lookup"     /v1/encryption/lookup "$ADMIN" '{"hosts":["example.com"],"lookups":["certificate","banana"]}'
+post 400 "domain-only lookup" /v1/encryption/lookup "$ADMIN" '{"hosts":["example.com"],"lookups":["ssl"]}'
+post 400 "missing field"      /v1/encryption/lookup "$ADMIN" '{}'
+free_key; post 400 "too many hosts (free)" /v1/encryption/lookup "$FK" '{"hosts":["example.com","example.org"],"lookups":["certificate"]}'
+
+check_json "hosts dedupe, drop the port, and report inputs verbatim" \
+    '.results | length == 1 and (.[0].host == "example.com") and (.[0].inputs | length == 2)' \
+    -X POST "$HOST/v1/encryption/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"hosts":["https://Example.com:8443/","example.com"],"lookups":["certificate"]}'
+
+echo "=== Encryption Lookup — Response Validation ==="
+# One request for all three, reused below. Whether our API answered is fatal;
+# what example.com's server negotiates is its business, so those are warnings.
+enc_body=$(curl -s -m 60 -X POST "$HOST/v1/encryption/lookup" \
+    -H "Content-Type: application/json" -H "X-API-Key: $ADMIN" \
+    -d '{"hosts":["example.com"],"lookups":["protocols","key_exchange","certificate"]}') || true
+if echo "$enc_body" | jq -e '.results[0].host == "example.com"' > /dev/null 2>&1; then
+    printf "  \033[32m✓\033[0m encryption response has host field\n"
+    pass=$((pass + 1))
+else
+    printf "  \033[31m✗\033[0m encryption response has no host field\n"
+    fail=$((fail + 1))
+    errors+=("encryption response has no host field")
+fi
+assert_json_upstream "protocols lists four TLS versions" \
+    '.results[0].protocols.versions | length == 4' "$enc_body"
+assert_json_upstream "key_exchange lists eight groups and a verdict" \
+    '.results[0].key_exchange | (.groups | length == 8) and (.verdict == "post_quantum" or .verdict == "classical")' "$enc_body"
+assert_json_upstream "certificate has a chain and all four verdicts" \
+    '.results[0].certificate | (.chain | length > 0) and has("expiry_verdict") and has("algorithm_verdict") and has("trust_verdict") and has("hostname_verdict")' "$enc_body"
+assert_json_upstream "encryption lookups carry cache_hit, ip and probed_at" \
+    '.results[0].certificate | (.cache_hit | type == "boolean") and (.ip | type == "string") and (.probed_at | type == "string")' "$enc_body"
 
 echo "=== GeoIP Admin ==="
 # Note: admin success test omitted — a refresh re-downloads the ~60 MB database,

@@ -145,7 +145,7 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 		args = append(args,
 			nilIfZero(e.CustomerID), nilIfZero(e.APIKeyID), nilIfEmpty(e.Plan),
 			e.Method, e.Path, e.StatusCode, e.LatencyMs, e.DomainCount, e.IPCount,
-			e.CacheHits, e.CacheMisses,
+			e.HostCount, e.CacheHits, e.CacheMisses,
 		)
 		requested := make(map[string]bool, len(e.Lookups))
 		for _, name := range e.Lookups {
@@ -174,7 +174,7 @@ func (ul *UsageLogger) flush(entries []UsageEntry) {
 func (ul *UsageLogger) columns() []string {
 	base := []string{
 		"customer_id", "api_key_id", "plan", "method", "path", "status_code",
-		"latency_ms", "domain_count", "ip_count", "cache_hits", "cache_misses",
+		"latency_ms", "domain_count", "ip_count", "host_count", "cache_hits", "cache_misses",
 	}
 	return append(append(base, LookupColumns...), "created_at")
 }

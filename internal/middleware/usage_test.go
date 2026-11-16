@@ -33,6 +33,7 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 		c.Set("api_key_plan", "pro")
 		c.Set("domain_count", 3)
 		c.Set("ip_count", 2)
+		c.Set("host_count", 6)
 		c.Set("cache_hits", 5)
 		c.Set("cache_misses", 4)
 		c.Set("lookups_requested", []string{"reputation", "email_security", "fingerprint", "threat_intel"})
@@ -62,6 +63,9 @@ func TestUsageLog_CapturesContextKeys(t *testing.T) {
 	}
 	if e.IPCount != 2 {
 		t.Errorf("IPCount = %d, want 2", e.IPCount)
+	}
+	if e.HostCount != 6 {
+		t.Errorf("HostCount = %d, want 6", e.HostCount)
 	}
 	if e.CacheHits != 5 {
 		t.Errorf("CacheHits = %d, want 5", e.CacheHits)

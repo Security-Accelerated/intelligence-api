@@ -49,6 +49,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 		COALESCE(AVG(latency_ms), 0),
 		COALESCE(SUM(domain_count), 0),
 		COALESCE(SUM(ip_count), 0),
+		COALESCE(SUM(host_count), 0),
 		%s
 		FROM request_log %s`, strings.Join(featureSelects, ",\n\t\t"), where)
 
@@ -60,6 +61,7 @@ func (qs *QueryService) QueryUsage(customerID, apiKeyID int, since, until time.T
 		&summary.AvgLatencyMs,
 		&summary.TotalDomains,
 		&summary.TotalIPs,
+		&summary.TotalHosts,
 	}
 	for i := range featureCounts {
 		dest = append(dest, &featureCounts[i])

@@ -10,7 +10,7 @@ import (
 // UsageLog returns middleware that records request metadata to a usage.Recorder
 // after the request completes. It reads context keys set by auth middleware and
 // handlers (api_key_id, api_key_plan, customer_id, domain_count, ip_count,
-// lookups_requested, and the per-lookup cache hit/miss counts).
+// host_count, lookups_requested, and the per-lookup cache hit/miss counts).
 func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -48,6 +48,11 @@ func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 				entry.IPCount = n
 			}
 		}
+		if v, ok := c.Get("host_count"); ok {
+			if n, ok := v.(int); ok {
+				entry.HostCount = n
+			}
+		}
 		if v, ok := c.Get("cache_hits"); ok {
 			if n, ok := v.(int); ok {
 				entry.CacheHits = n
@@ -58,8 +63,8 @@ func UsageLog(recorder usage.Recorder) gin.HandlerFunc {
 				entry.CacheMisses = n
 			}
 		}
-		// Requested lookups, regardless of how they were served. Both the domain
-		// and IP handlers publish this key.
+		// Requested lookups, regardless of how they were served. Every lookup
+		// handler publishes this key.
 		if v, ok := c.Get("lookups_requested"); ok {
 			if names, ok := v.([]string); ok {
 				entry.Lookups = names

@@ -19,6 +19,7 @@ type usageSummary struct {
 	AvgLatencyMs   float64        `json:"avg_latency_ms"`
 	TotalDomains   int            `json:"total_domains"`
 	TotalIPs       int            `json:"total_ips"`
+	TotalHosts     int            `json:"total_hosts"`
 	StatusCodes    map[string]int `json:"status_codes"`
 	FeatureUsage   map[string]int `json:"feature_usage"`
 	RequestsByPath map[string]int `json:"requests_by_path"`
@@ -113,6 +114,7 @@ func renderUsage(s usageSummary, f *usageFlags) {
 	fmt.Printf("\n  requests   %d\n", s.TotalRequests)
 	fmt.Printf("  domains    %d\n", s.TotalDomains)
 	fmt.Printf("  IPs        %d\n", s.TotalIPs)
+	fmt.Printf("  hosts      %d\n", s.TotalHosts)
 	fmt.Printf("  latency    %.1f ms average\n", s.AvgLatencyMs)
 	// cache_hit_rate already arrives as a percentage (see usage/query.go), not
 	// a fraction — scaling it again here produced "7922.3%".
