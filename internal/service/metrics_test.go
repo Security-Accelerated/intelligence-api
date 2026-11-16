@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/metrics"
@@ -230,33 +231,40 @@ func TestIsTimeout(t *testing.T) {
 
 // Eight callers ask for the same lookup at once: one fetches, seven wait on it.
 // The fetch is observed once and the seven are counted as coalesced.
+//
+// Run in a synctest bubble so "every caller is waiting" is something the test
+// can ask for instead of something it sleeps and hopes for. synctest.Wait
+// returns only once every goroutine is durably blocked: the one that started
+// the flight on the release channel, the other seven inside singleflight.
+// Releasing the fetch any earlier lets a straggler arrive after the flight has
+// finished and start a second one, which fails the counts below with correct
+// instrumentation.
 func TestLookupMetrics_CoalescedCallers(t *testing.T) {
-	m := newTestMetrics(t)
-	mc := newMockCache()
-	svc := newTestService(mc)
-	svc.metrics = m
+	synctest.Test(t, func(t *testing.T) {
+		m := newTestMetrics(t)
+		svc := newTestService(newMockCache())
+		svc.metrics = m
 
-	release := make(chan struct{})
-	svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) {
-		<-release
-		return okDNS(context.TODO(), "")
-	}
+		release := make(chan struct{})
+		svc.lookupDNS = func(context.Context, string) (*domain.DNSInfo, error) {
+			<-release
+			return okDNS(context.TODO(), "")
+		}
 
-	const callers = 8
-	mc.blockUntilCallers(callers)
+		const callers = 8
+		var wg sync.WaitGroup
+		for range callers {
+			wg.Go(func() {
+				svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
+			})
+		}
+		synctest.Wait()
+		close(release)
+		wg.Wait()
 
-	var wg sync.WaitGroup
-	for range callers {
-		wg.Go(func() {
-			svc.Lookup(context.Background(), "example.com", opts(domain.LookupDNSName))
-		})
-	}
-	mc.waitForCallers(t)
-	close(release)
-	wg.Wait()
-
-	metricstest.Want(t, m, `intelligence_api_lookup_duration_seconds_count{lookup="dns",outcome="ok",scope="domain"}`, 1)
-	metricstest.Want(t, m, `intelligence_api_singleflight_coalesced_total{lookup="dns",scope="domain"}`, callers-1)
-	// Every caller read the cache and missed; coalescing happens after that.
-	metricstest.Want(t, m, `intelligence_api_cache_requests_total{lookup="dns",result="miss",scope="domain"}`, callers)
+		metricstest.Want(t, m, `intelligence_api_lookup_duration_seconds_count{lookup="dns",outcome="ok",scope="domain"}`, 1)
+		metricstest.Want(t, m, `intelligence_api_singleflight_coalesced_total{lookup="dns",scope="domain"}`, callers-1)
+		// Every caller read the cache and missed; coalescing happens after that.
+		metricstest.Want(t, m, `intelligence_api_cache_requests_total{lookup="dns",result="miss",scope="domain"}`, callers)
+	})
 }

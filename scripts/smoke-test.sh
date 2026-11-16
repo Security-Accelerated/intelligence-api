@@ -642,12 +642,17 @@ else
         '^intelligence_api_http_request_duration_seconds_count\{.*plan="admin".*route="/v1/ip/lookup"'
     check_metric "unknown paths are recorded as one unmatched route" \
         '^intelligence_api_http_request_duration_seconds_count\{.*route="unmatched"'
+    # These three series exist at zero from startup, so matching the name alone
+    # would pass on a server that had recorded nothing. Each pattern requires a
+    # value that does not start with 0, which for a count means at least one.
+    #
     # geo is never cached, so the runs above always fetched it at least once.
     check_metric "live lookups are timed" \
-        '^intelligence_api_lookup_duration_seconds_count\{lookup="geo",outcome="ok",scope="ip"\}'
-    check_metric "cache reads are counted" '^intelligence_api_cache_requests_total\{'
+        '^intelligence_api_lookup_duration_seconds_count\{lookup="geo",outcome="ok",scope="ip"\} [1-9]'
+    check_metric "cache reads are counted" '^intelligence_api_cache_requests_total\{.*\} [1-9]'
     if [ -n "$RATELIMIT_KEY" ]; then
-        check_metric "rate-limit rejections are counted" '^intelligence_api_rate_limit_rejections_total\{plan="free"\}'
+        check_metric "rate-limit rejections are counted" \
+            '^intelligence_api_rate_limit_rejections_total\{plan="free"\} [1-9]'
     fi
     check_metric "postgres pool is exported" '^go_sql_open_connections\{db_name="postgres"\}'
     check_metric "redis pool is exported" '^intelligence_api_redis_pool_connections '

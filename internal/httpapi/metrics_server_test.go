@@ -78,6 +78,15 @@ func TestStartMetricsServer_ServesOnlyMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartMetricsServer: %v", err)
 	}
+	// Registered before the first request, so an assertion that fails early
+	// does not leave the listener and its goroutine behind for the rest of the
+	// test binary. Shutting down twice is harmless; the explicit stop below is
+	// the one the test asserts on.
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = stop(ctx)
+	})
 
 	status, body := get(t, "http://"+addr+"/metrics")
 	if status != http.StatusOK {
@@ -94,7 +103,9 @@ func TestStartMetricsServer_ServesOnlyMetrics(t *testing.T) {
 		}
 	}
 
-	if err := stop(context.Background()); err != nil {
+	stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := stop(stopCtx); err != nil {
 		t.Fatalf("stop: %v", err)
 	}
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+"/metrics", http.NoBody)
