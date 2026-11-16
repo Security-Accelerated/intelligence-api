@@ -35,3 +35,17 @@ const IPLookupKeyPrefix = "ip:"
 func IPLookupKey(ip, lookupName string) string {
 	return IPLookupKeyPrefix + ip + ":" + lookupName
 }
+
+// EncryptionLookupKeyPrefix namespaces per-lookup encryption cache entries.
+// Keys have the shape "encryption:<host>:<lookup_name>". A host is a domain
+// name, so without its own prefix an encryption lookup would share a keyspace
+// with the domain endpoint and a future name reused across the two would
+// collide.
+const EncryptionLookupKeyPrefix = "encryption:"
+
+// EncryptionLookupKey builds the cache key for a single encryption lookup on a
+// single host. The host must already be normalized; like LookupKey this never
+// re-normalizes its inputs.
+func EncryptionLookupKey(host, lookupName string) string {
+	return EncryptionLookupKeyPrefix + host + ":" + lookupName
+}

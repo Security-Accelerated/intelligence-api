@@ -59,3 +59,15 @@ func TestLookupKey_DistinctPerDomainAndLookup(t *testing.T) {
 		t.Errorf("built %d distinct keys, want 6", len(seen))
 	}
 }
+
+// A host is a domain name, so the encryption endpoint needs its own keyspace:
+// the same name on the two endpoints must never share a cache entry.
+func TestEncryptionLookupKey_SeparateFromDomainKeys(t *testing.T) {
+	got := EncryptionLookupKey("example.com", "certificate")
+	if got != "encryption:example.com:certificate" {
+		t.Errorf("EncryptionLookupKey() = %q, want %q", got, "encryption:example.com:certificate")
+	}
+	if got == LookupKey("example.com", "certificate") {
+		t.Error("encryption and domain keys collide for the same host and lookup")
+	}
+}
