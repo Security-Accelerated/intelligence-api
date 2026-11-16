@@ -49,13 +49,20 @@ func probeCertificate(ctx context.Context, s *session) (*CertificateInfo, error)
 	if len(state.PeerCertificates) == 0 {
 		return nil, errors.New("server presented no certificate")
 	}
-	return describeChain(state.PeerCertificates, s.host, s.roots, s.evidence()), nil
+	// Without a trust store there is no trust verdict to give, and guessing
+	// "untrusted" would be cached as a finding about the host. Fail the lookup
+	// instead: it is retried, and the failure alerts.
+	roots, err := s.roots()
+	if err != nil {
+		return nil, err
+	}
+	return describeChain(state.PeerCertificates, s.host, roots, s.evidence()), nil
 }
 
 // describeChain builds the certificate payload from a chain, leaf first. Split
 // from the handshake so the verdict rules can be tested on certificates built
-// in memory. roots is the trust store for the trust verdict; nil means the
-// system roots.
+// in memory. roots is the trust store for the trust verdict and must not be
+// nil: a nil pool would make x509 fall back to whatever the machine has.
 func describeChain(chain []*x509.Certificate, host string, roots *x509.CertPool, ev Evidence) *CertificateInfo {
 	leaf := chain[0]
 	info := &CertificateInfo{

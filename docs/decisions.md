@@ -257,6 +257,13 @@ expired certificate is also untrusted, and "renewal was missed" is indistinguish
 browsers do. A chain that only verifies after a repair fails in strict clients, which is
 what the caller wants to know.
 
+**The trust store is checked before it is used.** `checkTrustStore` fails the lookup with
+`ErrTrustStoreUnavailable` when the system roots are missing *or empty*. The empty case
+looks unnecessary and is the one that happens: on Linux an image with no CA bundle loads
+an empty pool with no error, and every chain then verifies as "unknown authority". Without
+the check every host would be `untrusted`, cached for hours, with nothing wrong in the
+logs. That error is ours, so it is deliberately not in `IsExpectedError` and it alerts.
+
 ### 2026-11-16 — The key exchange probe offers default cipher suites; the others offer every suite
 
 **Decision.** `protocols` and `certificate` offer every suite the standard library has,

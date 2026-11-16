@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/safenet"
@@ -43,10 +44,37 @@ type session struct {
 	// a loopback server.
 	dial func(ctx context.Context, network, address string) (net.Conn, error)
 	now  func() time.Time
-	// roots is the trust store the certificate lookup judges a chain against.
-	// Nil means the system roots; tests supply their own so the result does
-	// not depend on the machine running them.
-	roots *x509.CertPool
+	// roots returns the trust store the certificate lookup judges a chain
+	// against. Production uses the system roots; tests supply their own so the
+	// result does not depend on the machine running them.
+	roots func() (*x509.CertPool, error)
+}
+
+// ErrTrustStoreUnavailable means the system root certificates could not be
+// loaded, or loaded as an empty set. It is a fault in our environment, not a
+// finding about a target, so IsExpectedError does not know it and it alerts.
+var ErrTrustStoreUnavailable = errors.New("certificate trust store unavailable")
+
+// systemTrustStore loads the system roots once per process.
+var systemTrustStore = sync.OnceValues(func() (*x509.CertPool, error) {
+	return checkTrustStore(x509.SystemCertPool())
+})
+
+// checkTrustStore turns a missing or empty trust store into an error.
+//
+// The empty case is the one that matters. On Linux a container image with no
+// CA bundle does not fail to load: the standard library hands back an empty
+// pool and no error, and verifying against it reports every chain as signed by
+// an unknown authority. Without this check every host would get trust_verdict
+// "untrusted", cached for hours, and nothing would say why.
+func checkTrustStore(pool *x509.CertPool, err error) (*x509.CertPool, error) {
+	if err != nil {
+		return nil, fmt.Errorf("load system roots (%v): %w", err, ErrTrustStoreUnavailable)
+	}
+	if pool == nil || pool.Equal(x509.NewCertPool()) {
+		return nil, fmt.Errorf("system roots are empty: %w", ErrTrustStoreUnavailable)
+	}
+	return pool, nil
 }
 
 // newSession resolves host through the lookup resolver and pins one public
@@ -61,10 +89,11 @@ func newSession(ctx context.Context, host string) (*session, error) {
 		return nil, err
 	}
 	return &session{
-		host: host,
-		addr: netip.AddrPortFrom(addr, probePort),
-		dial: safenet.SafeDialer(EncryptionProbeTimeout).DialContext,
-		now:  time.Now,
+		host:  host,
+		addr:  netip.AddrPortFrom(addr, probePort),
+		dial:  safenet.SafeDialer(EncryptionProbeTimeout).DialContext,
+		now:   time.Now,
+		roots: systemTrustStore,
 	}, nil
 }
 

@@ -102,7 +102,7 @@ func loopbackSession(t *testing.T, ln net.Listener) *session {
 		addr:  ln.Addr().(*net.TCPAddr).AddrPort(),
 		dial:  (&net.Dialer{}).DialContext,
 		now:   func() time.Time { return testNow },
-		roots: x509.NewCertPool(),
+		roots: func() (*x509.CertPool, error) { return x509.NewCertPool(), nil },
 	}
 }
 
@@ -455,6 +455,46 @@ func TestProbeCertificate(t *testing.T) {
 	// lookup succeeded and says so in its verdicts.
 	if info.TrustVerdict != TrustUntrusted || info.HostnameVerdict != HostnameMatch {
 		t.Errorf("verdicts = %q / %q, want untrusted / match", info.TrustVerdict, info.HostnameVerdict)
+	}
+}
+
+// A missing trust store is our fault, not a fact about the host. The lookup
+// must fail, so nothing is cached, and the failure must alert.
+func TestProbeCertificate_NoTrustStoreFailsTheLookup(t *testing.T) {
+	s := startTLSServer(t, &tls.Config{MinVersion: tls.VersionTLS12})
+	s.roots = func() (*x509.CertPool, error) { return checkTrustStore(x509.NewCertPool(), nil) }
+
+	info, err := probeCertificate(context.Background(), s)
+	if info != nil {
+		t.Errorf("probeCertificate() returned a result (trust_verdict %q) with no trust store to judge against", info.TrustVerdict)
+	}
+	if !errors.Is(err, ErrTrustStoreUnavailable) {
+		t.Fatalf("probeCertificate() error = %v, want ErrTrustStoreUnavailable", err)
+	}
+	if IsExpectedError(err) {
+		t.Error("a missing trust store was classified as expected; it would never alert")
+	}
+}
+
+func TestCheckTrustStore(t *testing.T) {
+	loaded := x509.NewCertPool()
+	cert, _ := makeCert(t, certSpec{cn: "Some Root", key: ecdsaKey(t), isCA: true, notBefore: testNow.AddDate(0, 0, -1), notAfter: testNow.AddDate(1, 0, 0)})
+	loaded.AddCert(cert)
+
+	if pool, err := checkTrustStore(loaded, nil); err != nil || pool != loaded {
+		t.Errorf("checkTrustStore(loaded) = %v, %v; want the pool and no error", pool, err)
+	}
+	// What Linux hands back when the image has no CA bundle: no error, no
+	// certificates.
+	if _, err := checkTrustStore(x509.NewCertPool(), nil); !errors.Is(err, ErrTrustStoreUnavailable) {
+		t.Errorf("checkTrustStore(empty) error = %v, want ErrTrustStoreUnavailable", err)
+	}
+	if _, err := checkTrustStore(nil, errors.New("permission denied")); !errors.Is(err, ErrTrustStoreUnavailable) {
+		t.Errorf("checkTrustStore(load error) error = %v, want ErrTrustStoreUnavailable", err)
+	}
+	// The machine running the suite has roots, and so must production.
+	if _, err := systemTrustStore(); err != nil {
+		t.Errorf("systemTrustStore() error = %v on this machine", err)
 	}
 }
 

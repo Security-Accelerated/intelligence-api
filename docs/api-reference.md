@@ -677,10 +677,12 @@ Reports how well a host's encryption holds up, checked from the outside. Every a
 **Request:**
 ```json
 {
-  "hosts": ["https://Example.com/", "example.com"],
+  "hosts": ["https://Example.com/"],
   "lookups": ["key_exchange", "certificate"]
 }
 ```
+
+One host, so the example works on every plan: the free plan allows one host per request, and a second entry counts toward that even when it names the same host.
 
 Both fields are **required**, and the endpoint follows the same contract as the domain and IP lookups: `lookups` must be non-empty, names are trimmed/lowercased/deduplicated before validation, and results come back in a `{"results": [...]}` envelope with per-lookup `cache_hit`.
 
@@ -706,7 +708,7 @@ The catalog is separate from the domain and IP ones: asking for `ssl` here retur
   "results": [
     {
       "host": "example.com",
-      "inputs": ["https://Example.com/", "example.com"],
+      "inputs": ["https://Example.com/"],
       "key_exchange": {
         "cache_hit": false,
         "ip": "172.66.147.243",
