@@ -65,7 +65,9 @@ probe"):
   reports verdicts. The x509 error is dropped there and must never be returned as the
   lookup's error: `IsExpectedError` treats x509 failures as ours and they page.
 - **The key exchange probe uses default (ECDHE-only) cipher suites and checks the negotiated
-  group**; the other two offer every suite so legacy servers still answer.
+  group**; the other two offer every suite so legacy servers still answer, and every group
+  (`everyGroup()`), because the standard library's default offer leaves some out and a
+  server requiring one of those would read as refusing TLS.
 - Every connection goes through `safenet.SafeDialer`.
 
 Tests aim a `session` at TLS servers on loopback with an empty trust store; nothing touches

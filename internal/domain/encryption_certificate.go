@@ -30,11 +30,14 @@ func LookupCertificate(ctx context.Context, host string) (*CertificateInfo, erro
 // certificate picks one per connection.
 func probeCertificate(ctx context.Context, s *session) (*CertificateInfo, error) {
 	// Down to TLS 1.0 with every cipher suite, so that a server too old for
-	// current defaults still gets its certificate reported.
+	// current defaults still gets its certificate reported, and with every
+	// group, so that one requiring a key exchange outside those defaults does
+	// too.
 	//nolint:gosec // G402: reaching legacy servers is the feature.
 	state, err := s.handshake(ctx, &tls.Config{
-		MinVersion:   tls.VersionTLS10,
-		CipherSuites: everyCipherSuite(),
+		MinVersion:       tls.VersionTLS10,
+		CipherSuites:     everyCipherSuite(),
+		CurvePreferences: everyGroup(),
 	})
 	if err != nil {
 		var rejected *rejectedError
@@ -67,7 +70,7 @@ func describeChain(chain []*x509.Certificate, host string, roots *x509.CertPool,
 
 	strength := strengthPostQuantum
 	for _, cert := range chain {
-		selfSigned := bytes.Equal(cert.RawSubject, cert.RawIssuer)
+		selfSigned := isSelfSigned(cert)
 		info.Chain = append(info.Chain, ChainCertificate{
 			Subject:            displayName(cert.Subject.CommonName, cert.Subject.String()),
 			Issuer:             displayName(cert.Issuer.CommonName, cert.Issuer.String()),
@@ -90,6 +93,27 @@ func describeChain(chain []*x509.Certificate, host string, roots *x509.CertPool,
 	info.AlgorithmVerdict = strength.verdict()
 
 	return info
+}
+
+// isSelfSigned reports whether cert was signed with its own key. Matching
+// subject and issuer names only make a certificate self-issued: a CA rolling
+// over to a new key can publish a certificate with the same name on both
+// sides, signed by the old key. That one is an ordinary link in the chain and
+// its signature has to be scored like any other.
+//
+// When the signature cannot be checked at all (an algorithm the standard
+// library refuses, such as MD5, or does not implement), the names are all
+// there is to go on, and the certificate is treated as self-signed as before.
+func isSelfSigned(cert *x509.Certificate) bool {
+	if !bytes.Equal(cert.RawSubject, cert.RawIssuer) {
+		return false
+	}
+	err := cert.CheckSignature(cert.SignatureAlgorithm, cert.RawTBSCertificate, cert.Signature)
+	if err == nil {
+		return true
+	}
+	var insecure x509.InsecureAlgorithmError
+	return errors.As(err, &insecure) || errors.Is(err, x509.ErrUnsupportedAlgorithm)
 }
 
 // algorithmStrength orders the algorithm verdicts so a chain can be scored by

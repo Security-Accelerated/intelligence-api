@@ -48,11 +48,8 @@ func LookupKeyExchange(ctx context.Context, host string) (*KeyExchangeInfo, erro
 func probeKeyExchange(ctx context.Context, s *session) (*KeyExchangeInfo, error) {
 	info := &KeyExchangeInfo{Evidence: s.evidence(), Verdict: KeyExchangeClassical}
 	anyAccepted := false
-	all := make([]tls.CurveID, 0, len(probedGroups))
 
 	for _, g := range probedGroups {
-		all = append(all, g.id)
-
 		state, accepted, err := s.offer(ctx, &tls.Config{
 			MinVersion:       tls.VersionTLS12,
 			CurvePreferences: []tls.CurveID{g.id},
@@ -83,7 +80,7 @@ func probeKeyExchange(ctx context.Context, s *session) (*KeyExchangeInfo, error)
 	// lookup: the per-group answers above are already complete.
 	state, accepted, err := s.offer(ctx, &tls.Config{
 		MinVersion:       tls.VersionTLS12,
-		CurvePreferences: all,
+		CurvePreferences: everyGroup(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("combined offer: %w", err)

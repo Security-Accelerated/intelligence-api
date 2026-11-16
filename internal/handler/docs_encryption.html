@@ -326,7 +326,7 @@ resp = requests.post(
     </table>
   </div>
   <p>Groups tested, in this order: <code>X25519MLKEM768</code>, <code>SecP256r1MLKEM768</code>, <code>SecP384r1MLKEM1024</code>, <code>MLKEM1024</code> (post-quantum), then <code>x25519</code>, <code>secp256r1</code>, <code>secp384r1</code>, <code>secp521r1</code> (classical). <code>groups</code> always lists all eight.</p>
-  <div class="note">A <code>post_quantum</code> verdict here is about the session keys only. It means traffic recorded today cannot be decrypted later by a quantum computer. It says nothing about the certificate, which has its own <code>algorithm_verdict</code> and is <code>classical</code> for almost every host today. A host is not &ldquo;quantum-safe&rdquo; because this lookup passed.</div>
+  <div class="note">A <code>post_quantum</code> verdict says the host <em>supports</em> post-quantum key exchange. It is not a statement about every connection: only a client that negotiates one of those groups gets session keys that hold up if today&rsquo;s traffic is recorded and attacked with a quantum computer later, and a client that offers only classical groups still gets a classical exchange. <code>negotiated</code> shows what the host picks when offered everything. The verdict also says nothing about the certificate, which has its own <code>algorithm_verdict</code> and is <code>classical</code> for almost every host today. A host is not &ldquo;quantum-safe&rdquo; because this lookup passed.</div>
 
   <h3 id="certificate">certificate -- Certificate Chain</h3>
   <p>The chain the host sends to a client that accepts anything from TLS 1.0 up, so a host too old for current defaults still gets its certificate reported. Available on all plans.</p>

@@ -137,13 +137,27 @@ func New(d Deps) *Handler {
 	}
 }
 
+// capPlan returns the plan whose per-request cap applies to a caller. A plan
+// this code does not recognize gets the free cap, the same way lookup gating
+// and the rate limiter read it. Without this an unrecognized plan has no
+// config key, reads as 0, and 0 means no limit: a bad value in the customers
+// table would fail open on exactly the limit that bounds a request's cost.
+// admin is recognized and deliberately has no key, which is how it is
+// unlimited.
+func capPlan(plan string) string {
+	if _, ok := planRank[plan]; ok {
+		return plan
+	}
+	return planFree
+}
+
 // maxDomains returns the configured maximum number of domains for the given
 // config prefix and plan. Returns 0 (no limit) if config is nil.
 func (h *Handler) maxDomains(prefix, plan string) int {
 	if h.cfg == nil {
 		return 0
 	}
-	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, plan))
+	return h.cfg.GetInt(fmt.Sprintf("%s.max_domains.%s", prefix, capPlan(plan)))
 }
 
 // maxIPs returns the configured maximum number of IPs per request for the given
@@ -152,7 +166,7 @@ func (h *Handler) maxIPs(plan string) int {
 	if h.cfg == nil {
 		return 0
 	}
-	return h.cfg.GetInt(fmt.Sprintf("ip.max_ips.%s", plan))
+	return h.cfg.GetInt(fmt.Sprintf("ip.max_ips.%s", capPlan(plan)))
 }
 
 // maxHosts returns the configured maximum number of hosts per encryption
@@ -161,7 +175,7 @@ func (h *Handler) maxHosts(plan string) int {
 	if h.cfg == nil {
 		return 0
 	}
-	return h.cfg.GetInt(fmt.Sprintf("encryption.max_hosts.%s", plan))
+	return h.cfg.GetInt(fmt.Sprintf("encryption.max_hosts.%s", capPlan(plan)))
 }
 
 // RegisterRoutes registers unauthenticated routes only (home page, health check, docs, billing).

@@ -125,6 +125,35 @@ func TestEncryptionLookup_EveryLookupIsFree(t *testing.T) {
 	}
 }
 
+// A plan value this code does not know has no config key of its own. It must
+// get the free cap, as it does for lookup gating and rate limiting, and not
+// read as "no limit". admin is the one plan that is meant to be unlimited.
+func TestEncryptionLookup_UnrecognizedPlanGetsTheFreeHostCap(t *testing.T) {
+	body := `{"hosts":["a.com","b.com"],"lookups":["certificate"]}`
+
+	for _, plan := range []string{"enterprise", "basic", ""} {
+		w := postEncryption(newEncryptionTestRouter(&mockEncryptionService{}, plan), body)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "too many hosts: maximum 1 allowed") {
+			t.Errorf("plan %q: status = %d, body %s; want the free cap of 1 host", plan, w.Code, w.Body)
+		}
+	}
+
+	if w := postEncryption(newEncryptionTestRouter(&mockEncryptionService{}, planAdmin), body); w.Code != http.StatusOK {
+		t.Errorf("admin: status = %d, want 200 with no host cap; body %s", w.Code, w.Body)
+	}
+}
+
+func TestCapPlan(t *testing.T) {
+	for plan, want := range map[string]string{
+		planFree: planFree, planPro: planPro, planAdmin: planAdmin,
+		"basic": planFree, "": planFree,
+	} {
+		if got := capPlan(plan); got != want {
+			t.Errorf("capPlan(%q) = %q, want %q", plan, got, want)
+		}
+	}
+}
+
 func TestEncryptionLookup_NormalizesDeduplicatesAndKeepsInvalidEntries(t *testing.T) {
 	svc := &mockEncryptionService{}
 	w := postEncryption(newEncryptionTestRouter(svc, planPro),

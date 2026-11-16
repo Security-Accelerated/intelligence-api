@@ -260,12 +260,16 @@ what the caller wants to know.
 ### 2026-11-16 — The key exchange probe offers default cipher suites; the others offer every suite
 
 **Decision.** `protocols` and `certificate` offer every suite the standard library has,
-insecure ones included. `key_exchange` leaves the default (ECDHE-only) list and checks
-that the negotiated group is the one offered.
+insecure ones included, and every key exchange group it can speak. `key_exchange` leaves
+the default (ECDHE-only) suite list and checks that the negotiated group is the one
+offered.
 
 **Why.** A legacy server with only RSA key exchange or CBC suites left still speaks TLS,
-and leaving those suites out would report it as refusing. For the group probe the same
-suites are a hazard: a TLS 1.2 server could finish the handshake over RSA key exchange
+and leaving those suites out would report it as refusing. The groups are listed
+explicitly for the same reason at the other end of the range: the default offer omits
+some groups (pure ML-KEM), so a server that requires one refused the handshake and was
+reported as accepting no TLS version and having no certificate. For the group probe the
+extra suites are a hazard: a TLS 1.2 server could finish the handshake over RSA key exchange
 without using the group at all, and the group would read as accepted.
 
 **Instead of.** One shared `tls.Config` for all three probes.

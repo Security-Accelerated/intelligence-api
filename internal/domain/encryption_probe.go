@@ -206,3 +206,16 @@ func everyCipherSuite() []uint16 {
 	}
 	return ids
 }
+
+// everyGroup lists every key exchange group the probe can speak, post-quantum
+// first. The standard library's default offer leaves some of them out (pure
+// ML-KEM, for one), so a probe that leaves CurvePreferences empty cannot
+// complete a handshake with a server that insists on one of those, and would
+// report it as refusing TLS altogether.
+func everyGroup() []tls.CurveID {
+	ids := make([]tls.CurveID, 0, len(probedGroups))
+	for _, g := range probedGroups {
+		ids = append(ids, g.id)
+	}
+	return ids
+}

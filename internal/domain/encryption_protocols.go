@@ -38,9 +38,12 @@ func probeProtocols(ctx context.Context, s *session) (*ProtocolsInfo, error) {
 		_, accepted, err := s.offer(ctx, &tls.Config{
 			// Deliberately reaches down to TLS 1.0 with every cipher suite:
 			// finding out whether the server still accepts them is the lookup.
-			MinVersion:   v.id,
-			MaxVersion:   v.id,
-			CipherSuites: everyCipherSuite(),
+			// Every group too, so the answer is about the version and not
+			// about which key exchange the server happens to require.
+			MinVersion:       v.id,
+			MaxVersion:       v.id,
+			CipherSuites:     everyCipherSuite(),
+			CurvePreferences: everyGroup(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", v.name, err)

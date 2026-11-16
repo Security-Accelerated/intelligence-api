@@ -17,7 +17,7 @@
       audience: public
     - text: "`protocols` reports which of TLS 1.0, 1.1, 1.2 and 1.3 the host accepts, with `legacy_accepted` set when it still takes the two retired versions"
       audience: public
-    - text: "`key_exchange` reports which of eight key exchange groups the host accepts, four of them post-quantum, which one it picks when offered all of them, and a `post_quantum` or `classical` verdict: whether traffic recorded today could be decrypted later"
+    - text: "`key_exchange` reports which of eight key exchange groups the host accepts, four of them post-quantum, which one it picks when offered all of them, and a `post_quantum` or `classical` verdict: whether the host supports a key exchange that protects traffic recorded today from being decrypted later. A client still has to negotiate one of those groups to get that protection"
       audience: public
     - text: "`certificate` describes every certificate in the chain the host sends (key type and size, signature algorithm, validity) and gives four verdicts: `expiry_verdict`, `algorithm_verdict`, `trust_verdict` (does the chain lead to a publicly trusted root) and `hostname_verdict` (does the certificate cover the host). An expired, untrusted or mismatched certificate is reported in those verdicts, not returned as an error"
       audience: public

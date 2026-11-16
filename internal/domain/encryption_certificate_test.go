@@ -74,6 +74,58 @@ func TestDescribeChain_AlgorithmVerdict(t *testing.T) {
 	}
 }
 
+// A certificate's own signature is left out of the algorithm verdict only when
+// it really is self-signed. Matching names are not enough.
+func TestDescribeChain_SelfSignedIsDecidedBySignatureNotName(t *testing.T) {
+	valid := func(spec certSpec) certSpec {
+		spec.notBefore, spec.notAfter = testNow.AddDate(0, 0, -1), testNow.AddDate(0, 0, 30)
+		return spec
+	}
+	ev := Evidence{ProbedAt: testNow}
+	mldsaKey := func() *mldsa.PrivateKey {
+		key, err := mldsa.GenerateKey(mldsa.MLDSA65())
+		if err != nil {
+			t.Fatalf("generate ml-dsa key: %v", err)
+		}
+		return key
+	}
+
+	t.Run("ca rolled over to a new key under the same name", func(t *testing.T) {
+		// The old classical key certifies the CA's new post-quantum key.
+		// Subject and issuer are the same name, but this is an ordinary link
+		// whose classical signature makes the chain classical.
+		oldKey := ecdsaKey(t)
+		oldCA, _ := makeCert(t, valid(certSpec{cn: "Rollover CA", key: oldKey, isCA: true}))
+		newKey := mldsaKey()
+		rollover, _ := makeCert(t, valid(certSpec{cn: "Rollover CA", key: newKey, isCA: true, parent: oldCA, parentKey: oldKey}))
+		leaf, _ := makeCert(t, valid(certSpec{cn: "leaf.test", key: mldsaKey(), parent: rollover, parentKey: newKey}))
+
+		info := describeChain([]*x509.Certificate{leaf, rollover}, "leaf.test", x509.NewCertPool(), ev)
+		if info.Chain[1].SelfSigned {
+			t.Error("a certificate signed by a different key was reported as self-signed")
+		}
+		if info.AlgorithmVerdict != AlgorithmsClassical {
+			t.Errorf("AlgorithmVerdict = %q, want %q: the rollover certificate's signature is classical", info.AlgorithmVerdict, AlgorithmsClassical)
+		}
+	})
+
+	t.Run("old root signed with sha-1", func(t *testing.T) {
+		// Still exempt: a trust anchor is trusted by being installed, not by
+		// its signature, so a SHA-1 root must not make the chain weak.
+		rootKey := rsaKey(t, 2048)
+		root, _ := makeCert(t, valid(certSpec{cn: "Old Root", key: rootKey, isCA: true, sigAlg: x509.SHA1WithRSA}))
+		leaf, _ := makeCert(t, valid(certSpec{cn: "leaf.test", key: ecdsaKey(t), parent: root, parentKey: rootKey}))
+
+		info := describeChain([]*x509.Certificate{leaf, root}, "leaf.test", x509.NewCertPool(), ev)
+		if !info.Chain[1].SelfSigned {
+			t.Error("a self-signed SHA-1 root was not reported as self-signed")
+		}
+		if info.AlgorithmVerdict != AlgorithmsClassical {
+			t.Errorf("AlgorithmVerdict = %q, want %q: a root's own SHA-1 signature is not a weakness", info.AlgorithmVerdict, AlgorithmsClassical)
+		}
+	})
+}
+
 func TestSignatureStrength(t *testing.T) {
 	tests := []struct {
 		alg  x509.SignatureAlgorithm

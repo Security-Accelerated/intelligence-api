@@ -1389,8 +1389,10 @@ components:
           enum: [post_quantum, classical]
           description: >
             post_quantum if the host accepts at least one post-quantum group.
-            This is about the session keys only: it says nothing about the
-            certificate, which has its own verdicts.
+            This reports support, not what every connection gets: a client
+            has to negotiate one of those groups to be protected, and
+            negotiated shows what the host picks when offered all of them. It
+            says nothing about the certificate, which has its own verdicts.
       required:
         - cache_hit
         - ip

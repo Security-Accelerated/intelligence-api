@@ -35,6 +35,9 @@ type certSpec struct {
 	isCA      bool
 	parent    *x509.Certificate
 	parentKey crypto.Signer
+	// sigAlg overrides the signature algorithm; zero picks the default for
+	// the signing key.
+	sigAlg x509.SignatureAlgorithm
 }
 
 func makeCert(t *testing.T, spec certSpec) (cert *x509.Certificate, der []byte) {
@@ -48,6 +51,7 @@ func makeCert(t *testing.T, spec certSpec) (cert *x509.Certificate, der []byte) 
 		IsCA:                  spec.isCA,
 		BasicConstraintsValid: true,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		SignatureAlgorithm:    spec.sigAlg,
 	}
 	parent, signer := tmpl, spec.key
 	if spec.parent != nil {
@@ -245,6 +249,7 @@ func TestProbeProtocols(t *testing.T) {
 	tests := []struct {
 		name       string
 		min, max   uint16
+		curves     []tls.CurveID
 		want       map[string]bool
 		wantLegacy bool
 	}{
@@ -264,10 +269,19 @@ func TestProbeProtocols(t *testing.T) {
 			want:       map[string]bool{"TLS 1.3": false, "TLS 1.2": true, "TLS 1.1": true, "TLS 1.0": true},
 			wantLegacy: true,
 		},
+		{
+			// A group the standard library does not offer by default. The probe
+			// asks about the version, so it has to offer every group it can
+			// speak or this server reads as refusing TLS 1.3.
+			name: "tls 1.3 server that only takes pure ml-kem",
+			min:  tls.VersionTLS13, max: tls.VersionTLS13,
+			curves: []tls.CurveID{tls.MLKEM1024},
+			want:   map[string]bool{"TLS 1.3": true, "TLS 1.2": false, "TLS 1.1": false, "TLS 1.0": false},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := startTLSServer(t, &tls.Config{MinVersion: tt.min, MaxVersion: tt.max})
+			s := startTLSServer(t, &tls.Config{MinVersion: tt.min, MaxVersion: tt.max, CurvePreferences: tt.curves})
 
 			info, err := probeProtocols(context.Background(), s)
 			if err != nil {
@@ -441,6 +455,20 @@ func TestProbeCertificate(t *testing.T) {
 	// lookup succeeded and says so in its verdicts.
 	if info.TrustVerdict != TrustUntrusted || info.HostnameVerdict != HostnameMatch {
 		t.Errorf("verdicts = %q / %q, want untrusted / match", info.TrustVerdict, info.HostnameVerdict)
+	}
+}
+
+// The certificate probe has to reach a server whatever key exchange it insists
+// on, including a group the standard library leaves out of its defaults.
+func TestProbeCertificate_ServerWithNonDefaultGroup(t *testing.T) {
+	s := startTLSServer(t, &tls.Config{MinVersion: tls.VersionTLS13, CurvePreferences: []tls.CurveID{tls.MLKEM1024}})
+
+	info, err := probeCertificate(context.Background(), s)
+	if err != nil {
+		t.Fatalf("probeCertificate() error = %v, want the certificate of a pure ML-KEM server", err)
+	}
+	if len(info.Chain) != 1 {
+		t.Errorf("got %d certificates, want 1", len(info.Chain))
 	}
 }
 

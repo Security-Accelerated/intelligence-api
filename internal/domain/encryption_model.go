@@ -99,9 +99,11 @@ type ProtocolVersion struct {
 
 // --- Key exchange ---
 
-// Key exchange verdicts. Post-quantum here means the session keys are safe
-// from an attacker who records traffic now and decrypts it later. It says
-// nothing about the certificate, which has its own verdict.
+// Key exchange verdicts. Post-quantum here means the host accepts at least one
+// post-quantum group, so a client that negotiates it gets session keys safe
+// from an attacker who records traffic now and decrypts it later. It is a
+// statement of support, not about every connection, and it says nothing about
+// the certificate, which has its own verdict.
 const (
 	KeyExchangePostQuantum = "post_quantum"
 	KeyExchangeClassical   = "classical"

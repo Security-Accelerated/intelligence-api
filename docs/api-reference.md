@@ -20,7 +20,7 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 | `pro` | All free capabilities + reputation checks + threat intelligence, up to 20 domains, IPs or hosts per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
-The plan is stored in the `customers` table, defaulting to `free`. New customers provisioned via Stripe checkout receive the plan they purchased. An unrecognized plan value is treated as `free` by both the rate limiter and lookup gating, so a bad value fails closed.
+The plan is stored in the `customers` table, defaulting to `free`. New customers provisioned via Stripe checkout receive the plan they purchased. An unrecognized plan value is treated as `free` by the rate limiter, lookup gating, and the per-request caps on domains, IPs and hosts, so a bad value fails closed.
 
 Requests without a valid key receive `401 Unauthorized`. Requests from non-admin plans to admin-only endpoints receive `403 Forbidden`. Requests naming a lookup outside the caller's plan (`reputation`, `threat_intel` require pro) receive `403 Forbidden`. The `/v1/hello` and `/v1/health` checks require no authentication. Self-service endpoints (`GET /v1/usage`, `POST /v1/keys/rotate`) are available to every plan.
 
@@ -752,7 +752,7 @@ SSL 3.0 and earlier are not tested.
 
 Groups tested: `X25519MLKEM768`, `SecP256r1MLKEM768`, `SecP384r1MLKEM1024`, `MLKEM1024`, `x25519`, `secp256r1`, `secp384r1`, `secp521r1`.
 
-A `post_quantum` verdict here is about the session keys only: traffic recorded today cannot be decrypted later by a quantum computer. It says nothing about the certificate, which has its own verdicts and is `classical` for almost every host today.
+A `post_quantum` verdict says the host *supports* post-quantum key exchange. It is not a statement about every connection: only a client that negotiates one of those groups gets session keys that hold up if today's traffic is recorded and attacked with a quantum computer later, and a client that offers only classical groups still gets a classical exchange. `negotiated` shows what the host picks when offered everything. The verdict also says nothing about the certificate, which has its own verdicts and is `classical` for almost every host today.
 
 **`certificate`:**
 
