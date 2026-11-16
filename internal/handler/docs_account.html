@@ -23,6 +23,7 @@
       <a href="/docs">Overview</a>
       <a href="/docs/domain">Domain</a>
       <a href="/docs/ip">IP</a>
+      <a href="/docs/encryption">Encryption</a>
       <a href="/docs/account" class="active">Account</a>
       <a href="/docs/changelog">Changelog</a>
     </nav>
@@ -183,6 +184,7 @@ usage = res.json()
   <span class="str">"avg_latency_ms"</span>: <span class="num">412.8</span>,
   <span class="str">"total_domains"</span>: <span class="num">2140</span>,
   <span class="str">"total_ips"</span>: <span class="num">96</span>,
+  <span class="str">"total_hosts"</span>: <span class="num">0</span>,
   <span class="str">"status_codes"</span>: { <span class="str">"200"</span>: <span class="num">1270</span>, <span class="str">"429"</span>: <span class="num">14</span> },
   <span class="str">"feature_usage"</span>: { <span class="str">"dns"</span>: <span class="num">2140</span>, <span class="str">"ssl"</span>: <span class="num">2140</span>, <span class="str">"whois"</span>: <span class="num">757</span> },
   <span class="str">"requests_by_path"</span>: { <span class="str">"/v1/domain/lookup"</span>: <span class="num">1188</span>, <span class="str">"/v1/ip/lookup"</span>: <span class="num">96</span> },
@@ -202,6 +204,7 @@ usage = res.json()
         <tr><td><code>avg_latency_ms</code></td><td><code>float</code></td><td>Mean server-side response time in milliseconds</td></tr>
         <tr><td><code>total_domains</code></td><td><code>int</code></td><td>Domains submitted across all requests, counting duplicates</td></tr>
         <tr><td><code>total_ips</code></td><td><code>int</code></td><td>IPs submitted across all requests, counting duplicates</td></tr>
+        <tr><td><code>total_hosts</code></td><td><code>int</code></td><td>Hosts submitted to the encryption endpoint across all requests, counting duplicates</td></tr>
         <tr><td><code>status_codes</code></td><td><code>object</code></td><td>Request counts keyed by HTTP status code</td></tr>
         <tr><td><code>feature_usage</code></td><td><code>object</code></td><td>Counts keyed by lookup name &mdash; see below</td></tr>
         <tr><td><code>requests_by_path</code></td><td><code>object</code></td><td>Request counts keyed by endpoint path</td></tr>
@@ -286,7 +289,7 @@ usage = res.json()
   <p>
     Prefer to generate a client? The full
     <a href="/docs/openapi.yaml">OpenAPI 3.1 specification</a>
-    covers every endpoint &mdash; domain lookup, IP lookup, usage, and key rotation.
+    covers every endpoint &mdash; domain lookup, IP lookup, encryption lookup, usage, and key rotation.
   </p>
   <p class="page-footer-meta">
     Questions: <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a>

@@ -49,6 +49,9 @@ var docsDomainHTML string
 //go:embed docs_ip.html
 var docsIPHTML string
 
+//go:embed docs_encryption.html
+var docsEncryptionHTML string
+
 //go:embed docs_account.html
 var docsAccountHTML string
 
@@ -61,6 +64,7 @@ var docsNotFoundHTML string
 var docsTmpl = template.Must(template.New("docs").Parse(docsHTML))
 var docsDomainTmpl = template.Must(template.New("docs_domain").Parse(docsDomainHTML))
 var docsIPTmpl = template.Must(template.New("docs_ip").Parse(docsIPHTML))
+var docsEncryptionTmpl = template.Must(template.New("docs_encryption").Parse(docsEncryptionHTML))
 var docsAccountTmpl = template.Must(template.New("docs_account").Parse(docsAccountHTML))
 var docsChangelogTmpl = template.Must(template.New("docs_changelog").Parse(docsChangelogHTML))
 var docsNotFoundTmpl = template.Must(template.New("docs_404").Parse(docsNotFoundHTML))
@@ -84,6 +88,7 @@ var docsPages = []docsPage{
 	{"/docs", docsHTML, docsTmpl},
 	{"/docs/domain", docsDomainHTML, docsDomainTmpl},
 	{"/docs/ip", docsIPHTML, docsIPTmpl},
+	{"/docs/encryption", docsEncryptionHTML, docsEncryptionTmpl},
 	{"/docs/account", docsAccountHTML, docsAccountTmpl},
 	{"/docs/changelog", docsChangelogHTML, docsChangelogTmpl},
 }
@@ -248,5 +253,6 @@ func isAPIPath(path string) bool {
 // the overview and the domain reference, which pushed the changelog's length
 // onto pages people open to look something up and meant two copies of the same
 // list to keep in sync. Likewise the account endpoints have their own page
-// rather than a table row on the overview: /v1/usage and /v1/keys/rotate are
-// two of the four public endpoints and were the only two with no reference.
+// rather than a table row on the overview: /v1/usage and /v1/keys/rotate were
+// two of the four public endpoints at the time, and the only two with no
+// reference.

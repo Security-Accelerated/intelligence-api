@@ -9,7 +9,9 @@ A domain and IP intelligence REST API in Go. One request fans out to concurrent 
 (WHOIS, DNS, TLS, HTTP headers, email security, certificate transparency, BGP/ASN,
 technology fingerprinting, reputation, threat intelligence, DNSSEC/CAA, GeoIP, reverse
 DNS, abuse contacts) and returns one JSON document with a per-lookup cache flag and an
-optional aggregate risk score. It is a paid, metered service with self-service API keys,
+optional aggregate risk score. A third endpoint reports a host's encryption posture from
+handshakes it makes itself: accepted TLS versions, post-quantum key exchange, and the
+certificate chain. It is a paid, metered service with self-service API keys,
 Stripe billing, and per-plan rate limits, running in production at
 **<https://api.securityaccelerated.com>**.
 

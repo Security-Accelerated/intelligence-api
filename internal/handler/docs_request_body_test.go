@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,6 +23,7 @@ func TestDocs_RequestBodyListsOnlyContractFields(t *testing.T) {
 	}{
 		{"/docs/domain", docsDomainHTML, "domains"},
 		{"/docs/ip", docsIPHTML, "ips"},
+		{"/docs/encryption", docsEncryptionHTML, "hosts"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			table := requestBodyTable(t, tc.page)
@@ -34,7 +36,7 @@ func TestDocs_RequestBodyListsOnlyContractFields(t *testing.T) {
 
 			// Every lookup name is a valid *value* of `lookups`, never a field
 			// of its own. One appearing here means a boolean row came back.
-			names := append(append([]string{}, domain.AllLookupNames...), domain.AllIPLookupNames...)
+			names := slices.Concat(domain.AllLookupNames, domain.AllIPLookupNames, domain.AllEncryptionLookupNames)
 			for _, name := range names {
 				if name == tc.target || name == "lookups" {
 					continue

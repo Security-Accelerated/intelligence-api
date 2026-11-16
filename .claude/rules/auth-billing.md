@@ -64,7 +64,7 @@ docs and success pages. Config: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
 the aggregation SQL behind it. `UsageLogger` buffers on a channel and batch-inserts to
 `request_log` every 5s or 50 entries; a full channel drops with a warning. `NoopRecorder`
 discards entries when tracking isn't wanted (tests). `request_log` rows carry per-request
-metadata including `domain_count`, `ip_count`, and a per-feature flag per lookup. The `UsageLog()` middleware runs after `c.Next()` and reads the
+metadata including `domain_count`, `ip_count`, `host_count`, and a per-feature flag per lookup. The `UsageLog()` middleware runs after `c.Next()` and reads the
 `lookups_requested`, `cache_hits`, `cache_misses` context keys the handlers set.
 
 Two rules a drift test enforces:

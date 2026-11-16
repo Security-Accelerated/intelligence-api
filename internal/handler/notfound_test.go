@@ -27,7 +27,7 @@ func TestNotFound_HTMLPageForBrowserPaths(t *testing.T) {
 
 			body := w.Body.String()
 			// A 404 is a dead end unless it offers a way out.
-			for _, link := range []string{`href="/docs"`, `href="/docs/domain"`, `href="/docs/ip"`} {
+			for _, link := range []string{`href="/docs"`, `href="/docs/domain"`, `href="/docs/ip"`, `href="/docs/encryption"`} {
 				if !strings.Contains(body, link) {
 					t.Errorf("404 page does not link to %s", link)
 				}

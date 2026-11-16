@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Encryption Posture API reference. TLS versions, post-quantum key exchange, and the certificate chain for any public host, checked from the outside on port 443.">
+<meta property="og:title" content="Encryption Posture - Intelligence API">
+<meta property="og:description" content="Encryption Posture API reference with field documentation, code examples, and response behavior.">
+<meta property="og:type" content="website">
+<title>Encryption Posture - Intelligence API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/docs/styles.css">
+<script src="/docs/theme.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <a href="{{.HomeURL}}" class="topbar-brand"><span>Security</span> Accelerated</a>
+  <div class="topbar-actions">
+    <nav class="topbar-nav">
+      <a href="/docs">Overview</a>
+      <a href="/docs/domain">Domain</a>
+      <a href="/docs/ip">IP</a>
+      <a href="/docs/encryption" class="active">Encryption</a>
+      <a href="/docs/account">Account</a>
+      <a href="/docs/changelog">Changelog</a>
+    </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Theme toggle" aria-pressed="false" title="Switch theme">
+      <span class="theme-toggle-glyph" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+          <circle cx="12" cy="12" r="9" fill="transparent" stroke="var(--theme-icon-ring)" stroke-width="1.5"></circle>
+          <path d="M12 4.5A7.5 7.5 0 0 0 12 19.5Z" fill="var(--theme-icon-dark)"></path>
+          <path d="M12 4.5A7.5 7.5 0 0 1 12 19.5Z" fill="var(--theme-icon-light)"></path>
+          <path d="M12 4.6v14.8" stroke="var(--theme-icon-divider)" stroke-width="1"></path>
+        </svg>
+      </span>
+      <span class="theme-toggle-label">Dark mode</span>
+    </button>
+  </div>
+</header>
+
+<button class="sidebar-toggle" data-sidebar-toggle aria-label="Toggle navigation">&#9776;</button>
+
+<div class="sidebar-backdrop" data-sidebar-close></div>
+
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <h2>Encryption Docs</h2>
+    <span>TLS versions, key exchange, and certificate chain reference.</span>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Getting Started</div>
+    <a href="#authentication">Authentication</a>
+    <a href="#rate-limiting">Rate Limiting</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Endpoint</div>
+    <a href="#encryption-lookup">Encryption Posture</a>
+    <a href="#request-body" class="indent">Request Body</a>
+    <a href="#validation" class="indent">Hosts</a>
+    <a href="#example-request" class="indent">Example</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Response Fields</div>
+    <a href="#evidence" class="indent">ip, probed_at</a>
+    <a href="#protocols" class="indent">protocols</a>
+    <a href="#key-exchange" class="indent">key_exchange</a>
+    <a href="#certificate" class="indent">certificate</a>
+    <a href="#certificate-verdicts" class="indent">verdicts</a>
+    <a href="#errors-field" class="indent">errors</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Reference</div>
+    <a href="#error-handling">Error Handling</a>
+    <a href="#caching">Caching</a>
+    <a href="#request-correlation">Request Correlation</a>
+    <a href="#full-response-example">Full Response</a>
+    <a href="#response-headers" class="indent">Response Headers</a>
+    <a href="/docs/openapi.yaml">OpenAPI Spec</a>
+  </div>
+
+</nav>
+
+<main class="main">
+
+  <section class="hero" id="top">
+    <p class="eyebrow">Documentation</p>
+    <h1>Encryption Posture</h1>
+    <p>Give it a hostname and it reports how that host's encryption holds up: which TLS versions it accepts, which key exchange groups it accepts including post-quantum ones, and what its certificate chain looks like. Every answer comes from TLS handshakes made to the host on port 443, from the outside.</p>
+    <div class="hero-actions">
+      <div class="base-url">https://api.securityaccelerated.com{{if .Version}} <span class="version-pill">{{.Version}}</span>{{end}}</div>
+      <a href="mailto:support@securityaccelerated.com" class="support-link">support@securityaccelerated.com</a>
+    </div>
+  </section>
+
+  <h2 id="authentication">Authentication</h2>
+  <p>All requests require an API key passed via the <code>X-API-Key</code> header:</p>
+  <pre><code><span class="hdr">X-API-Key:</span> <span class="str">your-api-key-here</span></code></pre>
+
+  <h2 id="rate-limiting">Rate Limiting</h2>
+  <p>Requests are rate-limited per API key using a sliding window. Responses report your current window state:</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Header</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>X-RateLimit-Limit</code></td><td>Maximum requests per minute for your plan</td></tr>
+        <tr><td><code>X-RateLimit-Remaining</code></td><td>Requests remaining in the current window</td></tr>
+        <tr><td><code>Retry-After</code></td><td>Seconds to wait before retrying (only on 429)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Plan</th><th>Rate Limit</th><th>Max Hosts / Request</th></tr></thead>
+      <tbody>
+        <tr><td>Free</td><td>5 req/min</td><td>1</td></tr>
+        <tr><td>Pro</td><td>120 req/min</td><td>20</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="encryption-lookup">Encryption Posture</h2>
+  <div class="endpoint">
+    <span class="method">POST</span>
+    <span class="path">/v1/encryption/lookup</span>
+  </div>
+  <p>Submit one or more hostnames and choose exactly which lookups to run via the <code>lookups</code> array &mdash; there is no default set. All requested lookups run concurrently, and every lookup is available on every plan.</p>
+
+  <h3 id="request-body">Request Body</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Plan</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>hosts</code></td><td><code>string[]</code></td><td>All</td><td>Array of hostnames (required). Each is reduced to a bare lowercase hostname before use; entries that reduce to the same hostname are deduplicated, and plan limits count the entries you submitted.</td></tr>
+        <tr><td><code>lookups</code></td><td><code>string[]</code></td><td>All</td><td>Which lookups to run (required, non-empty). Names are trimmed, lowercased and deduplicated.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Valid Lookups</h4>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Name</th><th>Plan</th><th>Description</th><th>Handshakes</th></tr></thead>
+      <tbody>
+        <tr><td><code>protocols</code></td><td>All</td><td>Which of TLS 1.0, 1.1, 1.2 and 1.3 the host accepts.</td><td>4</td></tr>
+        <tr><td><code>key_exchange</code></td><td>All</td><td>Which key exchange groups the host accepts, which one it picks, and whether any is post-quantum.</td><td>9</td></tr>
+        <tr><td><code>certificate</code></td><td>All</td><td>The certificate chain: algorithms and key sizes, the leaf's expiry, whether the chain is publicly trusted, and whether it covers the host.</td><td>1</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The encryption catalog is separate from the domain and IP catalogs, so asking for <code>ssl</code> here returns <code>400</code>. The handshake count is how many connections one uncached lookup makes to the host.</p>
+
+  <h4 id="validation">Hosts</h4>
+  <p>A host may be written as a bare name, a URL, or <code>host:port</code>. It is reduced to a lowercase hostname before use:</p>
+  <ul class="checklist">
+    <li>Scheme, credentials, port, path, query, and a trailing dot are stripped</li>
+    <li><strong>The port is always 443</strong>, whatever was written</li>
+    <li>IP addresses are rejected &mdash; this endpoint takes hostnames only</li>
+    <li>A name without a dot, an empty entry, or a name over 253 characters is rejected</li>
+    <li>A host that resolves only to private or reserved addresses is not probed; the lookup fails with an entry in <code>errors</code></li>
+  </ul>
+  <p>All of one lookup's handshakes go to one address, chosen once after resolving the name. A host with several addresses can be configured differently on each, so every result reports the <code>ip</code> it was observed on.</p>
+
+  <h3 id="example-request">Example</h3>
+  <div class="lang-tabs">
+    <button class="lang-tab active" data-lang="curl">curl</button>
+    <button class="lang-tab" data-lang="javascript">JavaScript</button>
+    <button class="lang-tab" data-lang="python">Python</button>
+    <button class="lang-tab" data-lang="go">Go</button>
+  </div>
+  <div id="tab-curl" class="lang-panel active">
+  <pre><code>curl <span class="flag">-X POST</span> <span class="url">https://api.securityaccelerated.com/v1/encryption/lookup</span> \
+  <span class="flag">-H</span> <span class="str">'Content-Type: application/json'</span> \
+  <span class="flag">-H</span> <span class="str">'X-API-Key: your-api-key'</span> \
+  <span class="flag">-H</span> <span class="str">'X-Client-Request-ID: req-001'</span> \
+  <span class="flag">-d</span> <span class="str">'{
+    "hosts": ["example.com"],
+    "lookups": ["protocols", "key_exchange", "certificate"]
+  }'</span></code></pre>
+  </div>
+  <div id="tab-javascript" class="lang-panel">
+  <pre><code><span class="kw">const</span> res = <span class="kw">await</span> fetch(<span class="str">"https://api.securityaccelerated.com/v1/encryption/lookup"</span>, {
+  method: <span class="str">"POST"</span>,
+  headers: {
+    <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>,
+    <span class="str">"X-API-Key"</span>: <span class="str">"your-api-key"</span>,
+    <span class="str">"X-Client-Request-ID"</span>: <span class="str">"req-001"</span>,
+  },
+  body: <span class="kw">JSON</span>.stringify({
+    hosts: [<span class="str">"example.com"</span>],
+    lookups: [<span class="str">"protocols"</span>, <span class="str">"key_exchange"</span>, <span class="str">"certificate"</span>],
+  }),
+});
+
+<span class="kw">if</span> (!res.ok) {
+  <span class="kw">const</span> { error } = <span class="kw">await</span> res.json();
+  <span class="kw">throw new</span> <span class="kw">Error</span>(error);
+}
+
+<span class="cmt">// Results are wrapped in a "results" envelope. Match by `host` rather than by</span>
+<span class="cmt">// position: entries that reduce to the same hostname collapse into one.</span>
+<span class="kw">const</span> { results } = <span class="kw">await</span> res.json();
+
+<span class="kw">for</span> (<span class="kw">const</span> r <span class="kw">of</span> results) {
+  <span class="kw">console</span>.log(r.host, r.key_exchange?.verdict, r.certificate?.days_until_expiry);
+
+  <span class="cmt">// Individual lookups can fail while the rest succeed.</span>
+  <span class="kw">for</span> (<span class="kw">const</span> e <span class="kw">of</span> r.errors ?? []) {
+    <span class="kw">console</span>.warn(`${r.host}: ${e.lookup} failed — ${e.message}`);
+  }
+}</code></pre>
+  </div>
+  <div id="tab-python" class="lang-panel">
+  <pre><code><span class="kw">import</span> requests
+
+resp = requests.post(
+    <span class="str">"https://api.securityaccelerated.com/v1/encryption/lookup"</span>,
+    headers={
+        <span class="str">"X-API-Key"</span>: <span class="str">"your-api-key"</span>,
+        <span class="str">"X-Client-Request-ID"</span>: <span class="str">"req-001"</span>,
+    },
+    json={
+        <span class="str">"hosts"</span>: [<span class="str">"example.com"</span>],
+        <span class="str">"lookups"</span>: [<span class="str">"protocols"</span>, <span class="str">"key_exchange"</span>, <span class="str">"certificate"</span>],
+    },
+)
+
+<span class="kw">if</span> resp.status_code != <span class="num">200</span>:
+    print(<span class="str">"Error:"</span>, resp.json()[<span class="str">"error"</span>])
+<span class="kw">else</span>:
+    <span class="cmt"># Results are wrapped in a "results" envelope. A lookup that failed</span>
+    <span class="cmt"># leaves its field out, so read each one with .get().</span>
+    <span class="kw">for</span> r <span class="kw">in</span> resp.json()[<span class="str">"results"</span>]:
+        key_exchange = r.get(<span class="str">"key_exchange"</span>, {})
+        certificate = r.get(<span class="str">"certificate"</span>, {})
+        print(r[<span class="str">"host"</span>], key_exchange.get(<span class="str">"verdict"</span>), certificate.get(<span class="str">"days_until_expiry"</span>))</code></pre>
+  </div>
+  <div id="tab-go" class="lang-panel">
+  <pre><code><span class="kw">package</span> main
+
+<span class="kw">import</span> (
+    <span class="str">"bytes"</span>
+    <span class="str">"encoding/json"</span>
+    <span class="str">"fmt"</span>
+    <span class="str">"net/http"</span>
+)
+
+<span class="kw">func</span> main() {
+    body, _ := json.Marshal(<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span>{
+        <span class="str">"hosts"</span>:   []<span class="kw">string</span>{<span class="str">"example.com"</span>},
+        <span class="str">"lookups"</span>: []<span class="kw">string</span>{<span class="str">"protocols"</span>, <span class="str">"key_exchange"</span>, <span class="str">"certificate"</span>},
+    })
+
+    req, _ := http.NewRequest(<span class="str">"POST"</span>,
+        <span class="str">"https://api.securityaccelerated.com/v1/encryption/lookup"</span>,
+        bytes.NewReader(body))
+    req.Header.Set(<span class="str">"Content-Type"</span>, <span class="str">"application/json"</span>)
+    req.Header.Set(<span class="str">"X-API-Key"</span>, <span class="str">"your-api-key"</span>)
+    req.Header.Set(<span class="str">"X-Client-Request-ID"</span>, <span class="str">"req-001"</span>)
+
+    resp, err := http.DefaultClient.Do(req)
+    <span class="kw">if</span> err != <span class="kw">nil</span> { panic(err) }
+    <span class="kw">defer</span> resp.Body.Close()
+
+    <span class="kw">if</span> resp.StatusCode != http.StatusOK {
+        <span class="kw">var</span> apiErr <span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">string</span>
+        json.NewDecoder(resp.Body).Decode(&apiErr)
+        fmt.Println(<span class="str">"Error:"</span>, apiErr[<span class="str">"error"</span>])
+        <span class="kw">return</span>
+    }
+
+    <span class="cmt">// Results are wrapped in a "results" envelope.</span>
+    <span class="kw">var</span> response struct {
+        Results []<span class="kw">map</span>[<span class="kw">string</span>]<span class="kw">any</span> <span class="str">`json:"results"`</span>
+    }
+    json.NewDecoder(resp.Body).Decode(&response)
+    fmt.Println(response.Results[<span class="num">0</span>][<span class="str">"host"</span>], response.Results[<span class="num">0</span>][<span class="str">"key_exchange"</span>])
+}</code></pre>
+  </div>
+
+  <h2 id="response-fields">Response Fields</h2>
+  <p>Results are wrapped in a <code>results</code> envelope. Each element carries the normalized <code>host</code>, the verbatim <code>inputs</code> that mapped to it, one field per lookup you requested, and <code>errors</code> only when something failed. Match elements by <code>host</code> rather than by position.</p>
+
+  <h3 id="evidence">ip, probed_at -- Where and When</h3>
+  <p>Every lookup object carries the same three fields alongside its own:</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>cache_hit</code></td><td>Whether this lookup was served from cache</td></tr>
+        <tr><td><code>ip</code></td><td>The address the handshakes went to. One lookup always uses one address</td></tr>
+        <tr><td><code>probed_at</code></td><td>When the handshakes were made (UTC). For a cached result this is earlier than your request</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="protocols">protocols -- TLS Versions</h3>
+  <p>Each version is offered on its own, so the answer is what the host accepts, not just what it prefers. Available on all plans.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>versions</code></td><td>One entry per version, newest first: <code>name</code> (<code>TLS 1.3</code>, <code>TLS 1.2</code>, <code>TLS 1.1</code>, <code>TLS 1.0</code>) and <code>accepted</code></td></tr>
+        <tr><td><code>legacy_accepted</code></td><td><code>true</code> when the host accepts TLS 1.0 or TLS 1.1, both deprecated by RFC 8996</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>SSL 3.0 and earlier are not tested.</p>
+
+  <h3 id="key-exchange">key_exchange -- Key Exchange Groups</h3>
+  <p>Each group is offered on its own, then all of them together to see which one the host picks. Available on all plans.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>groups</code></td><td>One entry per group tested: <code>name</code> (the IANA name), <code>accepted</code>, and <code>post_quantum</code></td></tr>
+        <tr><td><code>negotiated</code></td><td>The group the host chose when offered all of them at once, post-quantum first. Omitted if that combined offer was refused</td></tr>
+        <tr><td><code>verdict</code></td><td><code>post_quantum</code> if the host accepts at least one post-quantum group, otherwise <code>classical</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Groups tested, in this order: <code>X25519MLKEM768</code>, <code>SecP256r1MLKEM768</code>, <code>SecP384r1MLKEM1024</code>, <code>MLKEM1024</code> (post-quantum), then <code>x25519</code>, <code>secp256r1</code>, <code>secp384r1</code>, <code>secp521r1</code> (classical). <code>groups</code> always lists all eight.</p>
+  <div class="note">A <code>post_quantum</code> verdict here is about the session keys only. It means traffic recorded today cannot be decrypted later by a quantum computer. It says nothing about the certificate, which has its own <code>algorithm_verdict</code> and is <code>classical</code> for almost every host today. A host is not &ldquo;quantum-safe&rdquo; because this lookup passed.</div>
+
+  <h3 id="certificate">certificate -- Certificate Chain</h3>
+  <p>The chain the host sends to a client that accepts anything from TLS 1.0 up, so a host too old for current defaults still gets its certificate reported. Available on all plans.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>chain</code></td><td>The certificates the host sent, leaf first. Each entry has <code>subject</code>, <code>issuer</code>, <code>not_before</code>, <code>not_after</code>, <code>key_algorithm</code>, <code>key_bits</code> (omitted when the algorithm has no single size), <code>signature_algorithm</code>, and <code>self_signed</code></td></tr>
+        <tr><td><code>sans</code></td><td>The hostnames the leaf covers. Omitted when it lists none</td></tr>
+        <tr><td><code>days_until_expiry</code></td><td>Whole days until the leaf expires, as of <code>probed_at</code>. Negative once expired</td></tr>
+        <tr><td><code>validity_days</code></td><td>The leaf's total lifetime in days</td></tr>
+        <tr><td><code>expiry_verdict</code></td><td><code>valid</code>, <code>expired</code>, or <code>not_yet_valid</code></td></tr>
+        <tr><td><code>algorithm_verdict</code></td><td><code>post_quantum</code>, <code>classical</code>, <code>weak</code>, or <code>unknown</code></td></tr>
+        <tr><td><code>trust_verdict</code></td><td><code>trusted</code> or <code>untrusted</code></td></tr>
+        <tr><td><code>hostname_verdict</code></td><td><code>match</code> or <code>mismatch</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 id="certificate-verdicts">The four verdicts</h4>
+  <p>Each verdict answers one question and is judged on its own, so a certificate can fail one and pass the others.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Verdict</th><th>Question it answers</th></tr></thead>
+      <tbody>
+        <tr><td><code>expiry_verdict</code></td><td>Is the leaf inside its validity dates at <code>probed_at</code>? There is no &ldquo;expiring soon&rdquo; value: what counts as soon depends on the certificate's lifetime and your renewal process, so set your own threshold on <code>days_until_expiry</code>.</td></tr>
+        <tr><td><code>algorithm_verdict</code></td><td>What is the weakest key or signature anywhere in the chain? See the table below.</td></tr>
+        <tr><td><code>trust_verdict</code></td><td>Does the chain the host sent lead to a root in the public trust store? Nothing is fetched to repair a chain, so a host that leaves out an intermediate is <code>untrusted</code> even where a browser would recover. Judged apart from the leaf's dates: an expired certificate from a public CA is <code>expired</code> and <code>trusted</code>.</td></tr>
+        <tr><td><code>hostname_verdict</code></td><td>Do the leaf's subject alternative names cover the host you asked about? Wildcards cover one label. The common name is not consulted.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><code>algorithm_verdict</code> is the weakest thing found anywhere in the chain:</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>weak</code></td><td>An RSA key under 2048 bits, an elliptic curve key under 224 bits, a DSA key, or a certificate signed with MD5 or SHA-1</td></tr>
+        <tr><td><code>unknown</code></td><td>An algorithm this service does not recognize</td></tr>
+        <tr><td><code>classical</code></td><td>Sound today, breakable by a large quantum computer</td></tr>
+        <tr><td><code>post_quantum</code></td><td>Every key and every signature in the chain is ML-DSA</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>A self-signed certificate's own signature is not scored, so an old root signed with SHA-1 does not make a chain <code>weak</code>.</p>
+  <div class="note">An untrusted, expired, or mismatched certificate is reported in the verdicts, not returned as an error. The lookup succeeded: it reached the host and is telling you what it found. Only a host that could not be reached, or that refused every handshake, produces an entry in <code>errors</code>.</div>
+
+  <h3 id="errors-field">errors -- Partial Failures</h3>
+  <p>If individual lookups fail, they appear here. The rest of the response is still populated.</p>
+  <pre><code><span class="str">"errors"</span>: [
+  { <span class="str">"lookup"</span>: <span class="str">"protocols"</span>, <span class="str">"message"</span>: <span class="str">"no such host"</span> }
+]</code></pre>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Message</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>no such host</code></td><td>The hostname does not resolve</td></tr>
+        <tr><td><code>domain resolves to a private/reserved IP address</code></td><td>Refused. Only public addresses are probed</td></tr>
+        <tr><td><code>connection refused</code></td><td>Nothing is listening on port 443</td></tr>
+        <tr><td><code>i/o timeout</code> or <code>context deadline exceeded</code></td><td>The connection or one of the handshakes timed out</td></tr>
+        <tr><td><code>no TLS handshake succeeded on port 443</code></td><td>The host answered and refused every offer</td></tr>
+        <tr><td><code>invalid hostname</code> (lookup <code>validation</code>)</td><td>The entry is not a hostname. Appears here only when other hosts in the request were valid; a request whose only host is invalid returns <code>400</code></td></tr>
+        <tr><td><code>raw IP addresses are not accepted; provide a hostname</code> (lookup <code>validation</code>)</td><td>The entry is an IP address</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>A lookup either returns a complete answer or fails</h4>
+  <p>If any one handshake times out, the whole lookup fails rather than reporting that offer as refused, and its field is absent &mdash; not <code>null</code>, not a partial object:</p>
+  <pre><code>{
+  <span class="str">"results"</span>: [
+    {
+      <span class="str">"host"</span>: <span class="str">"example.com"</span>,
+      <span class="str">"inputs"</span>: [<span class="str">"example.com"</span>],
+      <span class="str">"certificate"</span>: { <span class="str">"cache_hit"</span>: <span class="kw">false</span>, <span class="str">"expiry_verdict"</span>: <span class="str">"valid"</span>, ... },
+      <span class="str">"errors"</span>: [
+        { <span class="str">"lookup"</span>: <span class="str">"key_exchange"</span>, <span class="str">"message"</span>: <span class="str">"i/o timeout"</span> }
+      ]
+    }
+  ]
+}</code></pre>
+  <p>Requesting <em>n</em> lookups does not guarantee <em>n</em> fields, so code that reaches straight for <code>result.key_exchange.verdict</code> works in testing and throws the first time a host is slow to answer. Failures are never cached &mdash; ask again and the lookup runs again. A timeout is treated as &ldquo;nothing learned&rdquo; on purpose: recording silence as a refusal would let one lost packet be cached as a finding about the host.</p>
+
+  <h2 id="error-handling">Error Handling</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>400 Bad Request</code></td><td>Invalid request body or missing <code>hosts</code> field &mdash; <code>invalid request: hosts field is required and must be a non-empty array</code></td></tr>
+        <tr><td><code>400 Bad Request</code></td><td><code>lookups</code> missing or empty after normalization &mdash; <code>lookups is required, e.g. ["key_exchange", "certificate"]</code></td></tr>
+        <tr><td><code>400 Bad Request</code></td><td>Unrecognized lookup name (including domain-only names such as <code>ssl</code>) &mdash; the message names the offending entry</td></tr>
+        <tr><td><code>400 Bad Request</code></td><td>More hosts than your plan allows &mdash; e.g. <code>too many hosts: maximum 1 allowed for free plan</code></td></tr>
+        <tr><td><code>400 Bad Request</code></td><td>The only host submitted is not a hostname &mdash; <code>invalid hostname</code> or <code>raw IP addresses are not accepted; provide a hostname</code></td></tr>
+        <tr><td><code>401 Unauthorized</code></td><td>Missing or invalid API key</td></tr>
+        <tr><td><code>413 Content Too Large</code></td><td>Request body exceeds the 1 MB limit</td></tr>
+        <tr><td><code>429 Too Many Requests</code></td><td>Rate limit exceeded -- check the <code>Retry-After</code> header</td></tr>
+        <tr><td><code>500 Internal Server Error</code></td><td>Server error -- contact <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>All error responses use this format:</p>
+  <pre><code>{
+  <span class="str">"error"</span>: <span class="str">"description of the problem"</span>
+}</code></pre>
+  <div class="note">Partial lookup failures are different from HTTP errors. When individual lookups fail (e.g., the host does not answer on 443), the request still returns <code>200 OK</code> with successful lookups populated and failures listed in the <code>errors</code> array.</div>
+
+  <h2 id="caching">Caching</h2>
+  <p>Results are cached <strong>per lookup, per host</strong> under <code>encryption:&lt;host&gt;:&lt;lookup&gt;</code> &mdash; a namespace separate from domain lookups, so the same name asked about on the two endpoints never shares an entry. Each lookup object carries its own <code>cache_hit</code>, so one result can mix cached and freshly fetched fields.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Lookup</th><th>TTL</th></tr></thead>
+      <tbody>
+        <tr><td><code>protocols</code></td><td>12 hours</td></tr>
+        <tr><td><code>key_exchange</code></td><td>12 hours</td></tr>
+        <tr><td><code>certificate</code></td><td>4 hours</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h4>A cached result is an older observation</h4>
+  <p><code>probed_at</code> is stored with the result, so a cached answer reports when the handshakes were actually made, and <code>days_until_expiry</code> is counted from that moment. Recompute it from the leaf's <code>not_after</code> if you need it to the day.</p>
+  <h4>Cache failures never fail a request</h4>
+  <p>Caching is fail-open: an unreachable cache means every lookup is fetched live, an unreadable entry is treated as a miss and overwritten, and a failed write still returns the fetched result. Failed lookups are never cached &mdash; a failing lookup is retried on the next request rather than remembered.</p>
+
+  <h2 id="request-correlation">Request Correlation</h2>
+  <p>Every response carries an <code>X-Request-ID</code> the API generates for you. You can additionally send your own <code>X-Client-Request-ID</code> to tie a request to an identifier your systems already use &mdash; it is echoed back and recorded in server-side logs.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Header</th><th>Direction</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>X-Client-Request-ID</code></td><td>Request</td><td>Your correlation ID. Up to 64 characters, limited to letters, digits, hyphens, underscores, dots, and colons &mdash; enough for UUIDs and common trace IDs.</td></tr>
+        <tr><td><code>X-Client-Request-ID</code></td><td>Response</td><td>Echoed back byte for byte when the value you sent was accepted.</td></tr>
+        <tr><td><code>X-Request-ID</code></td><td>Response</td><td>A UUID the API generates for every request, whether or not you sent a correlation ID. Quote this when contacting support.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">A correlation ID that is too long or contains other characters is ignored rather than rejected &mdash; the request succeeds normally, but nothing is echoed back. If you are relying on the header for tracing, treat a missing <code>X-Client-Request-ID</code> on the response as a signal that the value did not pass validation. <code>X-Request-ID</code> is always present &mdash; including on error responses, where correlation matters most &mdash; so it works as a fallback.</div>
+
+  <h2 id="full-response-example">Full Response Example</h2>
+
+  <h3 id="response-headers">Response Headers</h3>
+  <p>Returned alongside the body on a successful lookup:</p>
+  <pre><code><span class="hdr">Content-Type:</span> <span class="str">application/json; charset=utf-8</span>
+<span class="hdr">X-Request-ID:</span> <span class="str">9f8b2c14-6d3a-4e57-b8f1-2a7c05e91d34</span>
+<span class="hdr">X-Client-Request-ID:</span> <span class="str">req-001</span>
+<span class="hdr">X-RateLimit-Limit:</span> <span class="str">120</span>
+<span class="hdr">X-RateLimit-Remaining:</span> <span class="str">118</span></code></pre>
+  <p><code>X-Request-ID</code> is generated by the API for every request &mdash; quote it when contacting support. <code>X-Client-Request-ID</code> appears only when you sent a valid one; see <a href="#request-correlation">Request Correlation</a>. The <code>X-RateLimit-*</code> pair reflects your plan's window, and a <code>429</code> adds <code>Retry-After</code> &mdash; see <a href="#rate-limiting">Rate Limiting</a>.</p>
+
+  <h3>Response Body</h3>
+  <p>Results are wrapped in a <code>results</code> envelope. Each element carries the normalized <code>host</code> and the verbatim <code>inputs</code> that mapped to it &mdash; match results by <code>host</code>, not by array position. The example is trimmed: <code>groups</code> always lists all eight groups, and <code>chain</code> usually has two or three certificates.</p>
+  <pre><code>{
+  <span class="str">"results"</span>: [
+  {
+    <span class="str">"host"</span>: <span class="str">"example.com"</span>,
+    <span class="str">"inputs"</span>: [<span class="str">"example.com"</span>],
+    <span class="str">"protocols"</span>: {
+      <span class="str">"cache_hit"</span>: <span class="kw">true</span>,
+      <span class="str">"ip"</span>: <span class="str">"93.184.216.34"</span>,
+      <span class="str">"probed_at"</span>: <span class="str">"2026-11-16T09:12:04Z"</span>,
+      <span class="str">"versions"</span>: [
+        { <span class="str">"name"</span>: <span class="str">"TLS 1.3"</span>, <span class="str">"accepted"</span>: <span class="kw">true</span> },
+        { <span class="str">"name"</span>: <span class="str">"TLS 1.2"</span>, <span class="str">"accepted"</span>: <span class="kw">true</span> },
+        { <span class="str">"name"</span>: <span class="str">"TLS 1.1"</span>, <span class="str">"accepted"</span>: <span class="kw">false</span> },
+        { <span class="str">"name"</span>: <span class="str">"TLS 1.0"</span>, <span class="str">"accepted"</span>: <span class="kw">false</span> }
+      ],
+      <span class="str">"legacy_accepted"</span>: <span class="kw">false</span>
+    },
+    <span class="str">"key_exchange"</span>: {
+      <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+      <span class="str">"ip"</span>: <span class="str">"93.184.216.34"</span>,
+      <span class="str">"probed_at"</span>: <span class="str">"2026-11-16T15:40:21Z"</span>,
+      <span class="str">"groups"</span>: [
+        { <span class="str">"name"</span>: <span class="str">"X25519MLKEM768"</span>, <span class="str">"accepted"</span>: <span class="kw">true</span>, <span class="str">"post_quantum"</span>: <span class="kw">true</span> },
+        { <span class="str">"name"</span>: <span class="str">"x25519"</span>, <span class="str">"accepted"</span>: <span class="kw">true</span>, <span class="str">"post_quantum"</span>: <span class="kw">false</span> }
+      ],
+      <span class="str">"negotiated"</span>: <span class="str">"X25519MLKEM768"</span>,
+      <span class="str">"verdict"</span>: <span class="str">"post_quantum"</span>
+    },
+    <span class="str">"certificate"</span>: {
+      <span class="str">"cache_hit"</span>: <span class="kw">false</span>,
+      <span class="str">"ip"</span>: <span class="str">"93.184.216.34"</span>,
+      <span class="str">"probed_at"</span>: <span class="str">"2026-11-16T15:40:21Z"</span>,
+      <span class="str">"chain"</span>: [
+        {
+          <span class="str">"subject"</span>: <span class="str">"example.com"</span>,
+          <span class="str">"issuer"</span>: <span class="str">"Example Issuing CA"</span>,
+          <span class="str">"not_before"</span>: <span class="str">"2026-09-20T00:00:00Z"</span>,
+          <span class="str">"not_after"</span>: <span class="str">"2027-01-18T23:59:59Z"</span>,
+          <span class="str">"key_algorithm"</span>: <span class="str">"ECDSA"</span>,
+          <span class="str">"key_bits"</span>: <span class="num">256</span>,
+          <span class="str">"signature_algorithm"</span>: <span class="str">"ECDSA-SHA384"</span>,
+          <span class="str">"self_signed"</span>: <span class="kw">false</span>
+        },
+        {
+          <span class="str">"subject"</span>: <span class="str">"Example Issuing CA"</span>,
+          <span class="str">"issuer"</span>: <span class="str">"Example Root CA"</span>,
+          <span class="str">"not_before"</span>: <span class="str">"2024-03-13T00:00:00Z"</span>,
+          <span class="str">"not_after"</span>: <span class="str">"2031-03-12T23:59:59Z"</span>,
+          <span class="str">"key_algorithm"</span>: <span class="str">"ECDSA"</span>,
+          <span class="str">"key_bits"</span>: <span class="num">384</span>,
+          <span class="str">"signature_algorithm"</span>: <span class="str">"ECDSA-SHA384"</span>,
+          <span class="str">"self_signed"</span>: <span class="kw">false</span>
+        }
+      ],
+      <span class="str">"sans"</span>: [<span class="str">"example.com"</span>, <span class="str">"www.example.com"</span>],
+      <span class="str">"days_until_expiry"</span>: <span class="num">63</span>,
+      <span class="str">"validity_days"</span>: <span class="num">121</span>,
+      <span class="str">"expiry_verdict"</span>: <span class="str">"valid"</span>,
+      <span class="str">"algorithm_verdict"</span>: <span class="str">"classical"</span>,
+      <span class="str">"trust_verdict"</span>: <span class="str">"trusted"</span>,
+      <span class="str">"hostname_verdict"</span>: <span class="str">"match"</span>
+    }
+  }
+  ]
+}</code></pre>
+
+<footer class="page-footer">
+  <p>
+    Prefer to generate a client? The full
+    <a href="/docs/openapi.yaml">OpenAPI 3.1 specification</a>
+    covers every endpoint &mdash; domain lookup, IP lookup, encryption lookup, usage, and key rotation.
+  </p>
+  <p class="page-footer-meta">
+    Questions: <a href="mailto:support@securityaccelerated.com">support@securityaccelerated.com</a>
+  </p>
+</footer>
+
+</main>
+
+<script src="/docs/docs.js" defer></script>
+
+</body>
+</html>

@@ -31,5 +31,15 @@ surfaces late — usually as a drift test failing in CI or a stale docs surface.
 5. Register the route in `RegisterProtectedRoutes()` with `RequireAdmin()` if admin-only
 6. Wire the service in `internal/app/app.go`
 7. Add a field to `handler.Deps` and set it in `app.go` — existing test call sites need no change, since they name only the dependencies they use
-8. Add context keys to `middleware/request_logger.go` if needed
+8. Add context keys to `middleware/request_logger.go` if needed. A per-request count such as `host_count` also needs a `UsageEntry` field, a block in `middleware/usage.go`, a `request_log` column, the insert in `usage/logger.go`, the `SUM` and `UsageSummary` field in `usage/query.go`, and the same field in `cmd/sactl/usage.go`, `openapi.yaml` and `docs_account.html`
 9. Update `docs/api-reference.md` (endpoint table and a section for the endpoint), api.http, smoke test, integration tests, changelog.yaml
+
+An endpoint with its own lookup catalog (`AllEncryptionLookupNames` beside `AllLookupNames` and `AllIPLookupNames`) also has to be added everywhere the catalogs are unioned. Nothing fails if one is missed, which is why they are listed:
+
+- `internal/app/app.go` `lookupNames` — left out, the catalog's `cache.ttl.*` keys are silently ignored and every lookup gets `cache.default_ttl`
+- `internal/usage/logger_test.go` `TestLookupColumns_MatchesLookupCatalogs` — left out along with the columns, the drift test passes and protects nothing
+- `internal/handler/openapi_contract_test.go` and `openapi_test.go` — the request-schema table and the expected-paths list
+- `internal/handler/docs_request_body_test.go` and the hard-coded page lists in `docs_test.go`
+- `cmd/sactl/lookup.go` and `interactive.go` — the `lookup` command and menu
+
+It also needs its own cache key prefix and builder in `internal/cache/cache.go`, its own `<name>LookupMinPlan` table, and, for a docs page, a `docsPages` row plus the topbar nav link in all six templates (`TestDocs_MobileNavReachesEveryPage` fails until every one has it).

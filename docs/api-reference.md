@@ -8,7 +8,7 @@ billing internals) is in [operations.md](operations.md).
 
 ## Authentication
 
-Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL as `hex(sha256(key))` and belong to a customer, who has a plan. A customer normally holds one live key, but holds several during a rotation grace window: `POST /v1/keys/rotate` issues a new key and leaves the previous ones authenticating until `auth.rotation_grace` (default 24h) elapses, so deployed clients can be switched over without downtime. The following routes are public (no API key required): `/` (the company home page on the company's hostname, a redirect to `/docs` on the API's), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/account`, `/docs/changelog`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
+Most API endpoints require an API key passed via the `X-API-Key` header. Keys are stored in PostgreSQL as `hex(sha256(key))` and belong to a customer, who has a plan. A customer normally holds one live key, but holds several during a rotation grace window: `POST /v1/keys/rotate` issues a new key and leaves the previous ones authenticating until `auth.rotation_grace` (default 24h) elapses, so deployed clients can be switched over without downtime. The following routes are public (no API key required): `/` (the company home page on the company's hostname, a redirect to `/docs` on the API's), `/docs`, `/docs/domain`, `/docs/ip`, `/docs/encryption`, `/docs/account`, `/docs/changelog`, `/docs/openapi.yaml`, `/v1/hello`, `/v1/health`, `/billing/webhook` (Stripe signature), and `/billing/success` (session token).
 
 ### Customer Plans
 
@@ -16,8 +16,8 @@ Each customer has a `plan` that controls rate limits, access to premium options,
 
 | Plan | Capabilities |
 |------|-------------|
-| `free` | All lookups except `reputation` and `threat_intel`. 1 domain per request. |
-| `pro` | All free capabilities + reputation checks + threat intelligence, up to 20 domains per request |
+| `free` | All lookups except `reputation` and `threat_intel`. 1 domain, IP or host per request. |
+| `pro` | All free capabilities + reputation checks + threat intelligence, up to 20 domains, IPs or hosts per request |
 | `admin` | All pro capabilities + admin endpoints (info, fingerprint management, cache invalidation) + no rate limit |
 
 The plan is stored in the `customers` table, defaulting to `free`. New customers provisioned via Stripe checkout receive the plan they purchased. An unrecognized plan value is treated as `free` by both the rate limiter and lookup gating, so a bad value fails closed.
@@ -48,6 +48,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/docs` | None | API documentation landing page |
 | GET | `/docs/domain` | None | Domain Intelligence API docs |
 | GET | `/docs/ip` | None | IP Intelligence API docs |
+| GET | `/docs/encryption` | None | Encryption Posture API docs |
 | GET | `/docs/account` | None | Usage statistics and key rotation docs |
 | GET | `/docs/changelog` | None | Public release notes |
 | GET | `/docs/openapi.yaml` | None | OpenAPI specification for the public API |
@@ -59,6 +60,7 @@ When the limit is exceeded, the API returns `429 Too Many Requests` with a `Retr
 | GET | `/v1/info` | `admin` | Application and environment info |
 | POST | `/v1/domain/lookup` | All plans | Domain intelligence lookup |
 | POST | `/v1/ip/lookup` | All plans | IP intelligence lookup |
+| POST | `/v1/encryption/lookup` | All plans | Encryption posture lookup: TLS versions, key exchange, certificate chain |
 | GET | `/v1/usage` | All plans | Caller's own usage statistics |
 | POST | `/v1/keys/rotate` | All plans | Rotate the caller's API key (old keys keep working for a grace window) |
 | POST | `/v1/admin/geoip/refresh` | `admin` | Download and reload the DB-IP GeoIP database |
@@ -668,6 +670,124 @@ It reads a local memory-mapped database with no network call, so a Redis round t
 
 MaxMind GeoLite2 was used until the switch; its EULA restricts disclosing the data to third parties, which a paid API does. See `docs/decisions.md`.
 
+### POST /v1/encryption/lookup
+
+Reports how well a host's encryption holds up, checked from the outside. Every answer comes from TLS handshakes this service makes itself to port 443 of the host, so there is no upstream provider behind it.
+
+**Request:**
+```json
+{
+  "hosts": ["https://Example.com/", "example.com"],
+  "lookups": ["key_exchange", "certificate"]
+}
+```
+
+Both fields are **required**, and the endpoint follows the same contract as the domain and IP lookups: `lookups` must be non-empty, names are trimmed/lowercased/deduplicated before validation, and results come back in a `{"results": [...]}` envelope with per-lookup `cache_hit`.
+
+#### `hosts`
+
+An array of hostnames. Each is normalized by the same rules as a domain: scheme, credentials, port, path, and a trailing dot are stripped, and the name is lowercased. **The port is always 443**, whatever was written. Entries that normalize to the same hostname are deduplicated into one result. Plan host limits (`encryption.max_hosts.*`, 1 free / 20 pro) count the entries you submitted, not the unique hostnames.
+
+IP addresses are rejected: the handshakes need a name to ask for. A host that resolves only to private or reserved addresses is refused at lookup time.
+
+#### `lookups`
+
+| Lookup | Plan | Reports | Handshakes |
+|--------|------|---------|------------|
+| `protocols` | All | Which of TLS 1.0, 1.1, 1.2 and 1.3 the host accepts | 4 |
+| `key_exchange` | All | Which of eight key exchange groups it accepts (four post-quantum), which it picks when offered all of them, and a verdict | 9 |
+| `certificate` | All | The certificate chain: algorithms, key sizes, the leaf's expiry, whether the chain is publicly trusted, and whether it covers the host | 1 |
+
+The catalog is separate from the domain and IP ones: asking for `ssl` here returns `400`. `certificate` overlaps the domain endpoint's `ssl` lookup, which reports the leaf only.
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "host": "example.com",
+      "inputs": ["https://Example.com/", "example.com"],
+      "key_exchange": {
+        "cache_hit": false,
+        "ip": "172.66.147.243",
+        "probed_at": "2026-11-10T03:54:40.5Z",
+        "groups": [
+          { "name": "X25519MLKEM768", "accepted": true,  "post_quantum": true  },
+          { "name": "x25519",         "accepted": true,  "post_quantum": false }
+        ],
+        "negotiated": "X25519MLKEM768",
+        "verdict": "post_quantum"
+      }
+    }
+  ]
+}
+```
+
+The example is trimmed: `groups` always lists all eight groups, and `certificate` is omitted. Match results by `host`, not by array position.
+
+**Fields on every lookup:**
+
+| Field | Description |
+|-------|-------------|
+| `cache_hit` | Whether this lookup was served from cache |
+| `ip` | The address the handshakes went to. A host with several addresses can be configured differently on each, so one lookup always uses one address: the first public IPv4 address, or the first public IPv6 one when there is no IPv4 |
+| `probed_at` | When the handshakes were made. For a cached result this is earlier than the request |
+
+**`protocols`:**
+
+| Field | Description |
+|-------|-------------|
+| `versions` | One entry per version, newest first: `name` (`TLS 1.3` … `TLS 1.0`) and `accepted` |
+| `legacy_accepted` | True when the host accepts TLS 1.0 or TLS 1.1, both deprecated by RFC 8996 |
+
+SSL 3.0 and earlier are not tested.
+
+**`key_exchange`:**
+
+| Field | Description |
+|-------|-------------|
+| `groups` | One entry per group: `name` (the IANA name), `accepted`, `post_quantum` |
+| `negotiated` | The group the host chose when offered all of them at once, post-quantum first. Absent if that combined offer was refused |
+| `verdict` | `post_quantum` if the host accepts at least one post-quantum group, otherwise `classical` |
+
+Groups tested: `X25519MLKEM768`, `SecP256r1MLKEM768`, `SecP384r1MLKEM1024`, `MLKEM1024`, `x25519`, `secp256r1`, `secp384r1`, `secp521r1`.
+
+A `post_quantum` verdict here is about the session keys only: traffic recorded today cannot be decrypted later by a quantum computer. It says nothing about the certificate, which has its own verdicts and is `classical` for almost every host today.
+
+**`certificate`:**
+
+| Field | Description |
+|-------|-------------|
+| `chain` | The certificates the host sent, leaf first. Each has `subject`, `issuer`, `not_before`, `not_after`, `key_algorithm`, `key_bits` (omitted when the algorithm has no single size), `signature_algorithm`, `self_signed` |
+| `sans` | The hostnames the leaf covers |
+| `days_until_expiry` | Whole days until the leaf expires, as of `probed_at`. Negative once expired |
+| `validity_days` | The leaf's total lifetime in days |
+| `expiry_verdict` | `valid`, `expired`, or `not_yet_valid` |
+| `algorithm_verdict` | `post_quantum`, `classical`, `weak`, or `unknown`: the weakest thing found anywhere in the chain |
+| `trust_verdict` | `trusted` or `untrusted`: whether the chain the host sent leads to a root in the public trust store |
+| `hostname_verdict` | `match` or `mismatch`: whether the leaf's subject alternative names cover the host asked about |
+
+`algorithm_verdict` values: `weak` is an RSA key under 2048 bits, an elliptic curve key under 224 bits, a DSA key, or a certificate signed with MD5 or SHA-1; `unknown` is an algorithm the service does not recognize; `classical` is sound today and breakable by a large quantum computer; `post_quantum` means every key and signature in the chain is ML-DSA. A self-signed certificate's own signature is not scored, so an old root signed with SHA-1 does not make a chain `weak`.
+
+`trust_verdict` is judged against the system root store in the API's container image, using only the certificates the host sent: nothing is fetched to repair a chain, so a host that leaves out an intermediate is `untrusted` even though some browsers would accept it. It is judged apart from the leaf's validity dates, which `expiry_verdict` already covers, so an expired certificate from a public CA reads `expired` and `trusted`, and stays distinguishable from one no public CA issued.
+
+There is no "expiring soon" verdict. What counts as soon depends on the certificate's lifetime and the caller's renewal process, so callers set their own threshold on `days_until_expiry`.
+
+**An untrusted, expired, or mismatched certificate is an answer, not an error.** The handshake deliberately skips verification so the certificate can be reported whatever its state; the verdicts carry the judgment.
+
+#### Failures
+
+A lookup either returns a complete answer or fails. A handshake has three outcomes: accepted, refused (the connection opened and the handshake then failed), and unknown (the connection never opened, or the handshake timed out). An unknown outcome fails the whole lookup instead of being recorded as a refusal, and failures are never cached, so asking again retries.
+
+| `errors[].message` | Meaning |
+|--------------------|---------|
+| `no such host` | The hostname does not resolve |
+| `domain resolves to a private/reserved IP address` | Refused. The service only connects to public addresses |
+| `connection refused` | Nothing is listening on port 443 |
+| `i/o timeout`, `context deadline exceeded` | The connection or a handshake timed out |
+| `no TLS handshake succeeded on port 443` | The host answered and refused every offer. This is an error and not a result because it cannot be told apart from a host blocking the probe |
+| `invalid hostname`, `raw IP addresses are not accepted; provide a hostname` (lookup `validation`) | The entry is not a hostname. Returned per host only when other hosts in the request were valid; a request whose only host is invalid gets a `400` |
+
 ### `GET /v1/usage` — My Usage (All Plans)
 
 Returns aggregated usage statistics for the authenticated customer. The customer filter always comes from the auth context — callers can only ever see their own usage. The response shape matches `GET /v1/admin/usage` below.
@@ -726,6 +846,7 @@ Returns aggregated API usage statistics for a configurable time window.
   "avg_latency_ms": 842.5,
   "total_domains": 1580,
   "total_ips": 420,
+  "total_hosts": 96,
   "status_codes": {"200": 1190, "400": 32, "403": 15, "429": 10},
   "feature_usage": {
     "whois": 900, "dns": 1100, "ssl": 870, "headers": 640,
@@ -742,6 +863,8 @@ Returns aggregated API usage statistics for a configurable time window.
 
 `feature_usage` counts requests that **asked for** each lookup, whether or not it was served from cache. A cache hit is still customer demand.
 
+`total_domains`, `total_ips` and `total_hosts` count the entries submitted to the domain, IP and encryption endpoints respectively, duplicates included.
+
 ### `GET /v1/info` — Application Status (Admin Only)
 
 Returns application configuration, service status, and live runtime metrics. The response is built from a `StatusSnapshot` populated at startup (static config) plus live data computed per-request.
@@ -753,7 +876,7 @@ Returns application configuration, service status, and live runtime metrics. The
 | `system` | App name, version, mode, session ID, start time, uptime, host, OS, kernel, arch, Go version, server timeouts |
 | `database` | PostgreSQL host, port, dbname, sslmode, connection pool settings |
 | `cache` | Redis addr/db, cache TTL, auth cache TTL, plus live: key count, memory used, ping latency (ms), auth cache size |
-| `lookups` | Lookup timeout, subdomain/CT log limits, rate limits and max domains per plan |
+| `lookups` | Lookup timeout, subdomain/CT log limits, rate limits and max domains, IPs and hosts per plan, encryption lookup and probe timeouts |
 | `services` | Notifications (enabled + alert config), billing (enabled, Stripe key mode `live`/`test`, config), threat intel (provider names), fingerprint (source + rule count), usage (buffer config) |
 | `runtime` | Goroutines, heap alloc/inuse (MB), sys memory (MB), GC count |
 | `postgres_pool` | Connection pool: open, in use, idle, wait count, wait duration |
@@ -771,9 +894,10 @@ Lookup results are cached in Redis **per lookup, per domain** — not per respon
 ```
 lookup:<domain>:<lookup_name>     # domain lookups, e.g. lookup:example.net:ssl
 ip:<ip>:<lookup_name>             # IP lookups, e.g. ip:8.8.8.8:reverse_dns
+encryption:<host>:<lookup_name>   # encryption lookups, e.g. encryption:example.net:certificate
 ```
 
-The two namespaces are separate, so `threat_intel` on a domain and on an IP never collide. Keys are built only from the normalized domain and lookup name, so the combination of lookups you request has no effect on cache reuse: a `dns`-only request warms the same `lookup:example.com:dns` entry that a later `dns` + `ssl` request reads from.
+The namespaces are separate, so `threat_intel` on a domain and on an IP never collide, and a host on the encryption endpoint never shares an entry with the same name on the domain endpoint. Keys are built only from the normalized domain and lookup name, so the combination of lookups you request has no effect on cache reuse: a `dns`-only request warms the same `lookup:example.com:dns` entry that a later `dns` + `ssl` request reads from.
 
 Each lookup object in the response carries its own `cache_hit` flag, so a single result can mix cached and freshly fetched fields. Redis stores the lookup payload and nothing else — no request metadata, no cache flags, no timestamps.
 
@@ -798,6 +922,9 @@ Every lookup has its own TTL, reflecting how fast that data actually changes. An
 | `abuse_contact` *(IP)* | 24h |
 | `asn` *(IP)* | 24h |
 | `geo` *(IP)* | never cached — local database read |
+| `protocols` *(encryption)* | 12h |
+| `key_exchange` *(encryption)* | 12h |
+| `certificate` *(encryption)* | 4h |
 | *(anything else)* | `cache.default_ttl` (60m) |
 
 Override individually with env vars — `CACHE_TTL_WHOIS=48h`, `CACHE_DEFAULT_TTL=30m` — or in the config file under `cache.ttl.*`.

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/security-accelerated/intelligence-api/internal/config"
+	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/middleware"
 	"github.com/spf13/viper"
 )
@@ -46,6 +47,9 @@ func TestDocs_LandingPage(t *testing.T) {
 	if !strings.Contains(body, "IP Intelligence") {
 		t.Error("expected landing page to mention IP Intelligence")
 	}
+	if !strings.Contains(body, "Encryption Posture") {
+		t.Error("expected landing page to mention Encryption Posture")
+	}
 }
 
 func TestDocs_DomainPage(t *testing.T) {
@@ -75,6 +79,55 @@ func TestDocs_IPPage(t *testing.T) {
 	body := w.Body.String()
 	if !strings.Contains(body, "IP Intelligence") {
 		t.Error("expected IP page content")
+	}
+}
+
+// TestDocs_EncryptionPage checks the page documents the contract the handler
+// serves, not just that it renders. Each string is something a caller has to
+// type or branch on: the path, the request field, every lookup name, every
+// certificate verdict and its values, and the error messages a failed lookup
+// reports.
+func TestDocs_EncryptionPage(t *testing.T) {
+	r := docsRouter()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/docs/encryption", http.NoBody)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	body := w.Body.String()
+
+	want := []string{
+		"Encryption Posture",
+		"/v1/encryption/lookup",
+		"<code>hosts</code>",
+		// Verdict fields and every value they can take.
+		"<code>expiry_verdict</code>", "<code>valid</code>", "<code>expired</code>", "<code>not_yet_valid</code>",
+		"<code>algorithm_verdict</code>", "<code>weak</code>", "<code>unknown</code>",
+		"<code>trust_verdict</code>", "<code>trusted</code>", "<code>untrusted</code>",
+		"<code>hostname_verdict</code>", "<code>match</code>", "<code>mismatch</code>",
+		"<code>post_quantum</code>", "<code>classical</code>",
+		// Evidence fields carried by every lookup.
+		"<code>ip</code>", "<code>probed_at</code>",
+		// Messages a caller sees in errors[].
+		domain.ErrNoHandshake.Error(),
+		"invalid hostname",
+		"raw IP addresses are not accepted; provide a hostname",
+	}
+	for _, name := range domain.AllEncryptionLookupNames {
+		want = append(want, "<code>"+name+"</code>")
+	}
+	for _, s := range want {
+		if !strings.Contains(body, s) {
+			t.Errorf("encryption page does not mention %q", s)
+		}
+	}
+
+	// The chain is verified now, and the outcome is a verdict. The sentence the
+	// first draft of this endpoint carried would be a false statement.
+	if strings.Contains(body, "described, not verified") {
+		t.Error("encryption page still says the chain is not verified")
 	}
 }
 
@@ -528,7 +581,7 @@ func TestDocs_ResponseHeadersDocumented(t *testing.T) {
 		"Retry-After",
 	}
 
-	for _, path := range []string{"/docs/domain", "/docs/ip"} {
+	for _, path := range []string{"/docs/domain", "/docs/ip", "/docs/encryption"} {
 		t.Run(path, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
@@ -607,15 +660,16 @@ func TestDocs_LanguageTabsHavePanels(t *testing.T) {
 }
 
 // TestDocs_ExamplesUseCurrentRequestContract catches example code left on the
-// pre-v0.54.0 contract. Both endpoints now require a `lookups` array and return
-// a `results` envelope; an example that omits either is wrong in a way no other
-// test would notice.
+// pre-v0.54.0 contract. Every lookup endpoint requires a `lookups` array and
+// returns a `results` envelope; an example that omits either is wrong in a way
+// no other test would notice.
 func TestDocs_ExamplesUseCurrentRequestContract(t *testing.T) {
 	// Scoped to the lookup pages on purpose: these assertions are about the
 	// lookup request contract, which the account examples do not share.
 	for _, tc := range []docsPage{
 		{Path: "/docs/domain", HTML: docsDomainHTML},
 		{Path: "/docs/ip", HTML: docsIPHTML},
+		{Path: "/docs/encryption", HTML: docsEncryptionHTML},
 	} {
 		t.Run(tc.Path, func(t *testing.T) {
 			// Every example sends a request, so all must name lookups.

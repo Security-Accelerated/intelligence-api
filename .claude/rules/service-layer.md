@@ -12,11 +12,12 @@ The *why* behind each of these is in `docs/decisions.md` under "Lookups and cach
 
 ## Shared runner core — `internal/service/runner.go`
 
-Both `DomainService` and `IPService` run on the same machinery: `lookupRunner`,
+`DomainService`, `IPService` and `EncryptionService` run on the same machinery: `lookupRunner`,
 `fetchResult`, `runState`, the runner constructors, panic recovery, the MGET pre-flight,
 and the singleflight + SET fan-out. `runState` is target-agnostic — a target string, a
 field name for logs, and a `keyFor` closure — so the domain service supplies
-`lookup:<domain>:<name>` keys and the IP service supplies `ip:<ip>:<name>`. Each service
+`lookup:<domain>:<name>` keys, the IP service `ip:<ip>:<name>`, and the encryption service
+`encryption:<host>:<name>`. Each service
 keeps only what is specific to it: which lookups exist, how they are fetched, how the
 response is assembled.
 
@@ -55,9 +56,10 @@ coalescing anywhere; `service/whole_response.go` is gone and must not come back.
 
 ## Cache rules
 
-- Keys are flat: `lookup:<domain>:<name>` / `ip:<ip>:<name>` (e.g.
-  `lookup:example.net:ssl`), built by `cache.LookupKey()` with the `cache.LookupKeyPrefix`
-  constant. The builder **does not normalize** — that is the handler's job.
+- Keys are flat: `lookup:<domain>:<name>` / `ip:<ip>:<name>` / `encryption:<host>:<name>`
+  (e.g. `lookup:example.net:ssl`), built by `cache.LookupKey()`, `IPLookupKey()` and
+  `EncryptionLookupKey()` with their prefix constants. The builders **do not normalize** —
+  that is the handler's job.
 - Redis stores the **bare payload only**. Response wrappers embed the payload type and add
   `cache_hit`, set at assembly time; only the embedded type is ever marshaled.
 - TTLs come from `cache.default_ttl` + `cache.ttl.<name>` via `config.CacheTTLs()`, which

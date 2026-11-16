@@ -10,6 +10,28 @@
 # terms (#91). An entry a later release reversed keeps its text and gains a
 # "superseded in vX" note, rather than being hidden or rewritten.
 
+- version: v1.3.0
+  date: 2026-11-16
+  changes:
+    - text: "New endpoint: `POST /v1/encryption/lookup` reports how well a host's encryption holds up, checked from the outside with TLS handshakes to port 443. It takes a `hosts` array and the same required `lookups` array as the other endpoints, and returns the same `results` envelope with a per-lookup `cache_hit`. Documented at `/docs/encryption` and in the OpenAPI specification"
+      audience: public
+    - text: "`protocols` reports which of TLS 1.0, 1.1, 1.2 and 1.3 the host accepts, with `legacy_accepted` set when it still takes the two retired versions"
+      audience: public
+    - text: "`key_exchange` reports which of eight key exchange groups the host accepts, four of them post-quantum, which one it picks when offered all of them, and a `post_quantum` or `classical` verdict: whether traffic recorded today could be decrypted later"
+      audience: public
+    - text: "`certificate` describes every certificate in the chain the host sends (key type and size, signature algorithm, validity) and gives four verdicts: `expiry_verdict`, `algorithm_verdict`, `trust_verdict` (does the chain lead to a publicly trusted root) and `hostname_verdict` (does the certificate cover the host). An expired, untrusted or mismatched certificate is reported in those verdicts, not returned as an error"
+      audience: public
+    - text: "Every encryption result says which address was probed (`ip`) and when (`probed_at`). A lookup returns a complete answer or fails: a handshake that times out fails the lookup and is not cached, so it is never reported as the host refusing"
+      audience: public
+    - text: "All three encryption lookups are available on every plan: 1 host per request on free, 20 on pro. Usage statistics gain `total_hosts`, the hosts submitted to the new endpoint"
+      audience: public
+    - text: "Encryption endpoint internals (#136): `EncryptionService` on the shared runner, cache keys under `encryption:`, config keys `encryption.lookup_timeout`, `encryption.probe_timeout`, `encryption.max_hosts.*` and `cache.ttl.protocols` / `key_exchange` / `certificate` (12h, 12h, 4h). The probe pins one address per lookup and dials through `safenet.SafeDialer`; `ErrNoHandshake` is classified as expected so a host with nothing on 443 does not alert"
+      audience: internal
+    - text: "Migration `018_request_log_encryption.sql` adds `host_count` and the `protocols`, `key_exchange` and `certificate` columns to `request_log`. Apply it to production before deploying this version: the build names those columns in every usage insert"
+      audience: internal
+    - text: "`sactl lookup encryption HOST` and an Encryption posture entry in the interactive lookup menu; `sactl usage` prints the host total"
+      audience: internal
+
 - version: v1.1.3
   date: 2026-11-12
   changes:

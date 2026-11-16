@@ -74,10 +74,13 @@ structurally impossible rather than merely avoided.
 
 ### Cache keys are flat and never re-normalized
 
-**Decision.** Two namespaces, one shape: `lookup:<domain>:<name>` from `cache.LookupKey()`
-and `ip:<ip>:<name>` from `cache.IPLookupKey()`, with the prefixes as constants beside
-them. Neither builder normalizes; normalization is the handler's job. The separate `ip:`
-prefix is what keeps `threat_intel` on the two endpoints from colliding.
+**Decision.** Three namespaces, one shape: `lookup:<domain>:<name>` from `cache.LookupKey()`,
+`ip:<ip>:<name>` from `cache.IPLookupKey()`, and `encryption:<host>:<name>` from
+`cache.EncryptionLookupKey()`, with the prefixes as constants beside them. No builder
+normalizes; normalization is the handler's job. The separate `ip:` prefix is what keeps
+`threat_intel` on the two endpoints from colliding. The `encryption:` prefix looks
+redundant today, since no encryption lookup shares a name with a domain one, but a host is
+a domain name: the first shared name would otherwise read the other endpoint's payload.
 
 **Why.** A missed normalization step surfaces as a distinct key — visibly wrong — rather
 than being silently papered over at the cache layer.
@@ -190,6 +193,94 @@ until the lookup was removed; see #110.
 
 **Instead of.** Wrapping everything in interfaces for symmetry. `LookupDNS` behind an
 interface buys nothing and costs a layer of indirection at every call site.
+
+## The encryption probe
+
+`internal/domain/encryption_probe.go` and the three lookups built on it (#136). The common
+thread: these results are cached for hours, so a wrong answer is worse than no answer.
+
+### 2026-11-16 — A handshake that times out fails the lookup; it is never a refusal
+
+**Decision.** A handshake has three outcomes: accepted, refused (`rejectedError`: the TCP
+connection opened and the handshake then failed), and unknown (the connection never
+opened, or time ran out). Unknown fails the whole lookup.
+
+**Why.** A failed lookup is retried on the next request. A wrong "TLS 1.3 not accepted"
+sits in the cache for twelve hours, and one lost packet is enough to produce it.
+
+**Instead of.** Counting silence as refusal. Some middleboxes drop offers they dislike
+instead of refusing them, so those hosts fail the lookup every time. That cost was weighed
+and accepted when the endpoint shipped.
+
+### 2026-11-16 — A lookup where nothing was accepted is an error, not an empty result
+
+**Decision.** When every offer is refused the lookup returns `ErrNoHandshake`.
+`IsExpectedError` knows it, so it does not page.
+
+**Why.** "This host accepts no TLS version" cannot be told apart from "this host is
+blocking us", and only the second is common.
+
+**Instead of.** Returning a payload with every `accepted` false, which reads as a finding
+and would be cached as one.
+
+### 2026-11-16 — Every handshake in a lookup goes to one address, and only to port 443
+
+**Decision.** `newSession` resolves once through `domain.Resolver()`, picks one public
+address (IPv4 first), and every handshake in that lookup dials it. The payload reports it
+as `ip`. The port is a constant.
+
+**Why.** A host with several addresses can be configured differently on each; mixing them
+gives a result true of no single server. IPv4 first because a missing IPv6 route on our
+side would be reported as the target's failure. A caller-supplied port turns the endpoint
+into a port prober, which is a product decision and not a parameter.
+
+**Instead of.** Dialing the hostname each time and letting the dialer pick, as `LookupSSL`
+does for its single connection.
+
+### 2026-11-16 — The handshake skips verification; the certificate lookup judges the chain afterwards
+
+**Decision.** Every probe sets `InsecureSkipVerify`. `certificate` then runs
+`x509.Verify` itself and reports `trust_verdict` and `hostname_verdict`. The verification
+error is dropped, never returned. Trust is judged at a moment inside the leaf's validity
+window (now, or the nearest end of the window), using only the certificates the server
+sent.
+
+**Why.** Reporting expired, self-signed and mismatched certificates is the feature;
+verifying in the handshake would turn the answer into an error. The error is dropped
+because `IsExpectedError` deliberately treats x509 failures as ours (they can otherwise
+only come from trusted upstreams), so one escaping would page on every untrusted host a
+customer checks. The clamped time keeps trust and expiry independent: otherwise every
+expired certificate is also untrusted, and "renewal was missed" is indistinguishable from
+"no public CA issued this".
+
+**Instead of.** Verifying at `probed_at`, or fetching missing intermediates the way some
+browsers do. A chain that only verifies after a repair fails in strict clients, which is
+what the caller wants to know.
+
+### 2026-11-16 — The key exchange probe offers default cipher suites; the others offer every suite
+
+**Decision.** `protocols` and `certificate` offer every suite the standard library has,
+insecure ones included. `key_exchange` leaves the default (ECDHE-only) list and checks
+that the negotiated group is the one offered.
+
+**Why.** A legacy server with only RSA key exchange or CBC suites left still speaks TLS,
+and leaving those suites out would report it as refusing. For the group probe the same
+suites are a hazard: a TLS 1.2 server could finish the handshake over RSA key exchange
+without using the group at all, and the group would read as accepted.
+
+**Instead of.** One shared `tls.Config` for all three probes.
+
+### 2026-11-16 — All three encryption lookups are on the free plan
+
+**Decision.** `encryptionLookupMinPlan` gates nothing.
+
+**Why.** Pro gating in this API has meant "spends scarce upstream quota" (`reputation`,
+`threat_intel`). These spend none: measured at about 1 ms of CPU and 60–100 ms of wall time
+per handshake, with the per-plan host cap and rate limit bounding the rest. Gating would be
+a pricing decision, and none has been made.
+
+**Revisit if.** Pricing for the encryption product is decided. It is a one-word change per
+row, and `TestEncryptionLookup_EveryLookupIsFree` is there to make it a deliberate one.
 
 ## HTTP surface and API contract
 
@@ -361,7 +452,9 @@ and were previously answered by the same number.
 
 ### `usage.LookupColumns` is asserted to match `domain.AllLookupNames`
 
-**Decision.** A test fails when they diverge.
+**Decision.** A test fails when they diverge. It compares against the union of every
+catalog (domain, IP, encryption), so a new catalog has to be added to the test as well as
+to `LookupColumns`.
 
 **Why.** A new lookup that nobody added a column for fails loudly in CI rather than silently
 in production, where the symptom is a feature that appears unused forever.
