@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"syscall"
 	"testing"
 
 	"github.com/likexian/whois"
 	whoisparser "github.com/likexian/whois-parser"
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 func TestIsExpectedError_Expected(t *testing.T) {
@@ -48,6 +50,11 @@ func TestIsExpectedError_Expected(t *testing.T) {
 		{"tls record header", tls.RecordHeaderError{Msg: "first record does not look like a TLS handshake"}},
 
 		{"encryption probe refused on every offer", ErrNoHandshake},
+
+		// A caller-chosen name that points at a private address. Refused by
+		// safenet, logged with the host, and not an incident.
+		{"private address refused before dialing", &safenet.BlockedError{IP: netip.MustParseAddr("10.0.0.5")}},
+		{"private address refused at dial time", fmt.Errorf("tls connect: %w", &net.OpError{Op: "dial", Net: "tcp", Err: &safenet.BlockedError{IP: netip.MustParseAddr("127.0.0.1")}})},
 	}
 
 	for _, tt := range tests {

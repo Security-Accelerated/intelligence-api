@@ -31,6 +31,8 @@
       audience: internal
     - text: "`sactl lookup encryption HOST` and an Encryption posture entry in the interactive lookup menu; `sactl usage` prints the host total"
       audience: internal
+    - text: "A lookup refused because its target resolves to a private or reserved address no longer counts toward alerting, on any endpoint. The caller still gets the same error and the refusal is still logged with the host. Where a name points is the caller's choice, so it should not be able to raise alerts"
+      audience: internal
 
 - version: v1.2.0
   date: 2026-11-16

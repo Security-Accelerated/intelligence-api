@@ -328,6 +328,25 @@ hostname and connecting to it.
 **Instead of.** Validating the URL or hostname before the request. A name that resolves to
 a private address passes that check and connects anyway.
 
+### 2026-11-16 — A refused private address is logged, not alerted on
+
+**Decision.** `safenet.BlockedError` is an expected error in `IsExpectedError`. The
+refusal is returned to the caller and logged at warn level with the host; it does not
+count toward the throttle or spike alerts.
+
+**Why.** It was unexpected on purpose, as a possible SSRF probe worth a look. But an
+alert carries a lookup name and a count, never the host or the customer, so the alert
+could not be investigated; the log line can. Meanwhile the trigger is a hostname the
+caller chooses, and names that point at private addresses are common in public DNS
+(internal hosts published by mistake, `localhost.` records, split-DNS leftovers). A
+customer checking a list of someone's subdomains would raise alerts by accident, and
+anyone could raise them on purpose. The encryption endpoint made this sharper, because
+all three of its lookups resolve the host and so fail together.
+
+**Instead of.** Keeping the page as an attack signal. If that signal is wanted, a counter
+of blocked dials in `internal/metrics` is the place for it: it can be graphed and alerted
+on at a threshold that means something, without tying it to the pager.
+
 ### The 404 page never echoes the requested path
 
 **Decision.** `Handler.NotFound` renders a static page. Paths under `/v1` or `/billing` get

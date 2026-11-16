@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 const testHost = "example.com"
@@ -162,6 +164,26 @@ func TestEncryptionLookup_PanicBecomesInternalError(t *testing.T) {
 	}
 	if resp.KeyExchange == nil {
 		t.Error("sibling lookup should be unaffected by the panic")
+	}
+}
+
+// A host that resolves only to private addresses is refused by all three
+// lookups at once. The caller is told why, and no alert is recorded: otherwise
+// a handful of requests naming such a host would page, with nothing in the
+// alert to say who sent them.
+func TestEncryptionLookup_PrivateAddressHostDoesNotAlert(t *testing.T) {
+	rec := &countingRecorder{}
+	blocked := fmt.Errorf("resolve: %w", &safenet.BlockedError{IP: netip.MustParseAddr("10.0.0.5")})
+	svc := newTestEncryptionService(newMockCache(), &encryptionStubs{protocolErr: blocked})
+	svc.alerter = rec
+
+	resp, _ := svc.Lookup(context.Background(), "intranet.example.com", encryptionOpts(domain.LookupProtocolsName))
+
+	if len(resp.Errors) != 1 || resp.Errors[0].Message != "domain resolves to a private/reserved IP address" {
+		t.Fatalf("errors = %+v, want the refusal reported to the caller", resp.Errors)
+	}
+	if rec.count.Load() != 0 {
+		t.Errorf("recorded %d alerts, want 0 for a host that resolves to a private address", rec.count.Load())
 	}
 }
 

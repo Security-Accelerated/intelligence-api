@@ -10,6 +10,7 @@ import (
 
 	"github.com/likexian/whois"
 	whoisparser "github.com/likexian/whois-parser"
+	"github.com/security-accelerated/intelligence-api/internal/safenet"
 )
 
 // expectedWhoisErrors are conditions the WHOIS libraries report about the
@@ -81,6 +82,19 @@ func IsExpectedError(err error) bool {
 	// The encryption probe reached the target and every handshake it offered
 	// was refused. Whatever is listening on 443 does not speak TLS to us.
 	if errors.Is(err, ErrNoHandshake) {
+		return true
+	}
+
+	// The target's name resolves to a private or reserved address and safenet
+	// refused to connect. The guard did its job, and where a name points is a
+	// fact about the name the caller chose. It used to count toward alerts as
+	// a possible SSRF probe, but an alert names a lookup and a count, not the
+	// host or the customer, so it could not be investigated from the alert;
+	// the refusal is logged with the host, and that is where to look. Counting
+	// it also meant a caller could raise alerts at will by submitting such
+	// names, which are common in public DNS without any ill intent.
+	var blocked *safenet.BlockedError
+	if errors.As(err, &blocked) {
 		return true
 	}
 
