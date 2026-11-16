@@ -100,6 +100,25 @@ func TestIPService_InitMetricsMatchesWhatLookupsRecord(t *testing.T) {
 	assertInitMatchesUse(t, before, lookupSeries(t, m))
 }
 
+func TestEncryptionService_InitMetricsMatchesWhatLookupsRecord(t *testing.T) {
+	m := newTestMetrics(t)
+	svc := newTestEncryptionService(newMockCache(), &encryptionStubs{})
+	svc.metrics = m
+	svc.initMetrics()
+	before := lookupSeries(t, m)
+
+	everything := domain.EncryptionLookupOptions{Lookups: domain.AllEncryptionLookupNames}
+	svc.Lookup(context.Background(), testHost, everything)
+	svc.Lookup(context.Background(), testHost, everything)
+
+	after := lookupSeries(t, m)
+	assertInitMatchesUse(t, before, after)
+	// The scope label is what keeps a host's series apart from a domain's.
+	if _, ok := after[`intelligence_api_cache_requests_total{lookup="certificate",result="hit",scope="host"}`]; !ok {
+		t.Errorf("no cache series under scope=host; got %v", after)
+	}
+}
+
 func TestLookupMetrics_CacheHitsAndMisses(t *testing.T) {
 	m := newTestMetrics(t)
 	svc := newTestService(newMockCache())

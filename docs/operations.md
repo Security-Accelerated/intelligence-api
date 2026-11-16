@@ -463,7 +463,7 @@ How to read the labels:
 
 - **`route`** is the route template (`/v1/domain/lookup`), never the path as sent. A request that matched no route is `unmatched`, and a method outside the standard set is `other`, so a scanner cannot create a series per request.
 - **`plan`** is the caller's plan, or `none` for a request with no valid API key (docs pages, health checks, failed authentication).
-- **`scope`** is `domain` or `ip`. It keeps the two `threat_intel` lookups apart.
+- **`scope`** is `domain`, `ip`, or `host` for the encryption endpoint. It keeps the two `threat_intel` lookups apart.
 - **`lookup`** is a name from the lookup catalog. `fingerprint` and `risk` never appear: both are computed from other lookups and are never fetched. A `fingerprint` request shows up as `headers`.
 - **`outcome`** is `ok`, `error` or `timeout`. A fan-out lookup (`reputation`, `threat_intel`) is an `error` when any provider failed, even if it returned a partial result, which is the same line the cache draws when it declines to store one.
 - **Cache hits and coalesced callers are not in the lookup histogram.** It times work that went upstream, so a warm cache does not make a slow provider look fast.

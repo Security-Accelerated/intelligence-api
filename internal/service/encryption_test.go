@@ -55,7 +55,7 @@ func (s *encryptionStubs) install(svc *EncryptionService) {
 
 func newTestEncryptionService(mc *mockCache, stubs *encryptionStubs) *EncryptionService {
 	ttls := map[string]time.Duration{domain.LookupCertificateName: 4 * time.Hour}
-	svc := NewEncryptionService(mc, testDefaultTTL, ttls, 5*time.Second, nil)
+	svc := NewEncryptionService(mc, testDefaultTTL, ttls, 5*time.Second, nil, nil)
 	stubs.install(svc)
 	return svc
 }

@@ -37,7 +37,7 @@ auth (it needs the key) and must be after `c.Next()` so it sees the outcome.
 ## Metrics — `internal/metrics`
 
 One `*metrics.Metrics`, built in `app.go` and passed to the router, the rate limiter
-(`RateLimitConfig.Metrics`) and both services. It is a concrete type, not an interface:
+(`RateLimitConfig.Metrics`) and the three lookup services. It is a concrete type, not an interface:
 there is one implementation, and every recording method is a no-op on a nil pointer, so
 tests pass nil or build their own (each owns its registry; `metricstest` reads one the
 way a scrape does). Recording is always on. `metrics.enabled` only decides whether

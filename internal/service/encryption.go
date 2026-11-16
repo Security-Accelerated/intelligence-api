@@ -7,6 +7,7 @@ import (
 	"github.com/security-accelerated/intelligence-api/internal/cache"
 	"github.com/security-accelerated/intelligence-api/internal/domain"
 	"github.com/security-accelerated/intelligence-api/internal/logging"
+	"github.com/security-accelerated/intelligence-api/internal/metrics"
 	"github.com/security-accelerated/intelligence-api/internal/notifications"
 	"golang.org/x/sync/singleflight"
 )
@@ -25,6 +26,7 @@ type EncryptionService struct {
 	sf              singleflight.Group
 	lookupTimeout   time.Duration
 	alerter         notifications.ErrorRecorder
+	metrics         *metrics.Metrics
 
 	lookupProtocols   func(ctx context.Context, host string) (*domain.ProtocolsInfo, error)
 	lookupKeyExchange func(ctx context.Context, host string) (*domain.KeyExchangeInfo, error)
@@ -36,13 +38,15 @@ type EncryptionService struct {
 // cacheTTLs.
 //
 // lookupTimeout bounds one lookup, which is several handshakes run in turn;
-// domain.EncryptionProbeTimeout bounds each handshake inside it.
+// domain.EncryptionProbeTimeout bounds each handshake inside it. m may be nil,
+// which records no metrics.
 func NewEncryptionService(
 	c cache.Cache,
 	defaultCacheTTL time.Duration,
 	cacheTTLs map[string]time.Duration,
 	lookupTimeout time.Duration,
 	alerter notifications.ErrorRecorder,
+	m *metrics.Metrics,
 ) *EncryptionService {
 	if lookupTimeout <= 0 {
 		lookupTimeout = 30 * time.Second
@@ -50,15 +54,27 @@ func NewEncryptionService(
 	if alerter == nil {
 		alerter = &notifications.NoopRecorder{}
 	}
-	return &EncryptionService{
+	svc := &EncryptionService{
 		cache:             c,
 		defaultCacheTTL:   defaultCacheTTL,
 		cacheTTLs:         cacheTTLs,
 		lookupTimeout:     lookupTimeout,
 		alerter:           alerter,
+		metrics:           m,
 		lookupProtocols:   domain.LookupProtocols,
 		lookupKeyExchange: domain.LookupKeyExchange,
 		lookupCertificate: domain.LookupCertificate,
+	}
+	svc.initMetrics()
+	return svc
+}
+
+// initMetrics creates the metric series for every encryption lookup, so each
+// exists at zero from startup (see metrics.InitLookup for why). All three are
+// cached.
+func (s *EncryptionService) initMetrics() {
+	for _, name := range domain.AllEncryptionLookupNames {
+		s.metrics.InitLookup(scopeHost, name, true)
 	}
 }
 
@@ -125,7 +141,7 @@ func (s *EncryptionService) Lookup(ctx context.Context, host string, opts domain
 		errs:        &resp.Errors,
 		logger:      logging.Logger(),
 		target:      host,
-		targetField: "host",
+		targetField: scopeHost,
 		keyFor:      func(name string) string { return cache.EncryptionLookupKey(host, name) },
 	}
 
@@ -134,6 +150,7 @@ func (s *EncryptionService) Lookup(ctx context.Context, host string, opts domain
 		sf:            &s.sf,
 		lookupTimeout: s.lookupTimeout,
 		ttlFor:        s.ttlFor,
+		metrics:       s.metrics,
 	}, st, s.buildRunners(st, data, opts))
 
 	// A lookup that was not requested or that failed has a nil payload and is

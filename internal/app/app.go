@@ -299,7 +299,7 @@ func Run(logger *zap.Logger, version string) error {
 	if v := cfg.GetDuration("encryption.probe_timeout"); v > 0 {
 		domain.EncryptionProbeTimeout = v
 	}
-	encryptionService := service.NewEncryptionService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("encryption.lookup_timeout"), alerter)
+	encryptionService := service.NewEncryptionService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("encryption.lookup_timeout"), alerter, m)
 
 	// HTTP
 	h := handler.New(handler.Deps{

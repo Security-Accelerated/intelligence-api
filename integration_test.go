@@ -363,7 +363,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	// the target, which no test may do. nosuchhost.example stands in for a
 	// host that fails every lookup.
 	evidence := domain.Evidence{IP: "93.184.216.34", ProbedAt: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
-	encSvc := service.NewEncryptionService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, &notifications.NoopRecorder{})
+	encSvc := service.NewEncryptionService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, &notifications.NoopRecorder{}, nil)
 	encSvc.SetLookups(
 		func(_ context.Context, host string) (*domain.ProtocolsInfo, error) {
 			if host == "nosuchhost.example" {
