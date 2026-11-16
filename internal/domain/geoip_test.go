@@ -50,6 +50,14 @@ func stubDBIP(t *testing.T, release string, body []byte) {
 	t.Cleanup(func() { trustedTransport = origTransport })
 }
 
+// The GeoIP metrics collector relies on this to report "not loaded" instead of
+// a build time of zero.
+func TestGeoIPReader_BuildTime_NothingLoaded(t *testing.T) {
+	if built, ok := NewEmptyGeoIPReader().BuildTime(); ok {
+		t.Errorf("BuildTime on an empty reader = %v, true; want false", built)
+	}
+}
+
 func TestDBIPReleases(t *testing.T) {
 	tests := []struct {
 		now  time.Time

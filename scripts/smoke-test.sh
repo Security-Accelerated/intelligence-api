@@ -599,6 +599,66 @@ echo "=== GeoIP Admin ==="
 post 403 "refresh (pro, forbidden)" /v1/admin/geoip/refresh "$PRO" '{}'
 post 401 "refresh (no key)" /v1/admin/geoip/refresh "" '{}'
 
+echo "=== Metrics ==="
+# The Prometheus endpoint is unauthenticated and protected only by living on a
+# listener of its own. The check that holds against every target, production
+# included, is that the public port does not serve it.
+check 404 "GET /metrics is not served on the public port" "$HOST/metrics"
+
+# The listener itself can only be checked where its port is reachable. The
+# local stack publishes it on loopback; production publishes it nowhere, so
+# against production this is skipped unless SMOKE_METRICS_URL points at a
+# tunnel to it. A skip here is the normal case, so it is not a warning.
+#
+# Last in the script on purpose: the series asserted below exist because of the
+# requests made above.
+METRICS_URL="${SMOKE_METRICS_URL:-}"
+if [ -z "$METRICS_URL" ] && [[ "$HOST" == *"localhost"* || "$HOST" == *"127.0.0.1"* ]]; then
+    METRICS_URL="http://localhost:9091/metrics"
+fi
+
+# check_metric — asserts the captured scrape has a line matching a regex.
+#   $1  description
+#   $2  extended regex matched against each line of $metrics_body
+check_metric() {
+    local desc="$1" pattern="$2"
+    if grep -Eq "$pattern" <<< "$metrics_body"; then
+        printf "  \033[32m✓\033[0m %s\n" "$desc"
+        pass=$((pass + 1))
+    else
+        printf "  \033[31m✗\033[0m %s (no series matching %s)\n" "$desc" "$pattern"
+        fail=$((fail + 1))
+        errors+=("$desc: no series matching $pattern")
+    fi
+}
+
+if [ -z "$METRICS_URL" ]; then
+    printf "  - metrics listener not checked (not reachable from here; set SMOKE_METRICS_URL to check it)\n"
+else
+    check 200 "GET /metrics on the metrics listener" "$METRICS_URL"
+    metrics_body=$(curl -s -m 10 "$METRICS_URL") || true
+    check_metric "build info carries the version" '^intelligence_api_build_info\{.*version="[^"]+"'
+    check_metric "requests are recorded by route template and plan" \
+        '^intelligence_api_http_request_duration_seconds_count\{.*plan="admin".*route="/v1/ip/lookup"'
+    check_metric "unknown paths are recorded as one unmatched route" \
+        '^intelligence_api_http_request_duration_seconds_count\{.*route="unmatched"'
+    # These three series exist at zero from startup, so matching the name alone
+    # would pass on a server that had recorded nothing. Each pattern requires a
+    # value that does not start with 0, which for a count means at least one.
+    #
+    # geo is never cached, so the runs above always fetched it at least once.
+    check_metric "live lookups are timed" \
+        '^intelligence_api_lookup_duration_seconds_count\{lookup="geo",outcome="ok",scope="ip"\} [1-9]'
+    check_metric "cache reads are counted" '^intelligence_api_cache_requests_total\{.*\} [1-9]'
+    if [ -n "$RATELIMIT_KEY" ]; then
+        check_metric "rate-limit rejections are counted" \
+            '^intelligence_api_rate_limit_rejections_total\{plan="free"\} [1-9]'
+    fi
+    check_metric "postgres pool is exported" '^go_sql_open_connections\{db_name="postgres"\}'
+    check_metric "redis pool is exported" '^intelligence_api_redis_pool_connections '
+    check_metric "geoip database state is exported" '^intelligence_api_geoip_database_loaded 1$'
+fi
+
 # Summary
 echo ""
 echo "================================"

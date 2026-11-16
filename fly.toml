@@ -18,6 +18,17 @@ primary_region = 'iad'
   # before this ships, or the home page has no address at all.
   SITE_HOME_HOST = 'securityaccelerated.com'
   SITE_API_HOST = 'api.securityaccelerated.com'
+  # Makes the app serve Prometheus metrics on :9091, which the [metrics]
+  # section below tells Fly to scrape. The two go together: without this
+  # nothing listens there, and without that nothing reads it.
+  METRICS_ENABLED = 'true'
+
+# Fly's managed Prometheus scrapes this port on every machine. It is
+# deliberately not in [http_service]: the endpoint is unauthenticated and must
+# have no public address. See docs/operations.md, "Metrics".
+[metrics]
+  port = 9091
+  path = '/metrics'
 
 [http_service]
   internal_port = 8080

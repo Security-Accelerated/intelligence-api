@@ -1,0 +1,18 @@
+# Local development only: the Prometheus half of the pair in docker-compose.yaml.
+# Production is scraped by Fly's managed Prometheus, configured by the [metrics]
+# section of fly.toml; see docs/operations.md.
+
+global:
+  # Fly scrapes every 15s. Matching it keeps rate() windows on the dashboard
+  # behaving the same here as they will in production.
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: intelligence-api
+    static_configs:
+      - targets: ["api:9091"]
+        labels:
+          # Fly stamps every series with the app's name, and the dashboard
+          # filters on it. Setting one here lets the same dashboard file work
+          # against both.
+          app: intelligence-api

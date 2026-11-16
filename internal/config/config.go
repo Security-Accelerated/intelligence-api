@@ -149,6 +149,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ip.lookup_timeout", "30s")
 	v.SetDefault("ip.max_ips.free", 1)
 	v.SetDefault("ip.max_ips.pro", 20)
+	// The Prometheus endpoint is off unless asked for: enabling it opens a
+	// second listener, which should never appear on an upgrade unannounced.
+	v.SetDefault("metrics.enabled", false)
+	v.SetDefault("metrics.listen_addr", ":9091")
 	v.SetDefault("dns.servers", []string{})
 	v.SetDefault("dns.timeout", "30s")
 }

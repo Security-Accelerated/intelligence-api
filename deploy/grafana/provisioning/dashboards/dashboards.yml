@@ -1,0 +1,11 @@
+# Local development only: loads the committed dashboard from the path
+# docker-compose.yaml mounts it at. Edits made in the UI are not written back;
+# export the JSON and replace deploy/grafana/intelligence-api.json to keep one.
+apiVersion: 1
+
+providers:
+  - name: intelligence-api
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
