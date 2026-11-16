@@ -307,6 +307,10 @@ func (s *shell) lookupMenu(ctx context.Context) error {
 			return s.lookupAction(ctx, "IP", "ips", "/v1/ip/lookup",
 				domain.AllIPLookupNames, defaultIPLookups)
 		}},
+		{"3", "Encryption posture", func(ctx context.Context) error {
+			return s.lookupAction(ctx, "host", "hosts", "/v1/encryption/lookup",
+				domain.AllEncryptionLookupNames, domain.AllEncryptionLookupNames)
+		}},
 	}, "b) Back")
 }
 

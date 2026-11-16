@@ -92,6 +92,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cache.ttl.asn", "24h")
 	v.SetDefault("cache.ttl.reverse_dns", "6h")
 	v.SetDefault("cache.ttl.abuse_contact", "24h")
+	// Encryption lookups. A server's TLS configuration changes rarely; its
+	// certificate is watched more closely because expiry is counted in days.
+	v.SetDefault("cache.ttl.protocols", "12h")
+	v.SetDefault("cache.ttl.key_exchange", "12h")
+	v.SetDefault("cache.ttl.certificate", "4h")
 	v.SetDefault("auth.cache_ttl", "5m")
 	v.SetDefault("auth.rotation_grace", "24h")
 	v.SetDefault("subdomain.http_timeout", "15s")
@@ -149,6 +154,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ip.lookup_timeout", "30s")
 	v.SetDefault("ip.max_ips.free", 1)
 	v.SetDefault("ip.max_ips.pro", 20)
+	// lookup_timeout bounds one encryption lookup, which is several handshakes
+	// run in turn. probe_timeout bounds a single handshake inside it.
+	v.SetDefault("encryption.lookup_timeout", "30s")
+	v.SetDefault("encryption.probe_timeout", "5s")
+	v.SetDefault("encryption.max_hosts.free", 1)
+	v.SetDefault("encryption.max_hosts.pro", 20)
 	// The Prometheus endpoint is off unless asked for: enabling it opens a
 	// second listener, which should never appear on an upgrade unannounced.
 	v.SetDefault("metrics.enabled", false)

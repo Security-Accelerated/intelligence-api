@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Domain and IP intelligence REST API documentation. WHOIS, DNS, SSL, HTTP headers, reputation, email security, subdomains, CT logs, BGP/ASN, fingerprinting, and threat intelligence.">
+<meta name="description" content="Domain, IP, and encryption posture REST API documentation. WHOIS, DNS, SSL, HTTP headers, reputation, email security, subdomains, CT logs, BGP/ASN, fingerprinting, threat intelligence, TLS versions, post-quantum key exchange, and certificate chains.">
 <meta property="og:title" content="Intelligence API Documentation">
-<meta property="og:description" content="Domain and IP intelligence REST API for security triage, enrichment, and automation.">
+<meta property="og:description" content="Domain, IP, and encryption posture REST API for security triage, enrichment, and automation.">
 <meta property="og:type" content="website">
 <title>Intelligence API Documentation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -116,9 +116,11 @@
 
   .hero-metrics small { color: var(--ink-soft); font-size: 13px; }
 
+  /* Two columns for four cards: the three endpoints and the shared contract
+     sit in a 2x2 block instead of leaving one card alone on a second row. */
   .services {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
     margin-top: 24px;
   }
@@ -263,6 +265,7 @@
       <a href="/docs" class="active">Overview</a>
       <a href="/docs/domain">Domain</a>
       <a href="/docs/ip">IP</a>
+      <a href="/docs/encryption">Encryption</a>
       <a href="/docs/account">Account</a>
       <a href="/docs/changelog">Changelog</a>
     </nav>
@@ -285,7 +288,7 @@
     <div class="hero-copy">
       <p class="eyebrow">Documentation</p>
       <h1>Intelligence API</h1>
-      <p>Security Accelerated exposes domain and IP intelligence through a single REST surface tuned for operational triage, enrichment, and automation.</p>
+      <p>Security Accelerated exposes domain intelligence, IP intelligence, and encryption posture through a single REST surface tuned for operational triage, enrichment, and automation.</p>
       <div class="hero-actions">
         <div class="base-url">
           https://api.securityaccelerated.com
@@ -300,9 +303,9 @@
         <p>Built for direct lookup workflows, enrichment jobs, and security automation where latency, limits, and failure modes need to be obvious.</p>
         <ul class="hero-metrics">
           <li>
-            <strong>2</strong>
+            <strong>3</strong>
             <span>Core endpoints</span>
-            <small>Domain and IP intelligence with shared auth and rate limiting.</small>
+            <small>Domain intelligence, IP intelligence, and encryption posture with shared auth and rate limiting.</small>
           </li>
           <li>
             <strong>30m&ndash;24h</strong>
@@ -352,7 +355,7 @@
       <li>Each lookup carries its own <code>cache_hit</code>, so one result can mix cached and freshly fetched fields.</li>
       <li>A lookup that fails does not fail the request. You get <code>200</code>, the field is absent, and the reason is in <code>errors</code>, which is present only when something failed &mdash; see <a href="/docs/domain#errors-field">partial failures</a>.</li>
     </ul>
-    <p>Full reference: <a href="/docs/domain">Domain Intelligence</a> and <a href="/docs/ip">IP Intelligence</a>.</p>
+    <p>Full reference: <a href="/docs/domain">Domain Intelligence</a>, <a href="/docs/ip">IP Intelligence</a>, and <a href="/docs/encryption">Encryption Posture</a>.</p>
   </section>
 
   <section class="services">
@@ -368,9 +371,15 @@
       <div class="service-meta"><span class="method-tag">POST</span><span class="endpoint-path">/v1/ip/lookup</span></div>
       <a href="/docs/ip" class="service-link">Open endpoint reference</a>
     </article>
+    <article class="service-card">
+      <h3>Encryption Posture</h3>
+      <p>Which TLS versions a host accepts, which key exchange groups it accepts including post-quantum ones, and what its certificate chain looks like &mdash; algorithms, expiry, trust, and hostname match &mdash; checked from the outside on port 443.</p>
+      <div class="service-meta"><span class="method-tag">POST</span><span class="endpoint-path">/v1/encryption/lookup</span></div>
+      <a href="/docs/encryption" class="service-link">Open endpoint reference</a>
+    </article>
     <article class="service-card is-overview">
       <h3>Shared contract</h3>
-      <p>Both APIs use the same authentication model, plan gating, JSON error envelope, and request tracing headers, so client integration stays predictable.</p>
+      <p>All three APIs use the same authentication model, plan gating, JSON error envelope, and request tracing headers, so client integration stays predictable.</p>
       <ul>
         <li>Use <code>X-API-Key</code> on every request.</li>
         <li>Pass <code>X-Client-Request-ID</code> for your own trace IDs.</li>
@@ -397,8 +406,10 @@
           <tr><td>Rate limit</td><td>5 req/min</td><td>120 req/min</td></tr>
           <tr><td>Domains per request</td><td>1</td><td>20</td></tr>
           <tr><td>IPs per request</td><td>1</td><td>20</td></tr>
+          <tr><td>Hosts per request (encryption)</td><td>1</td><td>20</td></tr>
           <tr><td>Core lookups (WHOIS, DNS, SSL, headers, GeoIP, ASN, RDNS)</td><td>Yes</td><td>Yes</td></tr>
           <tr><td>Email security, subdomains, CT logs, BGP, fingerprint, DNS security, abuse contact</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Encryption posture (TLS versions, key exchange, certificate)</td><td>Yes</td><td>Yes</td></tr>
           <tr><td>Aggregate risk score (add <code>risk</code> to <code>lookups</code>)</td><td>Yes</td><td>Yes</td></tr>
           <tr><td>Usage statistics + self-service key rotation</td><td>Yes</td><td>Yes</td></tr>
           <tr><td>Reputation, threat intelligence</td><td>-</td><td>Yes</td></tr>
@@ -431,6 +442,7 @@
       <h2>Caching</h2>
       <p>Domain results are cached <strong>per lookup, per domain</strong>, each with its own TTL &mdash; 30 minutes for fast-moving data like <code>dns</code> and <code>headers</code>, up to 24 hours for <code>whois</code> and <code>ct_logs</code>. Every lookup object reports its own <code>cache_hit</code>, so a single result can mix cached and live fields. See the <a href="/docs/domain#caching">Domain Intelligence</a> docs for the full table.</p>
       <p>IP results work the same way, under a separate <code>ip:</code> key namespace &mdash; 24 hours for <code>abuse_contact</code> and <code>asn</code>, 6 hours for <code>reverse_dns</code>, 30 minutes for <code>threat_intel</code>. <code>geo</code> reads a local database and is never cached, so its <code>cache_hit</code> is always <code>false</code>. See the <a href="/docs/ip#caching">IP Intelligence</a> docs.</p>
+      <p>Encryption results are cached per lookup, per host &mdash; 12 hours for <code>protocols</code> and <code>key_exchange</code>, 4 hours for <code>certificate</code>. Each result says when it was observed and which address answered. See the <a href="/docs/encryption#caching">Encryption Posture</a> docs.</p>
     </div>
   </section>
 

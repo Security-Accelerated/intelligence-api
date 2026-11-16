@@ -18,6 +18,9 @@ GET {{host}}/docs/domain
 ### IP Intelligence docs (no auth required)
 GET {{host}}/docs/ip
 
+### Encryption Posture docs (no auth required)
+GET {{host}}/docs/encryption
+
 ### OpenAPI specification (no auth required)
 GET {{host}}/docs/openapi.yaml
 
@@ -403,6 +406,94 @@ X-API-Key: {{adminKey}}
 {
   "ips": ["8.8.8.8", "1.1.1.1"],
   "lookups": ["geo", "asn", "reverse_dns", "abuse_contact"]
+}
+
+### Encryption lookup - all three lookups (admin key)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "hosts": ["example.com"],
+  "lookups": ["protocols", "key_exchange", "certificate"]
+}
+
+### Encryption lookup - every lookup is available on the free plan (free key)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{freeKey}}
+
+{
+  "hosts": ["github.com"],
+  "lookups": ["key_exchange"]
+}
+
+### Encryption lookup - URL and port are stripped; the probe always goes to 443 (pro key)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{proKey}}
+
+{
+  "hosts": ["https://Example.com:8443/path", "example.com", "cloudflare.com"],
+  "lookups": ["certificate"]
+}
+
+### Encryption lookup - expired certificate is a result, not an error (admin key)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "hosts": ["expired.badssl.com"],
+  "lookups": ["certificate"]
+}
+
+### Encryption lookup - should return 400 (lookups missing)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "hosts": ["example.com"]
+}
+
+### Encryption lookup - should return 400 (ssl is a domain-only lookup)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "hosts": ["example.com"],
+  "lookups": ["ssl"]
+}
+
+### Encryption lookup - should return 400 (raw IP)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{adminKey}}
+
+{
+  "hosts": ["93.184.216.34"],
+  "lookups": ["certificate"]
+}
+
+### Encryption lookup - should return 400 (free plan allows one host)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+X-API-Key: {{freeKey}}
+
+{
+  "hosts": ["example.com", "example.org"],
+  "lookups": ["certificate"]
+}
+
+### Encryption lookup - should return 401 (no key)
+POST {{host}}/v1/encryption/lookup
+Content-Type: application/json
+
+{
+  "hosts": ["example.com"],
+  "lookups": ["certificate"]
 }
 
 ### My usage (any plan)

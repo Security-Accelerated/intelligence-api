@@ -116,6 +116,8 @@ func testConfig() *viper.Viper {
 	cfg.Set("domain.max_domains.pro", 20)
 	cfg.Set("ip.max_ips.free", 1)
 	cfg.Set("ip.max_ips.pro", 20)
+	cfg.Set("encryption.max_hosts.free", 1)
+	cfg.Set("encryption.max_hosts.pro", 20)
 	return cfg
 }
 
@@ -139,6 +141,9 @@ var testCacheTTLs = map[string]time.Duration{
 	domain.LookupASNName:           22 * time.Hour,
 	domain.LookupReverseDNSName:    6 * time.Hour,
 	domain.LookupAbuseContactName:  24 * time.Hour,
+	domain.LookupProtocolsName:     12 * time.Hour,
+	domain.LookupKeyExchangeName:   11 * time.Hour,
+	domain.LookupCertificateName:   3 * time.Hour,
 }
 
 // decodeResults unwraps the {"results": [...]} envelope returned by the domain
@@ -160,6 +165,23 @@ func decodeIPResults(t *testing.T, w *httptest.ResponseRecorder) []*domain.IPRes
 		t.Fatalf("failed to unmarshal IP response envelope: %v\nbody: %s", err, w.Body.String())
 	}
 	return env.Results
+}
+
+// decodeEncryptionResults unwraps the {"results": [...]} envelope from the
+// encryption endpoint.
+func decodeEncryptionResults(t *testing.T, w *httptest.ResponseRecorder) []*domain.EncryptionResponse {
+	t.Helper()
+	var env domain.EncryptionResponseEnvelope
+	if err := json.Unmarshal(w.Body.Bytes(), &env); err != nil {
+		t.Fatalf("failed to unmarshal encryption response envelope: %v\nbody: %s", err, w.Body.String())
+	}
+	return env.Results
+}
+
+// encryptionRedisKey returns the namespaced Redis key for a per-lookup
+// encryption cache entry.
+func encryptionRedisKey(host, lookupName string) string {
+	return "intel:" + cache.EncryptionLookupKey(host, lookupName)
 }
 
 // ipRedisKey returns the namespaced Redis key for a per-lookup IP cache entry.
@@ -337,6 +359,50 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 		},
 	)
 
+	// Encryption service with stubs. The real lookups make TLS handshakes to
+	// the target, which no test may do. nosuchhost.example stands in for a
+	// host that fails every lookup.
+	evidence := domain.Evidence{IP: "93.184.216.34", ProbedAt: time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)}
+	encSvc := service.NewEncryptionService(rc, defaultTestTTL, testCacheTTLs, 30*time.Second, &notifications.NoopRecorder{}, nil)
+	encSvc.SetLookups(
+		func(_ context.Context, host string) (*domain.ProtocolsInfo, error) {
+			if host == "nosuchhost.example" {
+				return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+			}
+			return &domain.ProtocolsInfo{
+				Evidence: evidence,
+				Versions: []domain.ProtocolVersion{
+					{Name: "TLS 1.3", Accepted: true}, {Name: "TLS 1.2", Accepted: true},
+					{Name: "TLS 1.1", Accepted: false}, {Name: "TLS 1.0", Accepted: false},
+				},
+			}, nil
+		},
+		func(_ context.Context, _ string) (*domain.KeyExchangeInfo, error) {
+			return &domain.KeyExchangeInfo{
+				Evidence: evidence,
+				Groups: []domain.KeyExchangeGroup{
+					{Name: "X25519MLKEM768", Accepted: true, PostQuantum: true},
+					{Name: "x25519", Accepted: true},
+				},
+				Negotiated: "X25519MLKEM768",
+				Verdict:    domain.KeyExchangePostQuantum,
+			}, nil
+		},
+		func(_ context.Context, _ string) (*domain.CertificateInfo, error) {
+			return &domain.CertificateInfo{
+				Evidence:         evidence,
+				Chain:            []domain.ChainCertificate{{Subject: "example.com", Issuer: "Test CA", KeyAlgorithm: "ECDSA", KeyBits: 256, SignatureAlgorithm: "ECDSA-SHA384"}},
+				SANs:             []string{"example.com"},
+				DaysUntilExpiry:  61,
+				ValidityDays:     90,
+				ExpiryVerdict:    domain.ExpiryValid,
+				AlgorithmVerdict: domain.AlgorithmsClassical,
+				TrustVerdict:     domain.TrustTrusted,
+				HostnameVerdict:  domain.HostnameMatch,
+			}, nil
+		},
+	)
+
 	fpSvc := newStubFingerprintService()
 
 	repo := newStubRepo()
@@ -363,6 +429,7 @@ func setupRouterWithUsage(t *testing.T) (*gin.Engine, *miniredis.Miniredis, *rec
 	h := handler.New(handler.Deps{
 		DomainService:      svc,
 		IPService:          ipSvc,
+		EncryptionService:  encSvc,
 		FingerprintService: fpSvc,
 		UsageService:       usageQ,
 		Config:             cfg,
@@ -2729,5 +2796,211 @@ func TestIntegration_IPLookup_DedupesAndRecordsInputs(t *testing.T) {
 	}
 	if len(google.Inputs) != 2 || google.Inputs[0] != " 8.8.8.8 " {
 		t.Errorf("inputs = %v, want both verbatim entries", google.Inputs)
+	}
+}
+
+// ==================== Encryption Lookup Integration Tests ====================
+
+func postEncryption(t *testing.T, r *gin.Engine, apiKey, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/encryption/lookup", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestIntegration_EncryptionLookup_FullFlow(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	w := postEncryption(t, r, "test-admin-key",
+		`{"hosts":["https://Example.com:8443/path"],"lookups":["protocols","key_exchange","certificate"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	results := decodeEncryptionResults(t, w)
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Host != "example.com" {
+		t.Errorf("host = %q, want the normalized example.com", res.Host)
+	}
+	if res.Protocols == nil || len(res.Protocols.Versions) != 4 {
+		t.Errorf("protocols = %+v, want four versions", res.Protocols)
+	}
+	if res.KeyExchange == nil || res.KeyExchange.Verdict != domain.KeyExchangePostQuantum {
+		t.Errorf("key_exchange = %+v, want a post_quantum verdict", res.KeyExchange)
+	}
+	if res.Certificate == nil || res.Certificate.TrustVerdict != domain.TrustTrusted || res.Certificate.HostnameVerdict != domain.HostnameMatch {
+		t.Errorf("certificate = %+v, want trusted and matching", res.Certificate)
+	}
+	if len(res.Errors) != 0 {
+		t.Errorf("errors = %+v, want none", res.Errors)
+	}
+
+	// The evidence fields are part of every payload on the wire, beside
+	// cache_hit rather than nested under it.
+	var wire struct {
+		Results []struct {
+			Certificate map[string]any `json:"certificate"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &wire); err != nil {
+		t.Fatalf("decode wire shape: %v", err)
+	}
+	for _, field := range []string{"cache_hit", "ip", "probed_at", "chain", "trust_verdict", "hostname_verdict"} {
+		if _, ok := wire.Results[0].Certificate[field]; !ok {
+			t.Errorf("certificate payload is missing %q on the wire", field)
+		}
+	}
+}
+
+func TestIntegration_EncryptionLookup_CachesPerLookupInItsOwnKeyspace(t *testing.T) {
+	r, mr := setupRouter(t)
+	body := `{"hosts":["example.com"],"lookups":["key_exchange","certificate"]}`
+
+	first := decodeEncryptionResults(t, postEncryption(t, r, "test-admin-key", body))
+	if first[0].KeyExchange.CacheHit || first[0].Certificate.CacheHit {
+		t.Error("first request reported a cache hit")
+	}
+
+	for name, want := range map[string]time.Duration{
+		domain.LookupKeyExchangeName: 11 * time.Hour,
+		domain.LookupCertificateName: 3 * time.Hour,
+	} {
+		key := encryptionRedisKey("example.com", name)
+		if !mr.Exists(key) {
+			t.Errorf("expected redis key %s", key)
+			continue
+		}
+		if got := mr.TTL(key); got != want {
+			t.Errorf("%s TTL = %v, want %v", name, got, want)
+		}
+	}
+	// A host is a domain name: the same name on the domain endpoint must not
+	// share an entry with this one.
+	if mr.Exists(redisKey("example.com", domain.LookupCertificateName)) {
+		t.Error("encryption result landed in the domain keyspace")
+	}
+	if mr.Exists(encryptionRedisKey("example.com", domain.LookupProtocolsName)) {
+		t.Error("protocols was cached without being requested")
+	}
+
+	second := decodeEncryptionResults(t, postEncryption(t, r, "test-admin-key", body))
+	if !second[0].KeyExchange.CacheHit || !second[0].Certificate.CacheHit {
+		t.Error("second request was not served from cache")
+	}
+	if !second[0].Certificate.ProbedAt.Equal(first[0].Certificate.ProbedAt) {
+		t.Error("probed_at changed on a cached result; it must report when the handshake was made")
+	}
+}
+
+func TestIntegration_EncryptionLookup_EveryPlanMayUseEveryLookup(t *testing.T) {
+	r, _ := setupRouter(t)
+	body := `{"hosts":["example.com"],"lookups":["protocols","key_exchange","certificate"]}`
+
+	for _, key := range []string{"test-free-key", "test-pro-key", "test-admin-key"} {
+		if w := postEncryption(t, r, key, body); w.Code != http.StatusOK {
+			t.Errorf("%s: status = %d, want 200; body: %s", key, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestIntegration_EncryptionLookup_Rejections(t *testing.T) {
+	r, _ := setupRouter(t)
+
+	tests := []struct {
+		name string
+		key  string
+		body string
+		want int
+	}{
+		{"no key", "", `{"hosts":["example.com"],"lookups":["certificate"]}`, http.StatusUnauthorized},
+		{"unknown key", "nope", `{"hosts":["example.com"],"lookups":["certificate"]}`, http.StatusUnauthorized},
+		{"missing lookups", "test-pro-key", `{"hosts":["example.com"]}`, http.StatusBadRequest},
+		{"domain lookup name", "test-pro-key", `{"hosts":["example.com"],"lookups":["ssl"]}`, http.StatusBadRequest},
+		{"ip lookup name", "test-pro-key", `{"hosts":["example.com"],"lookups":["geo"]}`, http.StatusBadRequest},
+		{"raw ip", "test-pro-key", `{"hosts":["93.184.216.34"],"lookups":["certificate"]}`, http.StatusBadRequest},
+		{"free plan host limit", "test-free-key", `{"hosts":["a.example.com","b.example.com"],"lookups":["certificate"]}`, http.StatusBadRequest},
+		{"invalid body", "test-pro-key", `{`, http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if w := postEncryption(t, r, tt.key, tt.body); w.Code != tt.want {
+				t.Errorf("status = %d, want %d; body: %s", w.Code, tt.want, w.Body.String())
+			}
+		})
+	}
+}
+
+// A failing lookup is reported on its host and leaves the rest of the response
+// intact; an invalid entry among valid ones becomes a validation result.
+func TestIntegration_EncryptionLookup_PartialFailureAndMixedHosts(t *testing.T) {
+	r, mr := setupRouter(t)
+
+	w := postEncryption(t, r, "test-pro-key",
+		`{"hosts":["nosuchhost.example","example.com","localhost"],"lookups":["protocols","certificate"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	byHost := map[string]*domain.EncryptionResponse{}
+	for _, res := range decodeEncryptionResults(t, w) {
+		byHost[res.Host] = res
+	}
+	if len(byHost) != 3 {
+		t.Fatalf("got results for %d hosts, want 3", len(byHost))
+	}
+
+	failed := byHost["nosuchhost.example"]
+	if failed.Protocols != nil || failed.Certificate == nil {
+		t.Errorf("failing host = %+v, want protocols absent and certificate present", failed)
+	}
+	if len(failed.Errors) != 1 || failed.Errors[0].Lookup != domain.LookupProtocolsName || failed.Errors[0].Message != "no such host" {
+		t.Errorf("errors = %+v, want one sanitized protocols error", failed.Errors)
+	}
+	if mr.Exists(encryptionRedisKey("nosuchhost.example", domain.LookupProtocolsName)) {
+		t.Error("a failed lookup was cached")
+	}
+
+	if ok := byHost["example.com"]; ok.Protocols == nil || len(ok.Errors) != 0 {
+		t.Errorf("healthy host = %+v, want protocols and no errors", ok)
+	}
+
+	invalid := byHost["localhost"]
+	if len(invalid.Errors) != 1 || invalid.Errors[0].Lookup != "validation" || invalid.Errors[0].Message != "invalid hostname" {
+		t.Errorf("invalid host errors = %+v, want one validation error", invalid.Errors)
+	}
+}
+
+func TestIntegration_EncryptionLookup_UsageRecordsHostsAndLookups(t *testing.T) {
+	r, _, rec := setupRouterWithUsage(t)
+
+	w := postEncryption(t, r, "test-admin-key",
+		`{"hosts":["example.com","EXAMPLE.com"],"lookups":["protocols","certificate"]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d; body: %s", w.Code, w.Body.String())
+	}
+
+	e := rec.last(t)
+	// Submitted entries, not unique hosts, and not counted as domains.
+	if e.HostCount != 2 || e.DomainCount != 0 || e.IPCount != 0 {
+		t.Errorf("counts = hosts %d, domains %d, ips %d; want 2, 0, 0", e.HostCount, e.DomainCount, e.IPCount)
+	}
+	lookups := slices.Clone(e.Lookups)
+	slices.Sort(lookups)
+	if want := []string{"certificate", "protocols"}; !slices.Equal(lookups, want) {
+		t.Errorf("lookups = %v, want %v", lookups, want)
+	}
+	if e.CacheHits != 0 || e.CacheMisses != 2 {
+		t.Errorf("cache = %d hits, %d misses; want 0 and 2", e.CacheHits, e.CacheMisses)
+	}
+	if e.Path != "/v1/encryption/lookup" {
+		t.Errorf("path = %q", e.Path)
 	}
 }

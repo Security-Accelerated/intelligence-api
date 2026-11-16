@@ -46,6 +46,8 @@ func TestIsExpectedError_Expected(t *testing.T) {
 		{"connection reset", fmt.Errorf("read: %w", syscall.ECONNRESET)},
 
 		{"tls record header", tls.RecordHeaderError{Msg: "first record does not look like a TLS handshake"}},
+
+		{"encryption probe refused on every offer", ErrNoHandshake},
 	}
 
 	for _, tt := range tests {

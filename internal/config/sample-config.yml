@@ -43,6 +43,10 @@ cache:
     asn: 24h
     reverse_dns: 6h
     abuse_contact: 24h
+    # Encryption lookups.
+    protocols: 12h
+    key_exchange: 12h
+    certificate: 4h
 
 auth:
   cache_ttl: 5m
@@ -120,6 +124,14 @@ usage:
 ip:
   lookup_timeout: 30s
   max_ips:
+    free: 1
+    pro: 20
+
+# Encryption posture lookups: TLS handshakes we make to port 443 of each host.
+encryption:
+  lookup_timeout: 30s   # one lookup, which is up to nine handshakes in turn
+  probe_timeout: 5s     # one handshake, TCP connect included
+  max_hosts:
     free: 1
     pro: 20
 

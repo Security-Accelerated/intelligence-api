@@ -17,10 +17,11 @@ import (
 func lookupGroup() group {
 	return group{
 		name:    "lookup",
-		summary: "run domain and IP intelligence lookups",
+		summary: "run domain, IP and encryption lookups",
 		commands: []command{
-			lookupCommandFor("domain", "domains", "/v1/domain/lookup", domain.AllLookupNames, defaultDomainLookups),
-			lookupCommandFor("ip", "ips", "/v1/ip/lookup", domain.AllIPLookupNames, defaultIPLookups),
+			lookupCommandFor("domain", "domain", "domains", "/v1/domain/lookup", domain.AllLookupNames, defaultDomainLookups),
+			lookupCommandFor("ip", "ip", "ips", "/v1/ip/lookup", domain.AllIPLookupNames, defaultIPLookups),
+			lookupCommandFor("encryption", "host", "hosts", "/v1/encryption/lookup", domain.AllEncryptionLookupNames, domain.AllEncryptionLookupNames),
 		},
 	}
 }
@@ -45,11 +46,14 @@ type lookupFlags struct {
 	lookups string
 }
 
-func lookupCommandFor(name, field, path string, all, defaults []string) command {
+// lookupCommandFor builds one `sactl lookup <name>` command. target is what the
+// command takes ("domain", "ip", "host"), which is not always the command's
+// name: the encryption endpoint takes hosts. field is the request body key.
+func lookupCommandFor(name, target, field, path string, all, defaults []string) command {
 	return command{
 		name:    name,
-		summary: "look up one or more " + name + "s",
-		usage:   strings.ToUpper(name) + " [" + strings.ToUpper(name) + "...] [--lookups a,b,c]",
+		summary: "look up one or more " + target + "s",
+		usage:   strings.ToUpper(target) + " [" + strings.ToUpper(target) + "...] [--lookups a,b,c]",
 		flags: func(fs *flag.FlagSet) any {
 			f := &lookupFlags{api: registerAPIFlags(fs)}
 			fs.StringVar(&f.lookups, "lookups", "", fmt.Sprintf(
@@ -60,7 +64,7 @@ func lookupCommandFor(name, field, path string, all, defaults []string) command 
 		run: func(ctx context.Context, cfg any, args []string) error {
 			f := cfg.(*lookupFlags)
 			if len(args) == 0 {
-				return fmt.Errorf("give at least one %s, e.g. sactl lookup %s example.com", name, name)
+				return fmt.Errorf("give at least one %s, e.g. sactl lookup %s example.com", target, name)
 			}
 			names, err := resolveLookupNames(f.lookups, all, defaults)
 			if err != nil {

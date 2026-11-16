@@ -45,6 +45,13 @@ func TestConfig_Defaults(t *testing.T) {
 		{"geoip.city_db", "dbip-city-lite.mmdb"},
 		{"geoip.max_age", "720h"},
 		{"cache.ttl.asn", "24h"},
+		{"encryption.lookup_timeout", "30s"},
+		{"encryption.probe_timeout", "5s"},
+		{"encryption.max_hosts.free", 1},
+		{"encryption.max_hosts.pro", 20},
+		{"cache.ttl.protocols", "12h"},
+		{"cache.ttl.key_exchange", "12h"},
+		{"cache.ttl.certificate", "4h"},
 		{"postgres.sslmode", "require"},
 		// Off by default: turning it on opens a second, unauthenticated listener.
 		{"metrics.enabled", false},

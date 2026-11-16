@@ -16,6 +16,7 @@ var IntContextKeys = []string{
 	"customer_id",
 	"domain_count",
 	"ip_count",
+	"host_count",
 	"error_count",
 	"cache_hits",
 	"cache_misses",

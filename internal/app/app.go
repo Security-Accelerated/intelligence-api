@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"github.com/security-accelerated/intelligence-api/internal/auth"
@@ -28,8 +29,9 @@ func Run(logger *zap.Logger, version string) error {
 	logger = logger.With(zap.String("version", version))
 	cfg := config.Config()
 
-	// Both catalogs, so /info reports the same TTL table the services resolve.
-	lookupNames := append(append([]string{}, domain.AllLookupNames...), domain.AllIPLookupNames...)
+	// Every catalog, so /info reports the same TTL table the services resolve.
+	// A catalog left out here has its cache.ttl.* keys silently ignored.
+	lookupNames := slices.Concat(domain.AllLookupNames, domain.AllIPLookupNames, domain.AllEncryptionLookupNames)
 
 	status := config.NewStatusSnapshot(version, lookupNames)
 
@@ -292,10 +294,18 @@ func Run(logger *zap.Logger, version string) error {
 	// IP intelligence service
 	ipService := service.NewIPService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("ip.lookup_timeout"), geoReader, alerter, ipTIProviders, m)
 
+	// Encryption posture service. The per-handshake timeout is a domain
+	// package var like the other lookup limits above.
+	if v := cfg.GetDuration("encryption.probe_timeout"); v > 0 {
+		domain.EncryptionProbeTimeout = v
+	}
+	encryptionService := service.NewEncryptionService(redisCache, defaultCacheTTL, cacheTTLs, cfg.GetDuration("encryption.lookup_timeout"), alerter, m)
+
 	// HTTP
 	h := handler.New(handler.Deps{
 		DomainService:      domainService,
 		IPService:          ipService,
+		EncryptionService:  encryptionService,
 		FingerprintService: fpService,
 		BillingService:     billingSvc,
 		UsageService:       usageQuerySvc,

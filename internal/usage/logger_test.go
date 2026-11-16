@@ -75,14 +75,16 @@ func TestUsageLogger_FlushInsertsCacheAndLookupColumns(t *testing.T) {
 
 	mock.ExpectExec("INSERT INTO request_log").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
-			"POST", "/v1/domain/lookup", 200, 12, 2, 0, // method..ip_count
+			"POST", "/v1/domain/lookup", 200, 12, 2, 0, 0, // method..host_count
 			3, 1, // cache_hits, cache_misses
 			true, true, false, false, // whois, dns, ssl, headers
 			// reputation, email_security, subdomains, ct_logs, bgp,
 			// fingerprint, threat_intel, dns_security, risk,
-			// geo, asn, reverse_dns, abuse_contact
+			// geo, asn, reverse_dns, abuse_contact,
+			// protocols, key_exchange, certificate
 			false, false, false, false, false, false, false, false, false,
 			false, false, false, false,
+			false, false, false,
 			sqlmock.AnyArg(), // created_at
 		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -109,9 +111,12 @@ func TestLookupColumns_MatchesLookupCatalogs(t *testing.T) {
 	for _, n := range domain.AllIPLookupNames {
 		want[n] = true
 	}
+	for _, n := range domain.AllEncryptionLookupNames {
+		want[n] = true
+	}
 
 	if len(LookupColumns) != len(want) {
-		t.Errorf("LookupColumns has %d entries, the two catalogs union to %d",
+		t.Errorf("LookupColumns has %d entries, the catalogs union to %d",
 			len(LookupColumns), len(want))
 	}
 	for name := range want {
@@ -121,7 +126,7 @@ func TestLookupColumns_MatchesLookupCatalogs(t *testing.T) {
 	}
 	for _, name := range LookupColumns {
 		if !want[name] {
-			t.Errorf("LookupColumns has %q, which is in neither catalog", name)
+			t.Errorf("LookupColumns has %q, which is in no catalog", name)
 		}
 	}
 }

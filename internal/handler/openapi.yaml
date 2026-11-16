@@ -6,7 +6,9 @@ info:
     HTTP header, reputation, email security, subdomain, certificate
     transparency, BGP/ASN, technology fingerprinting, DNS security, and threat
     intelligence lookups for domains, plus GeoIP, ASN, reverse DNS, abuse
-    contact, and threat intelligence lookups for IP addresses.
+    contact, and threat intelligence lookups for IP addresses, and encryption
+    posture lookups for hosts: accepted TLS versions, key exchange groups
+    including post-quantum ones, and the certificate chain.
 
     Authentication is via the `X-API-Key` header. Rate limits are per API key:
     free = 5 requests/min, pro = 120 requests/min.
@@ -139,6 +141,81 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/IPResponse'
+                required:
+                  - results
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/encryption/lookup:
+    post:
+      operationId: encryptionLookup
+      summary: Encryption posture lookup
+      description: |
+        Reports how each host's encryption holds up, from TLS handshakes made
+        to port 443 of the host: which TLS versions it accepts, which key
+        exchange groups (including post-quantum ones), and what certificate
+        chain it presents. Name exactly what you want in the required
+        `lookups` array: nothing runs unless you ask for it. Domain and IP
+        lookup names such as `ssl` return 400 on this endpoint.
+
+        Per-plan limits on the number of hosts per request: free = 1,
+        pro = 20. The limit counts the entries you submit, before
+        deduplication. All three lookups are available on every plan.
+
+        A host may be written as a bare name, a URL, or `host:port`. It is
+        reduced to a lowercase hostname: scheme, credentials, port, path and a
+        trailing dot are stripped. The port is always 443, whatever was
+        written. IP addresses are not accepted, and a host that resolves only
+        to private or reserved addresses is refused.
+
+        Results are returned in a `results` envelope, one element per unique
+        hostname. Match results by the `host` field rather than by array
+        position.
+
+        A lookup either returns a complete answer or fails. If any one
+        handshake times out the lookup fails rather than reporting that offer
+        as refused, and the failure is not cached. An untrusted, expired or
+        mismatched certificate is not a failure: it is reported in the
+        `certificate` verdicts.
+      parameters:
+        - $ref: '#/components/parameters/ClientRequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptionRequest'
+      responses:
+        '200':
+          description: |
+            One result per unique host. Hosts that fail validation (when the
+            request contains more than one host) are returned with a
+            `validation` entry in `errors`.
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/XRequestID'
+            X-Client-Request-ID:
+              $ref: '#/components/headers/XClientRequestID'
+            X-RateLimit-Limit:
+              $ref: '#/components/headers/XRateLimitLimit'
+            X-RateLimit-Remaining:
+              $ref: '#/components/headers/XRateLimitRemaining'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EncryptionResponse'
                 required:
                   - results
         '400':
@@ -1168,6 +1245,259 @@ components:
           type: string
         email:
           type: string
+    EncryptionRequest:
+      type: object
+      properties:
+        hosts:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: >
+            Hostnames to look up. Each is reduced to a lowercase hostname
+            before use, so entries that reduce to the same hostname are
+            deduplicated into one result; plan limits count the entries you
+            submit. The port is always 443. IP addresses are not accepted.
+          examples:
+            - ["example.com"]
+        lookups:
+          type: array
+          items:
+            type: string
+            enum: [protocols, key_exchange, certificate]
+          minItems: 1
+          description: >
+            Which lookups to run. Required and must be non-empty. Domain and
+            IP lookup names such as ssl return 400 on this endpoint.
+          examples:
+            - ["key_exchange", "certificate"]
+      required:
+        - hosts
+        - lookups
+    EncryptionResponse:
+      type: object
+      properties:
+        host:
+          type: string
+          description: >
+            The normalized hostname this result applies to. Match results by
+            this field: array position is not part of the contract.
+        inputs:
+          type: array
+          items:
+            type: string
+          description: >
+            The verbatim request entries that normalized to this host.
+        protocols:
+          $ref: '#/components/schemas/ProtocolsInfo'
+        key_exchange:
+          $ref: '#/components/schemas/KeyExchangeInfo'
+        certificate:
+          $ref: '#/components/schemas/CertificateInfo'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/LookupError'
+          description: Per-lookup failures; the rest of the response is still populated.
+      required:
+        - host
+        - inputs
+    ProtocolsInfo:
+      type: object
+      properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
+        ip:
+          type: string
+          description: >
+            The address every handshake in this lookup went to. A host with
+            several addresses can be configured differently on each.
+        probed_at:
+          type: string
+          format: date-time
+          description: When the handshakes were made. Earlier than the request for a cached result.
+        versions:
+          type: array
+          description: One entry per TLS version tested, newest first.
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                enum: ["TLS 1.3", "TLS 1.2", "TLS 1.1", "TLS 1.0"]
+              accepted:
+                type: boolean
+            required:
+              - name
+              - accepted
+        legacy_accepted:
+          type: boolean
+          description: True when the host accepts TLS 1.0 or TLS 1.1, both deprecated by RFC 8996.
+      required:
+        - cache_hit
+        - ip
+        - probed_at
+        - versions
+        - legacy_accepted
+    KeyExchangeInfo:
+      type: object
+      properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
+        ip:
+          type: string
+          description: The address every handshake in this lookup went to.
+        probed_at:
+          type: string
+          format: date-time
+          description: When the handshakes were made. Earlier than the request for a cached result.
+        groups:
+          type: array
+          description: One entry per key exchange group tested, post-quantum first.
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: The IANA TLS Supported Groups name.
+                enum:
+                  - X25519MLKEM768
+                  - SecP256r1MLKEM768
+                  - SecP384r1MLKEM1024
+                  - MLKEM1024
+                  - x25519
+                  - secp256r1
+                  - secp384r1
+                  - secp521r1
+              accepted:
+                type: boolean
+              post_quantum:
+                type: boolean
+            required:
+              - name
+              - accepted
+              - post_quantum
+        negotiated:
+          type: string
+          description: >
+            The group the host chose when offered all of them at once,
+            post-quantum first. Absent if that combined offer was refused.
+        verdict:
+          type: string
+          enum: [post_quantum, classical]
+          description: >
+            post_quantum if the host accepts at least one post-quantum group.
+            This reports support, not what every connection gets: a client
+            has to negotiate one of those groups to be protected, and
+            negotiated shows what the host picks when offered all of them. It
+            says nothing about the certificate, which has its own verdicts.
+      required:
+        - cache_hit
+        - ip
+        - probed_at
+        - groups
+        - verdict
+    CertificateInfo:
+      type: object
+      properties:
+        cache_hit:
+          type: boolean
+          description: True when this lookup was served from cache.
+        ip:
+          type: string
+          description: The address the handshake went to.
+        probed_at:
+          type: string
+          format: date-time
+          description: When the handshake was made. Earlier than the request for a cached result.
+        chain:
+          type: array
+          description: The certificates the host sent, leaf first.
+          items:
+            $ref: '#/components/schemas/ChainCertificate'
+        sans:
+          type: array
+          items:
+            type: string
+          description: The hostnames the leaf covers.
+        days_until_expiry:
+          type: integer
+          description: Whole days until the leaf expires, as of probed_at. Negative once expired.
+        validity_days:
+          type: integer
+          description: The leaf's total lifetime in days.
+        expiry_verdict:
+          type: string
+          enum: [valid, expired, not_yet_valid]
+        algorithm_verdict:
+          type: string
+          enum: [post_quantum, classical, weak, unknown]
+          description: >
+            The weakest key or signature algorithm found anywhere in the chain.
+            A self-signed certificate's own signature is not scored.
+        trust_verdict:
+          type: string
+          enum: [trusted, untrusted]
+          description: >
+            Whether the chain the host sent leads to a root in the public trust
+            store. Nothing is fetched to repair a chain, so a missing
+            intermediate is untrusted. Judged apart from the leaf's validity
+            dates: an expired certificate from a public CA is expired and
+            trusted.
+        hostname_verdict:
+          type: string
+          enum: [match, mismatch]
+          description: >
+            Whether the leaf's subject alternative names cover the host that
+            was asked about. The common name is not consulted.
+      required:
+        - cache_hit
+        - ip
+        - probed_at
+        - chain
+        - days_until_expiry
+        - validity_days
+        - expiry_verdict
+        - algorithm_verdict
+        - trust_verdict
+        - hostname_verdict
+    ChainCertificate:
+      type: object
+      properties:
+        subject:
+          type: string
+          description: The common name, or the full distinguished name when there is none.
+        issuer:
+          type: string
+        not_before:
+          type: string
+          format: date-time
+        not_after:
+          type: string
+          format: date-time
+        key_algorithm:
+          type: string
+          examples:
+            - ECDSA
+        key_bits:
+          type: integer
+          description: Public key size in bits. Omitted when the algorithm has no single size.
+        signature_algorithm:
+          type: string
+          examples:
+            - ECDSA-SHA384
+        self_signed:
+          type: boolean
+      required:
+        - subject
+        - issuer
+        - not_before
+        - not_after
+        - key_algorithm
+        - signature_algorithm
+        - self_signed
     UsageSummary:
       type: object
       properties:
@@ -1185,6 +1515,9 @@ components:
           type: integer
         total_ips:
           type: integer
+        total_hosts:
+          type: integer
+          description: Hosts submitted to the encryption endpoint, counting duplicates.
         status_codes:
           type: object
           additionalProperties:
@@ -1218,6 +1551,7 @@ components:
         - avg_latency_ms
         - total_domains
         - total_ips
+        - total_hosts
         - status_codes
         - feature_usage
         - requests_by_path

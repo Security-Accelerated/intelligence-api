@@ -65,6 +65,10 @@ Config values:
 | `ip.lookup_timeout` | `30s` | Overall timeout for all concurrent IP lookups |
 | `ip.max_ips.free` | `1` | Maximum IPs per request for free plan |
 | `ip.max_ips.pro` | `20` | Maximum IPs per request for pro plan |
+| `encryption.lookup_timeout` | `30s` | Timeout for one encryption lookup, which is up to nine handshakes run in turn |
+| `encryption.probe_timeout` | `5s` | Timeout for a single handshake inside a lookup, TCP connect included |
+| `encryption.max_hosts.free` | `1` | Maximum hosts per encryption request for free plan |
+| `encryption.max_hosts.pro` | `20` | Maximum hosts per encryption request for pro plan |
 | `domain.lookup_timeout` | `30s` | Overall timeout for all concurrent lookups per domain |
 | `domain.max_domains.free` | `1` | Maximum domains per request for free plan |
 | `domain.max_domains.pro` | `20` | Maximum domains per request for pro plan |
@@ -127,6 +131,7 @@ The `migrations/` directory contains SQL files that are automatically applied wh
 - `015_request_log_ip_lookups.sql` — adds `geo`/`asn`/`reverse_dns`/`abuse_contact` columns now that IP lookups are individually selectable
 - `016_drop_request_log_cache_hit.sql` — drops the superseded `cache_hit` column. **Apply only after a build that no longer writes it (v0.55.0+) is deployed** — see below
 - `017_merge_basic_into_pro.sql` — moves any `basic` customer to `pro` and resets the `plan` column default from `basic` to `free`. **Apply before deploying the build that removes the plan (v0.73.0+)** — a surviving `basic` row is an unrecognized plan to that build and reads as `free` until this runs
+- `018_request_log_encryption.sql` — adds `host_count` and the `protocols`/`key_exchange`/`certificate` columns for the encryption endpoint. **Apply before deploying the build that adds the endpoint**: that build names these columns in every usage insert, for every endpoint, so without them usage logging fails until the migration runs (requests are still served)
 - `seed.sql` — inserts test customers (admin, pro, free) with hashed keys
 
 API keys are stored as SHA-256 hashes. When inserting a key manually, hash it first:
@@ -330,6 +335,7 @@ scripted and CI use:
 sactl                                        # interactive menu
 sactl lookup domain example.com --lookups dns,ssl,risk
 sactl lookup ip 8.8.8.8 --lookups all
+sactl lookup encryption example.com --lookups key_exchange,certificate
 sactl customer list
 sactl customer create --name "Acme" --plan pro --email ops@acme.com
 sactl customer plan --id 12 --plan pro
@@ -457,7 +463,7 @@ How to read the labels:
 
 - **`route`** is the route template (`/v1/domain/lookup`), never the path as sent. A request that matched no route is `unmatched`, and a method outside the standard set is `other`, so a scanner cannot create a series per request.
 - **`plan`** is the caller's plan, or `none` for a request with no valid API key (docs pages, health checks, failed authentication).
-- **`scope`** is `domain` or `ip`. It keeps the two `threat_intel` lookups apart.
+- **`scope`** is `domain`, `ip`, or `host` for the encryption endpoint. It keeps the two `threat_intel` lookups apart.
 - **`lookup`** is a name from the lookup catalog. `fingerprint` and `risk` never appear: both are computed from other lookups and are never fetched. A `fingerprint` request shows up as `headers`.
 - **`outcome`** is `ok`, `error` or `timeout`. A fan-out lookup (`reputation`, `threat_intel`) is an `error` when any provider failed, even if it returned a partial result, which is the same line the cache draws when it declines to store one.
 - **Cache hits and coalesced callers are not in the lookup histogram.** It times work that went upstream, so a warm cache does not make a slow provider look fast.

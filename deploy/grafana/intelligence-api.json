@@ -88,11 +88,11 @@
     },
     {
       "id": 4, "type": "stat", "title": "Lookup p95",
-      "description": "95th percentile latency of POST /v1/domain/lookup and POST /v1/ip/lookup, as the caller sees it.",
+      "description": "95th percentile latency of POST /v1/domain/lookup, POST /v1/ip/lookup and POST /v1/encryption/lookup, as the caller sees it.",
       "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
-        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip)/lookup\"}[$__rate_interval])))" }
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip|encryption)/lookup\"}[$__rate_interval])))" }
       ],
       "fieldConfig": { "defaults": { "unit": "s", "decimals": 2 }, "overrides": [] },
       "options": { "colorMode": "none", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
@@ -150,13 +150,13 @@
     },
     {
       "id": 12, "type": "timeseries", "title": "Lookup endpoint latency",
-      "description": "Request latency of the two lookup endpoints, end to end. The per-lookup fetch times are in the Lookups row.",
+      "description": "Request latency of the three lookup endpoints, end to end. The per-lookup fetch times are in the Lookups row.",
       "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
-        { "refId": "A", "legendFormat": "p50 {{route}}", "expr": "histogram_quantile(0.50, sum by (le, route) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip)/lookup\"}[$__rate_interval])))" },
-        { "refId": "B", "legendFormat": "p95 {{route}}", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip)/lookup\"}[$__rate_interval])))" },
-        { "refId": "C", "legendFormat": "p99 {{route}}", "expr": "histogram_quantile(0.99, sum by (le, route) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip)/lookup\"}[$__rate_interval])))" }
+        { "refId": "A", "legendFormat": "p50 {{route}}", "expr": "histogram_quantile(0.50, sum by (le, route) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip|encryption)/lookup\"}[$__rate_interval])))" },
+        { "refId": "B", "legendFormat": "p95 {{route}}", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip|encryption)/lookup\"}[$__rate_interval])))" },
+        { "refId": "C", "legendFormat": "p99 {{route}}", "expr": "histogram_quantile(0.99, sum by (le, route) (rate(intelligence_api_http_request_duration_seconds_bucket{app=~\"$app\",instance=~\"$instance\",route=~\"/v1/(domain|ip|encryption)/lookup\"}[$__rate_interval])))" }
       ],
       "fieldConfig": { "defaults": { "unit": "s", "min": 0 }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }

@@ -4,6 +4,7 @@ paths:
   - "internal/safenet/**"
   - "internal/handler/domain.go"
   - "internal/handler/ip.go"
+  - "internal/handler/encryption.go"
   - "internal/handler/fingerprint.go"
   - "internal/handler/geoip_admin.go"
 ---
@@ -38,6 +39,39 @@ envelope. `internal/handler/ip.go` validates with `netip.ParseAddr`, rejects
 non-globally-routable addresses, and gates `threat_intel` to pro/admin. `ipLookupMinPlan`
 is a separate table — `whois` is valid for a domain and a 400 for an IP. Keys live under
 `ip:`, so `threat_intel` on the two endpoints cannot collide.
+
+## Encryption lookups use it too, and the probe has rules of its own
+
+`/v1/encryption/lookup` takes `hosts` and the same `lookups` array. `encryptionLookupMinPlan`
+in `internal/handler/encryption.go` is a third table (all free: the lookups spend no
+upstream quota). Hosts go through `normalizeDomain`/`groupDomains` unchanged, so the port a
+caller writes is dropped. Keys live under `encryption:`. Types are in
+`internal/domain/encryption_model.go`; the catalog is `AllEncryptionLookupNames`.
+
+The probe is `internal/domain/encryption_probe.go`. Each rule below is a way to return a
+wrong answer that would then be cached for hours (`docs/decisions.md`, "The encryption
+probe"):
+
+- **A handshake has three outcomes: accepted, refused, unknown.** Refused (`rejectedError`)
+  means the TCP connection opened and the handshake then failed. A connect failure or a
+  timeout is unknown, and unknown fails the lookup. Never record it as a refusal.
+- **A lookup where nothing was accepted returns `ErrNoHandshake`**, not a result saying the
+  host accepts nothing.
+- **All handshakes in one lookup go to one address**, picked once in `newSession` after
+  resolving through `domain.Resolver()`.
+- **Port 443 only, hostnames only.** A caller-supplied port makes this a port prober.
+- **`InsecureSkipVerify` during the handshake, on purpose**, as in `LookupSSL`. The
+  `certificate` lookup judges the chain *afterwards* (`trustVerdict`, `hostnameVerdict`) and
+  reports verdicts. The x509 error is dropped there and must never be returned as the
+  lookup's error: `IsExpectedError` treats x509 failures as ours and they page.
+- **The key exchange probe uses default (ECDHE-only) cipher suites and checks the negotiated
+  group**; the other two offer every suite so legacy servers still answer, and every group
+  (`everyGroup()`), because the standard library's default offer leaves some out and a
+  server requiring one of those would read as refusing TLS.
+- Every connection goes through `safenet.SafeDialer`.
+
+Tests aim a `session` at TLS servers on loopback with an empty trust store; nothing touches
+the network.
 
 ## Resolver — never `net.DefaultResolver`
 

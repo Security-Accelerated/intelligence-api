@@ -86,6 +86,10 @@ type LookupConfig struct {
 	IPTimeout            string `json:"ip_timeout"`
 	MaxIPsFree           int    `json:"max_ips_free"`
 	MaxIPsPro            int    `json:"max_ips_pro"`
+	EncryptionTimeout    string `json:"encryption_timeout"`
+	EncryptionProbe      string `json:"encryption_probe_timeout"`
+	MaxHostsFree         int    `json:"max_hosts_free"`
+	MaxHostsPro          int    `json:"max_hosts_pro"`
 }
 
 type ServicesStatus struct {
@@ -208,6 +212,10 @@ func NewStatusSnapshot(version string, lookupNames []string) *StatusSnapshot {
 			IPTimeout:            cfg.GetDuration("ip.lookup_timeout").String(),
 			MaxIPsFree:           cfg.GetInt("ip.max_ips.free"),
 			MaxIPsPro:            cfg.GetInt("ip.max_ips.pro"),
+			EncryptionTimeout:    cfg.GetDuration("encryption.lookup_timeout").String(),
+			EncryptionProbe:      cfg.GetDuration("encryption.probe_timeout").String(),
+			MaxHostsFree:         cfg.GetInt("encryption.max_hosts.free"),
+			MaxHostsPro:          cfg.GetInt("encryption.max_hosts.pro"),
 		},
 	}
 }

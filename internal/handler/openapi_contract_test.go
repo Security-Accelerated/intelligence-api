@@ -46,6 +46,7 @@ func TestOpenAPIMatchesLookupContract(t *testing.T) {
 	}{
 		{"DomainRequest", "domains", domain.AllLookupNames},
 		{"IPRequest", "ips", domain.AllIPLookupNames},
+		{"EncryptionRequest", "hosts", domain.AllEncryptionLookupNames},
 	} {
 		t.Run(tc.schema, func(t *testing.T) {
 			sch, ok := doc.Components.Schemas[tc.schema]

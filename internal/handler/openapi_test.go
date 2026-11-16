@@ -63,6 +63,7 @@ func TestOpenAPISpec_ValidYAMLWithExpectedPaths(t *testing.T) {
 	for _, want := range []string{
 		"/v1/domain/lookup",
 		"/v1/ip/lookup",
+		"/v1/encryption/lookup",
 		"/v1/usage",
 		"/v1/keys/rotate",
 	} {

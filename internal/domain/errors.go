@@ -78,6 +78,12 @@ func IsExpectedError(err error) bool {
 		return true
 	}
 
+	// The encryption probe reached the target and every handshake it offered
+	// was refused. Whatever is listening on 443 does not speak TLS to us.
+	if errors.Is(err, ErrNoHandshake) {
+		return true
+	}
+
 	// TLS handshake failures below the certificate layer — a target that is not
 	// speaking TLS on 443, or speaking it badly. That is a finding about them.
 	var recordErr tls.RecordHeaderError
@@ -102,10 +108,12 @@ func IsExpectedError(err error) bool {
 
 	// Certificate *verification* failures are deliberately NOT expected.
 	//
-	// Everything that touches an arbitrary target domain — LookupSSL, and the
-	// headers lookup via safeTransport — sets
+	// Everything that touches an arbitrary target domain — LookupSSL, the
+	// encryption probe, and the headers lookup via safeTransport — sets
 	// InsecureSkipVerify, precisely so it can inspect expired and self-signed
-	// certificates. So an x509 error cannot come from a target. It can only
+	// certificates. The certificate lookup does verify the chain afterwards,
+	// but it reports the outcome as a verdict and discards the error (see
+	// trustVerdict). So an x509 error cannot come from a target. It can only
 	// come from trustedTransport, which is used solely for crt.sh, RDAP,
 	// VirusTotal, URLhaus and AlienVault OTX — services with valid public
 	// certificates.

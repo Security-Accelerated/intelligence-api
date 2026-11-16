@@ -17,16 +17,19 @@ import (
 )
 
 // Shared machinery for services that cache and coalesce individual lookups
-// rather than whole response documents. Both DomainService and IPService build
-// a []lookupRunner and hand it to runLookups; everything about which lookups
-// exist, how they are fetched and how the response is assembled stays in the
-// owning service.
+// rather than whole response documents. DomainService, IPService and
+// EncryptionService each build a []lookupRunner and hand it to runLookups;
+// everything about which lookups exist, how they are fetched and how the
+// response is assembled stays in the owning service.
 
-// The two kinds of target. Each is a runState's targetField, which names the
-// target in log output and is the "scope" label on every lookup metric.
+// The kinds of target. Each is a runState's targetField, which names the
+// target in log output and is the "scope" label on every lookup metric. The
+// encryption endpoint's is "host" because that is what its target is called in
+// the request and the response.
 const (
 	scopeDomain = "domain"
 	scopeIP     = "ip"
+	scopeHost   = "host"
 )
 
 // lookupRunner is one cacheable lookup for one target: how to decode a payload

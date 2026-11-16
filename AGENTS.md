@@ -4,8 +4,10 @@ Domain and IP intelligence REST API in Go with Gin. Concurrent WHOIS, DNS, SSL, 
 headers, reputation, email security (SPF/DKIM/DMARC/MTA-STS/TLS-RPT/BIMI),
 subdomains, certificate transparency, BGP/ASN, technology fingerprinting, threat
 intelligence, and DNS security (DNSSEC/CAA) for domains, plus an aggregate risk score. IP
-lookups: GeoIP, ASN, reverse DNS, RDAP abuse contact, threat intelligence. Results are
-cached per lookup in Redis with singleflight coalescing; failures are never cached. Auth is
+lookups: GeoIP, ASN, reverse DNS, RDAP abuse contact, threat intelligence. Encryption
+lookups for hosts, from TLS handshakes the API makes itself to port 443: accepted TLS
+versions, key exchange groups including post-quantum ones, and the certificate chain.
+Results are cached per lookup in Redis with singleflight coalescing; failures are never cached. Auth is
 API-key based with PostgreSQL; customers self-rotate keys and query their own usage.
 OpenAPI 3.1 at `/docs/openapi.yaml`.
 

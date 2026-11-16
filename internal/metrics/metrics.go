@@ -84,7 +84,7 @@ func New(version string) (*Metrics, error) {
 		lookupDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Name:      "lookup_duration_seconds",
-			Help:      "Duration of live lookup fetches by scope (domain or ip), lookup and outcome (ok, error, timeout). Cache hits and coalesced callers are not observed. The _count series is the outcome count.",
+			Help:      "Duration of live lookup fetches by scope (domain, ip or host), lookup and outcome (ok, error, timeout). Cache hits and coalesced callers are not observed. The _count series is the outcome count.",
 			Buckets:   lookupBuckets,
 		}, []string{"scope", "lookup", "outcome"}),
 		cacheRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -177,8 +177,9 @@ func (m *Metrics) ObserveHTTP(route, method, plan string, status int, d time.Dur
 }
 
 // ObserveLookup records one live fetch of a lookup: how long it took and how
-// it ended (OutcomeOK, OutcomeError or OutcomeTimeout). scope is "domain" or
-// "ip", which keeps the two threat_intel lookups apart.
+// it ended (OutcomeOK, OutcomeError or OutcomeTimeout). scope is "domain",
+// "ip" or "host" (the encryption endpoint), which keeps the two threat_intel
+// lookups apart.
 func (m *Metrics) ObserveLookup(scope, lookup, outcome string, d time.Duration) {
 	if m == nil {
 		return
