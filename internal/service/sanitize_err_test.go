@@ -173,11 +173,14 @@ func TestIsExpectedError_InfraError_NotExpected(t *testing.T) {
 	}
 }
 
-func TestIsExpectedError_BlockedError_NotExpected(t *testing.T) {
-	// SSRF blocks are unexpected — they indicate a domain resolved to a private IP,
-	// which may warrant investigation.
+// A name that resolves to a private address is refused and logged, and it is
+// not an incident. This was the other way round until the encryption endpoint
+// made the consequence plain: a caller could raise alerts at will by
+// submitting such names, and the alert could not say which host or customer.
+// See docs/decisions.md before flipping it back.
+func TestIsExpectedError_BlockedError_Expected(t *testing.T) {
 	err := &safenet.BlockedError{IP: netip.MustParseAddr("127.0.0.1")}
-	if isExpectedError(err) {
-		t.Error("safenet.BlockedError should NOT be expected")
+	if !isExpectedError(err) {
+		t.Error("safenet.BlockedError should be expected: it must not count toward alerting")
 	}
 }
