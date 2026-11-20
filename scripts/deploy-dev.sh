@@ -35,6 +35,18 @@ fi
 # (.env included, .dockerignore does not exclude it) goes wherever the build runs.
 local_docker() { BUILDX_BUILDER=default docker --context default "$@"; }
 
+# DOCKER_HOST is the remaining way to move the build: the `default` context is
+# whatever that variable points at. A unix socket is still this machine (rootless
+# Docker, Colima), so it is left alone rather than unset; anything else is refused.
+case "${DOCKER_HOST:-}" in
+    "" | unix://*) ;;
+    *)
+        echo "error: DOCKER_HOST=$DOCKER_HOST points at another machine's engine" >&2
+        echo "       the build would send it the source and .env; unset it and run again" >&2
+        exit 1
+        ;;
+esac
+
 REMOTE_DIR_Q=$(printf '%q' "$REMOTE_DIR")
 # The timeouts are on the ssh process itself. A limit on the command run over
 # there does nothing for a connection that never completes or a session that
