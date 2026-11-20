@@ -39,7 +39,7 @@ internal/config/         Viper, YAML + env overrides, StatusSnapshot
 migrations/              PostgreSQL schema
 deploy/                  Grafana dashboard (deploy/grafana/intelligence-api.json), plus the
                          Prometheus and Grafana config the local Compose stack mounts
-scripts/                 docker-reset.sh, smoke-test.sh, status.sh, info.sh — dev only
+scripts/                 docker-reset.sh, deploy-dev.sh, smoke-test.sh, status.sh, info.sh — dev only
 changelog.yaml           symlink to internal/handler/changelog.yaml; edit from the root
 ```
 
@@ -78,6 +78,11 @@ open the file.
   `SMOKE_FREE_KEYS`) because the limiter is per key per minute, and reserves
   `SMOKE_RATELIMIT_KEY` for the rate-limit check, which must exhaust one key's window;
   without it that check is skipped, not run wrongly.
+- `./scripts/deploy-dev.sh <ssh-host>` — **dev only**: builds the image here, ships it, and
+  runs the Compose stack on another Docker host. Source and `.env` stay here; never
+  replace it with `docker compose up --build` against a remote context, which sends both.
+  Smoke-test that host through an SSH tunnel to `localhost:8080`, since any other host
+  makes the smoke test load the production keys from `.env`.
 - `./scripts/docker-reset.sh` bounds its readiness wait with `RESET_TIMEOUT` (300s) and
   names the dependency that timed out. `./scripts/status.sh` checks Fly machine state and
   endpoint reachability.
