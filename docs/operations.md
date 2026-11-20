@@ -160,6 +160,37 @@ It also starts Prometheus and Grafana, so the dashboard can be checked against r
 | `http://localhost:9090` | Prometheus, scraping the API every 15s |
 | `http://localhost:3000` | Grafana, no login, opening on the Intelligence API dashboard |
 
+### Run the dev stack on another Docker host
+
+For a workstation that builds but does not run the stack. `scripts/deploy-dev.sh` builds the API image here, ships it over SSH, and starts the same Compose stack on the other machine:
+
+```sh
+./scripts/deploy-dev.sh <ssh-host>      # or: DEV_DEPLOY_HOST=<ssh-host>
+```
+
+Only the image and the files Compose bind-mounts (`docker-compose.yaml`, `migrations/`, `deploy/`) reach the host, under `~/docker/intelligence-api`. The source tree and `.env` stay here. The script waits for `/v1/health` and then checks that the running container holds the image it just built.
+
+The host needs Docker with the Compose plugin, key-based SSH, and the config file, installed once:
+
+```sh
+ssh <ssh-host> 'sudo mkdir -p /etc/security-accelerated && sudo tee /etc/security-accelerated/intelligence-api.yaml >/dev/null' < internal/config/sample-config.yml
+```
+
+| Variable | Default | What |
+|----------|---------|------|
+| `DEV_DEPLOY_HOST` | — | SSH host, when not given as the argument |
+| `DEV_DEPLOY_DIR` | `docker/intelligence-api` | Directory on the host, relative to the SSH user's home |
+| `DEPLOY_TIMEOUT` | `120` | Seconds to wait for the API to answer |
+
+Things to know:
+
+- **Migrations are not re-applied.** As with a local stack, Postgres reads `migrations/` only when its volume is first created. Apply a new one by hand, or remove the volume on the host.
+- **The API is on the host's network.** Port 8080 is published on every interface, and so are Redis (6379) and Postgres (5432, with the Compose file's default password). Use a host on a network you trust.
+- **Prometheus, Grafana and `/metrics` stay on the host's loopback.** Forward them: `ssh -L 3000:localhost:3000 -L 9090:localhost:9090 -L 9091:localhost:9091 <ssh-host>`.
+- **Smoke-test through a tunnel**, not at `http://<ssh-host>:8080`: `ssh -N -L 8080:localhost:8080 -L 9091:localhost:9091 <ssh-host>`, then `./scripts/smoke-test.sh`. For any host other than localhost the smoke test loads the keys in `.env`, which are the production ones.
+- **Do not run `docker compose up` from the checkout against a remote Docker context.** It would send the build context, `.env` included, to the host, and the relative bind mounts would resolve to this machine's paths there. `docker --context <name> ps` and `logs` are fine. The script names the `default` context for its own local calls, so it is safe to run while a remote context is selected.
+- Each deploy of changed code leaves the previous image untagged on the host; `docker image prune` there reclaims the space.
+
 ### Run from GitHub Container Registry
 
 On any machine with Docker — no code checkout needed:
@@ -237,6 +268,7 @@ make run    # builds and starts the server
 | `make deploy` | Deploy to Fly.io with git version baked in |
 | `make docker-reset` | **Dev only.** Tear down containers, wipe volumes, rebuild, and wait for healthy startup. The wait is bounded by `RESET_TIMEOUT` (default 300s), after which it names the dependency that never came up |
 | `./scripts/smoke-test.sh [host]` | Hit every endpoint with every key/plan combo and check expected status codes. Defaults to `http://localhost:8080`. Also checks that `/metrics` is a 404 on the public port, and reads the metrics listener where it is reachable: `localhost:9091` for a local host, `SMOKE_METRICS_URL` otherwise, skipped when neither applies |
+| `./scripts/deploy-dev.sh <ssh-host>` | **Dev only.** Build the image here and run the Compose stack on another Docker host over SSH. See [Run the dev stack on another Docker host](#run-the-dev-stack-on-another-docker-host) |
 | `./scripts/status.sh` | Check Fly.io deployment health, Postgres, and Redis status |
 | `./scripts/info.sh [host]` | Pretty-print the `/v1/info` admin endpoint. Defaults to production |
 
@@ -417,6 +449,7 @@ docker reset; the rest overlap with `sactl` commands. They load API keys from
 ```sh
 ./scripts/smoke-test.sh https://api.securityaccelerated.com
 ./scripts/docker-reset.sh                                     # or: make docker-reset
+./scripts/deploy-dev.sh <ssh-host>                            # dev stack on another Docker host
 ./scripts/status.sh                                           # or: sactl status
 ./scripts/info.sh                                             # or: sactl info
 ./scripts/usage.sh 30                                         # or: sactl usage --days 30
