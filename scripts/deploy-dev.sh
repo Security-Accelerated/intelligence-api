@@ -30,10 +30,19 @@ fi
 # Every local docker call names the `default` context, which is always this
 # machine's engine. Without it, a shell where `docker context use <host>` is in
 # effect would build on the remote host and ship it the source after all.
-local_docker() { docker --context default "$@"; }
+# BUILDX_BUILDER is pinned for the same reason: the context picks the engine, but
+# a builder selected by that variable can be a remote one, and the build context
+# (.env included, .dockerignore does not exclude it) goes wherever the build runs.
+local_docker() { BUILDX_BUILDER=default docker --context default "$@"; }
 
 REMOTE_DIR_Q=$(printf '%q' "$REMOTE_DIR")
-remote() { ssh -o BatchMode=yes "$HOST" "$@"; }
+# The timeouts are on the ssh process itself. A limit on the command run over
+# there does nothing for a connection that never completes or a session that
+# stops answering, and either would outlast the readiness deadline below.
+remote() {
+    ssh -o BatchMode=yes -o ConnectTimeout=10 \
+        -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$HOST" "$@"
+}
 
 VERSION=$(git describe --tags --always --dirty)
 export VERSION
@@ -50,11 +59,32 @@ if ! remote test -r "$CONFIG"; then
     exit 1
 fi
 
+# An image built for another architecture loads without complaint and then fails
+# to start with an exec format error. Cross-building is not attempted here (it
+# needs emulation set up on this machine), so a mismatch stops before the build.
+platform='{{.Server.Os}}/{{.Server.Arch}}'
+local_platform=$(local_docker version -f "$platform")
+remote_platform=$(remote "docker version -f '$platform'")
+if [ "$local_platform" != "$remote_platform" ]; then
+    echo "error: this machine builds $local_platform images, $HOST runs $remote_platform" >&2
+    echo "       cross-platform builds are not supported by this script" >&2
+    exit 1
+fi
+
 echo "==> Building image locally..."
 local_docker compose build api
+# The tag is shared by every checkout on this machine. Remember which image this
+# run built, so that a build elsewhere moving the tag is caught instead of being
+# shipped and reported under this run's version.
+built_id=$(local_docker image inspect -f '{{.Id}}' intelligence-api)
 
 echo "==> Shipping image..."
 local_docker save intelligence-api | remote docker load
+if [ "$(local_docker image inspect -f '{{.Id}}' intelligence-api)" != "$built_id" ]; then
+    echo "error: the intelligence-api tag was rebuilt while this deploy was running" >&2
+    echo "       the image sent to $HOST may not be this checkout's; run the deploy again" >&2
+    exit 1
+fi
 
 # From the working tree, not HEAD, so these match the image just built from it.
 # Extracting over the old copy leaves a file deleted here in place over there;
@@ -88,7 +118,7 @@ done
 # differs, while Compose rightly keeps the container when the image inside is
 # byte-for-byte the same. Comparing IDs fails a rebuild of unchanged code.
 content='{{json .RootFS.Layers}} {{json .Config}}'
-built=$(local_docker image inspect -f "$content" intelligence-api)
+built=$(local_docker image inspect -f "$content" "$built_id")
 running=$(remote "docker image inspect -f '$content' \$(docker inspect -f '{{.Image}}' intelligence-api)")
 if [ "$built" != "$running" ]; then
     echo "error: the api container on $HOST is not running the image just built" >&2
